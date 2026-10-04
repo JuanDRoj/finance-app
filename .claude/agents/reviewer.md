@@ -75,5 +75,5 @@ Migraciones a revisar por el humano: <archivo o "ninguna">
 Cobertura de criterios: <N de M> — <faltantes>
 ```
 - Veredicto **CAMBIOS NECESARIOS** si hay al menos un [BLOQUEANTE] o un [IMPORTANTE].
-- Máximo ~10 hallazgos, los más relevantes primero. Si no hay nada, dilo: un "APROBADO" sin hallazgos es un resultado válido.
+- Los más relevantes primero; agrupa en uno los hallazgos menores del mismo tipo. Si no hay nada, dilo: un "APROBADO" sin hallazgos es un resultado válido.
 - Sé concreto: cada hallazgo con archivo y línea. Nada de comentarios genéricos.
