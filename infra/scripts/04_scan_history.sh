@@ -23,10 +23,12 @@ else
     'xox[baprs]-[A-Za-z0-9-]+'
     'sk-[A-Za-z0-9]{32,}'
     '(password|passwd|secret|api[_-]?key|token)[[:space:]]*[:=][[:space:]]*["'\'']?[A-Za-z0-9/+_-]{12,}'
+    # URLs con usuario y clave incrustados en la direccion de conexion
+    '[a-z+]+://[^/:@[:space:]]+:[^@[:space:]]+@'
   )
   found=0
   for p in "${patterns[@]}"; do
-    n="$(git -C "$REPO_ROOT" log --all -p | grep -cE -e "$p" || true)"
+    n="$(git -C "$REPO_ROOT" log --all -p | grep -ciE -e "$p" || true)"
     log "patrón '${p:0:30}...': $n coincidencias"
     [[ "$n" != "0" ]] && found=1
   done
