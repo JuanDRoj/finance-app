@@ -12,7 +12,8 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   log "Escaneando el historial con gitleaks (Docker)"
   # Montaje de solo lectura; se analizan todas las ramas y tags.
   docker run --rm -v "$REPO_ROOT":/repo:ro zricethezav/gitleaks:latest \
-    detect --source /repo --log-opts="--all" --redact --no-banner
+    detect --source /repo --log-opts="--all" --redact --no-banner \
+    --gitleaks-ignore-path /repo/infra/gitleaks/.gitleaksignore
 else
   log "Docker no disponible: fallback con grep (solo conteos, sin valores)"
   patterns=(
