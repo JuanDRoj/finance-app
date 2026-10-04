@@ -27,6 +27,7 @@ Objetivo: <1–2 frases>
 Archivos: <nuevos / modificados, con ruta>
 Tests (se escriben primero): <lista de casos, incluidos los de error e IDOR si aplica>
 Migraciones: <ninguna | descripción>
+Dependencias nuevas: <paquete · para qué · alternativa descartada> | ninguna
 Riesgos / decisiones a confirmar: <lista o "ninguno">
 Fuera de alcance (no lo haré): <lista o "nada">
 ```
@@ -67,6 +68,7 @@ Migraciones (REQUIERE REVISIÓN HUMANA): <archivo o "ninguna">
 
 ## Prohibido
 - Debilitar, saltar (`skip`, `xfail`) o borrar tests para que pasen. Si un test parece incorrecto, detente y explícalo.
+- Agregar dependencias nuevas (`uv add`) sin mencionarlas en el plan aprobado. Si al implementar descubres que necesitas una, detente y explica: es un desvío del plan.
 - Editar fuera de `/backend` (está bloqueado), salvo `frontend/src/lib/api/schema.d.ts` generado con `npm run gen:api`. Si otra carpeta necesita un cambio, anótalo en "Dudas abiertas".
 - Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado): ramas, commits y PRs los gestiona el orquestador.
 - Leer o escribir secretos. Usa `backend/.env.example` como referencia.
