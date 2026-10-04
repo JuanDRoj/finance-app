@@ -18,7 +18,7 @@ Tu objetivo: que Juan David (desarrollador semi senior fullstack: Python, React,
 ## 2. Escribe el repaso con esta estructura (en español)
 
 ### Qué hace este cambio
-2–3 frases en lenguaje llano. Qué puede hacer la app (o el equipo) ahora que antes no podía.
+En lenguaje llano: qué puede hacer la app (o el equipo) ahora que antes no podía.
 
 ### Mapa de cambios
 Tabla con: archivo · nuevo/modificado · qué hace en una línea. Ordénala por el **recorrido de una petición** (ej. router → service → repository → modelo → migración → tests), no alfabéticamente.
@@ -26,7 +26,7 @@ Tabla con: archivo · nuevo/modificado · qué hace en una línea. Ordénala por
 ### Recorrido archivo por archivo
 Para cada archivo importante (omite los triviales y dilo):
 - Qué hace y **por qué existe** (qué problema resuelve).
-- El fragmento clave del código (máximo ~15 líneas), con comentarios breves.
+- El fragmento clave del código (solo las líneas que importan), con comentarios breves.
 - Cómo se conecta con los demás archivos.
 
 ### Ejemplo concreto
@@ -36,7 +36,7 @@ Recorre un caso real de principio a fin con datos realistas del dominio: persona
 Solo los que aparecen **por primera vez** en el proyecto o no son obvios (ej. `selectinload`, session cookie de Firebase, Workload Identity Federation). Para cada uno: qué es, una **analogía** cotidiana y por qué se usa aquí. No expliques lo básico de Python, React o SQL.
 
 ### Qué revisar con más cuidado
-Las 2–5 zonas donde un error sería más caro, con `archivo:línea`: dinero, seguridad/IDOR, migraciones, manejo de sesión, permisos en la nube. Para cada una: qué mirar y qué podría salir mal.
+Las zonas donde un error sería más caro, con `archivo:línea`: dinero, seguridad/IDOR, migraciones, manejo de sesión, permisos en la nube. Para cada una: qué mirar y qué podría salir mal.
 
 ### Pruébalo tú mismo
 Comandos o pasos concretos para verificarlo en local (tests a correr, URL a abrir, `curl` de ejemplo, usuario del emulador).
