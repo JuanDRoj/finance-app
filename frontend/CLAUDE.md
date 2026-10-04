@@ -18,7 +18,7 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Tipos | `npm run typecheck` (`tsc --noEmit`) |
 | Formato (verificar / aplicar) | `npm run format:check` / `npm run format` (Prettier; no toca los `*.md`) |
 | Build | `npm run build` |
-| Regenerar tipos de la API | `npm run gen:api` (lee `../backend/openapi.json`) _(pendiente: FE-02)_ |
+| Regenerar tipos de la API | `npm run gen:api` (lee `../backend/openapi.json` y escribe `src/lib/api/schema.d.ts`; idempotente) |
 | Tests de lógica | `npm test` _(pendiente: se añade con la primera lógica testeable)_ |
 | E2E | `npx playwright test` _(pendiente)_ |
 
@@ -36,10 +36,11 @@ frontend/
 │   │   └── layout.tsx
 │   ├── proxy.ts                # (pendiente) redirige a /login si no hay cookie de sesión. Next 16 renombró `middleware.ts` a `proxy.ts`
 │   ├── lib/
-│   │   ├── api/                # (pendiente: FE-02)
-│   │   │   ├── schema.d.ts     # GENERADO por gen:api — nunca editar a mano
-│   │   │   ├── server.ts       # cliente para Server Components (BACKEND_URL + reenvía cookie)
-│   │   │   └── browser.ts      # cliente para el navegador (vía /api/*)
+│   │   ├── api/                # cliente tipado de la API (openapi-fetch)
+│   │   │   ├── schema.d.ts     # GENERADO por gen:api (versionado) — nunca editar a mano
+│   │   │   ├── server.ts       # `getServerApi()` (import "server-only"): BACKEND_URL + reenvía la cabecera Cookie
+│   │   │   ├── browser.ts      # `browserApi`: baseUrl `/api` (rewrite) + `credentials: "include"`
+│   │   │   └── contract.check.ts # canario de tipos que revisa `typecheck`; nadie lo importa ni se ejecuta
 │   │   ├── env/                # validación de variables de entorno (zod)
 │   │   │   ├── server.schema.ts  # schema de las variables solo de servidor (puro)
 │   │   │   ├── client.schema.ts  # schema de las NEXT_PUBLIC_* (puro)
@@ -55,17 +56,25 @@ frontend/
 ├── .nvmrc                      # versión de Node
 ├── eslint.config.mjs           # ESLint (flat config) + regla que prohíbe `process.env` fuera de lib/env/
 ├── .prettierrc.json            # Prettier (printWidth 100; el resto sale de ../.editorconfig)
-└── next.config.ts              # valida el entorno; rewrite /api/* → backend (pendiente: KAN-25)
+└── next.config.ts              # valida el entorno; rewrite /api/* → backend
 ```
 
 ## Convenciones
 - **API:** solo vía `lib/api/server.ts` o `lib/api/browser.ts`, tipados con `schema.d.ts`. Nunca `fetch` suelto al backend ni tipos de respuesta escritos a mano.
-- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI falla si los tipos generados no coinciden. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
-- **Rewrite:** `/api/:path*` → `${BACKEND_URL}/:path*` en `next.config.ts` (lo mantiene frontend; quita el prefijo `/api`). Funciona igual en local y en Vercel. _(Pendiente: lo añade KAN-25.)_
+  - Servidor: `const api = await getServerApi();` (una vez por render) y `await api.GET("/ruta")`. Lee los headers de la petición, así que la ruta pasa a ser dinámica. No usa caché (`cache: "no-store"`).
+  - Navegador: `browserApi.GET("/ruta")` desde handlers o efectos de componentes cliente. Su `baseUrl` es relativa, así que en Node falla con `Failed to parse URL`: en Server Components usa `getServerApi()`.
+  - Las llamadas devuelven `{ data, error, response }`, ya tipados con `schema.d.ts`: no los redeclares a mano.
+- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI fallará si los tipos generados no coinciden _(pendiente: KAN-15)_. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
+  - Un cambio del contrato que rompa lo que usa el frontend se ve en `npm run typecheck`. `lib/api/contract.check.ts` lo garantiza para `/healthz` y el cableado de los clientes (sus `@ts-expect-error` fallan si el cliente deja de rechazar llamadas erróneas).
+  - Los endpoints reales se tipan al usarlos en la app; no hay que registrarlos en ningún sitio.
+- **Rewrite:** `/api/:path*` → `${BACKEND_URL}/:path*` en `next.config.ts` (lo mantiene frontend; quita el prefijo `/api`). Funciona igual en local y en Vercel.
+  - `BACKEND_URL` se lee con `serverSchema.parse(process.env)` (el schema puro, no `serverEnv`, que lleva `server-only`) y se fija al hacer `dev`/`build`: cambiarla exige reiniciar o volver a construir.
+  - No crees rutas en `src/app/api/`: el sistema de archivos tiene prioridad sobre el rewrite y taparía el endpoint del backend.
+  - Define las rutas del backend sin barra final: una redirección 307 de FastAPI apuntaría al backend y sacaría al navegador del origen.
 - **Next.js 16:** la protección de rutas va en `proxy.ts` (antes `middleware.ts`, ya deprecado). Ante dudas de APIs, la documentación de la versión instalada está en `node_modules/next/dist/docs/`.
 - **Server vs. client:** Server Components por defecto; `"use client"` solo donde haga falta interactividad o Firebase.
 - **Sesión:** el login con Firebase entrega un ID token → `POST /api/auth/session` → el backend responde con la cookie HttpOnly. El frontend **no guarda tokens**. Logout = `DELETE /api/auth/session`.
-- **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante.
+- **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante: `getServerApi()` copia tal cual la cabecera `Cookie` (`(await headers()).get("cookie")`), no la reconstruye con `cookies()` porque eso re-codifica los valores. Un `Set-Cookie` del backend no se propaga desde un Server Component (no puede escribir cookies).
 - **Dinero:** llega en centavos (`1550`). Se formatea solo para mostrar, con `lib/money.ts` (`Intl.NumberFormat` y la moneda del espacio). Sin aritmética con floats.
 - **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → `lib/i18n.ts`.
 - **Estados de pantalla:** carga, vacío y error en cada vista que pide datos.
