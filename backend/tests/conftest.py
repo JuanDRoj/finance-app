@@ -1,8 +1,10 @@
 import io
 import logging
 import os
+import shutil
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -15,6 +17,8 @@ from app.core.config import Settings, get_settings
 from app.core.db import Database
 from app.core.logging import JsonFormatter, RequestIdFilter
 from app.main import create_app
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://finance:finance_dev@localhost:5432/finance_test"
 
@@ -86,6 +90,23 @@ def restore_root_logger() -> Iterator[None]:
     finally:
         root.handlers = handlers
         root.setLevel(level)
+
+
+@pytest.fixture
+def isolated_backend(tmp_path: Path) -> Path:
+    """Working directory for subprocess tests: a copy of the code, without `.env`.
+
+    Settings reads `.env` relative to the cwd, so a subprocess started in `backend/` would pick
+    up the developer's file and the result would depend on the machine. The environment is
+    already clean: `_isolated_settings` removes the database variables from `os.environ`.
+    """
+    root = tmp_path / "backend"
+    root.mkdir()
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+    shutil.copytree(BACKEND_DIR / "app", root / "app", ignore=ignore)
+    shutil.copytree(BACKEND_DIR / "migrations", root / "migrations", ignore=ignore)
+    shutil.copy(BACKEND_DIR / "alembic.ini", root / "alembic.ini")
+    return root
 
 
 # --- PostgreSQL (real, from Docker Compose; never SQLite) ---------------------------------

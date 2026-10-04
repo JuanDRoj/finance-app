@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import asyncpg
@@ -135,10 +136,15 @@ async def test_default_connector_factory_uses_lazy_refresh_and_requested_ip_type
     assert captured == {"ip_type": "PSC", "refresh_strategy": "lazy"}
 
 
-def test_connector_package_is_not_imported_when_the_app_loads() -> None:
+def test_connector_package_is_not_imported_when_the_app_loads(isolated_backend: Path) -> None:
     # The import is lazy so local runs and the direct-URL path do not pay for grpc/aiohttp.
     code = "import sys, app.main; sys.exit('google.cloud.sql.connector' in sys.modules)"
     result = subprocess.run(  # noqa: S603
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=60, check=False
+        [sys.executable, "-c", code],
+        cwd=isolated_backend,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
     )
     assert result.returncode == 0, result.stderr

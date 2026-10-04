@@ -97,14 +97,14 @@ async def test_env_py_applies_the_naming_convention_and_reverts_cleanly(
 
 
 async def test_alembic_cli_upgrades_and_downgrades_from_the_backend_directory(
-    scratch_database_url: str,
+    scratch_database_url: str, isolated_backend: Path
 ) -> None:
     env = {**os.environ, "DATABASE_URL": scratch_database_url}
 
     def run(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
             [sys.executable, "-m", "alembic", *args],
-            cwd=BACKEND_DIR,
+            cwd=isolated_backend,
             env=env,
             capture_output=True,
             text=True,

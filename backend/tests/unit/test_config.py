@@ -130,6 +130,16 @@ def test_connector_requires_user_password_and_name(
         _settings()
 
 
+@pytest.mark.parametrize("empty", ["DB_USER", "DB_PASSWORD", "DB_NAME"])
+def test_connector_treats_empty_user_password_and_name_as_missing(
+    monkeypatch: pytest.MonkeyPatch, empty: str
+) -> None:
+    _set_connector_env(monkeypatch)
+    monkeypatch.setenv(empty, "")
+    with pytest.raises(ValidationError, match=empty):
+        _settings()
+
+
 @pytest.mark.parametrize("name", ["finance-db", "project:instance", "a b:c:d", "a:b:c:d:e"])
 def test_instance_connection_name_rejects_bad_format(
     monkeypatch: pytest.MonkeyPatch, name: str

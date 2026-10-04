@@ -12,6 +12,13 @@ LOCAL_DATABASE_URL = "postgresql+asyncpg://finance:finance_dev@localhost:5432/fi
 _INSTANCE_CONNECTION_NAME = re.compile(r"[^\s:]+:[^\s:]+:[^\s:]+")
 
 
+def _is_blank(value: str | SecretStr | None) -> bool:
+    """None or an empty string (an empty SecretStr counts too): an unset variable in practice."""
+    if isinstance(value, SecretStr):
+        value = value.get_secret_value()
+    return not value
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -51,7 +58,7 @@ class Settings(BaseSettings):
             missing = [
                 name
                 for name in ("DB_USER", "DB_PASSWORD", "DB_NAME")
-                if getattr(self, name) is None
+                if _is_blank(getattr(self, name))
             ]
             if missing:
                 raise ValueError(
