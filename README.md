@@ -2,6 +2,36 @@
 
 App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `frontend/` (Next.js), `infra/` (scripts y notas), `docs/` (decisiones y modelo de datos).
 
+## Levantar todo en local
+
+> Estado: el entorno local se va completando por tareas. Cada paso indica qué tarea lo habilita; cuando esa tarea se cierre, reemplaza la nota por el comando real.
+
+### Requisitos
+- Docker con Compose v2 (`docker compose version`).
+- Python con `uv` (versión exacta: la fija el backend).
+- Node.js LTS con npm (versión exacta: la fija el frontend).
+
+### Puertos
+| Servicio | Puerto |
+|---|---|
+| PostgreSQL | 5432 |
+| Emulador Firebase Auth | 9099 (UI en 4000) |
+| Backend | 8000 |
+| Frontend | 3000 |
+
+### Pasos
+1. Copiar los `.env.example` (raíz, `backend/`, `frontend/`) a `.env` y ajustar. Pendiente: los archivos los crean KAN-8 y las tareas de backend y frontend.
+2. PostgreSQL y emulador de Firebase Auth con `docker compose up -d`. Pendiente: `docker-compose.yml` llega con KAN-8.
+3. Backend en el puerto 8000 con `uv run`. Pendiente: comando exacto con las tareas de backend.
+4. Frontend en el puerto 3000 con `npm run dev`. Pendiente: disponible con las tareas de frontend.
+
+## Flujo de trabajo y `main` protegida
+
+- `main` solo recibe cambios por Pull Request: no se admite push directo, force push ni borrado de la rama (tampoco para el administrador).
+- Los checks de CI obligatorios se añaden con KAN-15; hasta entonces el ruleset no exige checks.
+- La protección se aplica con `infra/scripts/05_github_main_protection.sh` (`DRY_RUN=1` para ver qué hará).
+- El repositorio es público: nunca se suben secretos (`.env*`, llaves, credenciales). Usa los `.env.example` como referencia.
+
 ## Equipo de agentes (Claude Code)
 
 El desarrollo lo hace un equipo de agentes de Claude Code coordinado con la skill `/tarea KAN-x`. La configuración vive en `.claude/` y en los `CLAUDE.md`.

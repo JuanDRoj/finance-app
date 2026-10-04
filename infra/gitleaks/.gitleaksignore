@@ -1,0 +1,2 @@
+# Falso positivo confirmado: ID de proyecto ficticio (finance-other-1) en un test del hook guard_cloud.
+271c792c82f42d9a931e03e00cfd7cd3beb5b53a:.claude/hooks/tests/test_hooks.py:generic-api-key:96

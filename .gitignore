@@ -7,3 +7,48 @@ docs/guia-de-trabajo.md
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*-sa.json
+service-account*.json
+*.tfstate*
+.terraform/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+coverage/
+
+# Docker / entorno local
+docker-compose.override.yml
+pgdata/
+.firebase/
+firebase-debug.log*
+*-debug.log
+
+# IDE / sistema operativo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
