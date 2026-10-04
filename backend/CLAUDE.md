@@ -8,7 +8,7 @@ Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python C
 ## Comandos (siempre desde `/backend`)
 | Para | Comando |
 |---|---|
-| Instalar dependencias | `uv sync` |
+| Instalar dependencias | `uv sync` (usa `uv add <paquete>` solo si el plan aprobado lo incluye) |
 | Levantar la API en local | `uv run fastapi dev app/main.py` |
 | Tests (todos) | `uv run pytest` |
 | Tests de un archivo | `uv run pytest tests/api/test_spaces.py -q` |
