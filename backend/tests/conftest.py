@@ -16,7 +16,7 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Keep tests independent of the developer's shell and backend/.env."""
     monkeypatch.setenv("ENV", "local")
     monkeypatch.setenv("LOG_LEVEL", "INFO")
-    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "")
+    monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

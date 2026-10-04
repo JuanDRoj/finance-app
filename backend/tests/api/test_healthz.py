@@ -91,8 +91,9 @@ async def test_unhandled_exception_is_logged_with_traceback_and_request_id(
     assert errors[0]["request_id"] == "rid-500"
     assert errors[0]["level"] == "ERROR"
     assert "RuntimeError: kaboom" in errors[0]["exception"]
-    assert "s3cret" not in json.dumps(errors[0]["path"])
+    assert "s3cret" not in json.dumps(errors[0])
 
     completed = next(line for line in lines if line["message"] == "request_completed")
     assert completed["status"] == 500
     assert completed["request_id"] == "rid-500"
+    assert "s3cret" not in json.dumps(completed)

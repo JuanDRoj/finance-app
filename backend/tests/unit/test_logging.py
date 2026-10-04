@@ -88,6 +88,7 @@ def _assert_uvicorn_routed_to_root() -> None:
         lg = logging.getLogger(name)
         assert lg.handlers == []
         assert lg.propagate is True
+    assert logging.getLogger("uvicorn.access").disabled is True
     assert any(isinstance(h.formatter, JsonFormatter) for h in logging.getLogger().handlers)
 
 
