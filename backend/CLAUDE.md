@@ -17,7 +17,7 @@ Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python C
 | Tipos | `uv run mypy .` |
 | Nueva migración | `uv run alembic revision --autogenerate -m "<descripción>"` |
 | Aplicar migraciones | `uv run alembic upgrade head` |
-| Exportar OpenAPI | `uv run python scripts/export_openapi.py` → `backend/openapi.json` |
+| Exportar OpenAPI | `uv run python -m app.export_openapi` → `backend/openapi.json` (opcional `-o <ruta>`; no levanta el servidor ni necesita BD) |
 | Regenerar tipos TS (si cambió la API) | `cd ../frontend && npm run gen:api` → `frontend/src/lib/api/schema.d.ts` (el CI falla si difieren) |
 
 La BD local y el emulador de Firebase Auth se levantan con `docker compose up -d` desde la raíz del repo.
@@ -27,6 +27,7 @@ La BD local y el emulador de Firebase Auth se levantan con `docker compose up -d
 backend/
 ├── app/
 │   ├── main.py                 # crea la app, registra routers y middlewares
+│   ├── export_openapi.py       # CLI: escribe openapi.json sin levantar el servidor
 │   ├── core/                   # config (pydantic-settings), db, seguridad, logging
 │   └── modules/
 │       └── <módulo>/           # spaces, accounts, categories, transactions, recurring, dashboard
@@ -38,7 +39,8 @@ backend/
 │           └── dependencies.py # dependencias FastAPI del módulo (si aplica)
 ├── alembic.ini                 # config de Alembic (la BD se lee de la config de la app, no de aquí)
 ├── migrations/                 # Alembic (env.py en modo async)
-├── scripts/                    # utilidades (export de OpenAPI, etc.)
+├── openapi.json                # contrato de la API, GENERADO por app.export_openapi (nunca a mano)
+├── scripts/                    # utilidades sueltas (aún no existe; el export de OpenAPI vive en app/)
 └── tests/
     ├── conftest.py             # fixtures: BD de test, cliente HTTP, usuarios y sesiones
     ├── unit/                   # lógica pura, sin BD            → backend-dev
@@ -70,6 +72,11 @@ backend/
   - Pool pequeño (2–5): `DB_POOL_SIZE=2` + `DB_MAX_OVERFLOW=3`, `DB_POOL_TIMEOUT=30`.
 - **Sesión por request:** `DbSession` (`from app.core.db import DbSession`). La dependencia **no hace commit**: el service es la unidad de trabajo y llama `await session.commit()`; lo que quede sin commit se revierte al terminar el request. Una operación que cruza módulos usa la misma sesión y un solo commit.
 - **Modelos ORM:** heredan de `app.core.db.Base`. Toda restricción tiene nombre predecible (convención `pk_`, `fk_`, `uq_`, `ck_`, `ix_`); cada `CheckConstraint` **debe llevar `name=`**. Al crear los modelos de un módulo, importa su `models.py` en `migrations/env.py` para que autogenerate los vea.
+
+## Contrato OpenAPI
+- `backend/openapi.json` está **versionado** y se genera con `uv run python -m app.export_openapi`: claves ordenadas, indentación de 2 espacios, UTF-8 y un único `\n` final, así que dos corridas dan los mismos bytes. El frontend genera sus tipos a partir de él.
+- Si un cambio toca la API (rutas, schemas, respuestas), **regenéralo en el mismo cambio**. `tests/unit/test_export_openapi.py` falla si el archivo versionado no coincide con la app.
+- **Importar la app no debe construir `Settings` ni el engine** (viven en el `lifespan`, que el export no ejecuta): el export tiene que funcionar sin BD ni variables de entorno. No llames a `get_settings()` ni crees engines a nivel de módulo en routers, models o schemas.
 
 ## Tests
 - **PostgreSQL real** (contenedor de Docker Compose), nunca SQLite. `docker compose up -d postgres` desde la raíz antes de correr la suite.
