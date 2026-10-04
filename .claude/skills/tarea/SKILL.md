@@ -4,6 +4,12 @@ description: Ejecuta el ciclo completo de una sub-tarea de Jira (KAN-n) con el e
 argument-hint: KAN-<n>
 arguments: [clave]
 disable-model-invocation: true
+hooks:
+  PreToolUse:
+    - matcher: "Edit|Write|NotebookEdit|Bash"
+      hooks:
+        - type: command
+          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" --main-only .claude/ CLAUDE.md "*/CLAUDE.md" docs/ README.md
 ---
 
 # Ciclo de la sub-tarea $clave

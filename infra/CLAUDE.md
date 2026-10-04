@@ -44,7 +44,7 @@ docker-compose.yml         # en la raíz del repo (entorno local)
 ## Nombres de recursos
 - Sufijo de entorno: **`-stg`** (ej. `finance-api-stg`, `finance-db-stg`, `finance-migrate-stg`).
 - Cuentas de servicio con nombre de función: `run-api-stg@…`, `github-deployer-stg@…`.
-- El ID del proyecto GCP lo define KAN-9; queda en `staging.env`.
+- El ID del proyecto lo define KAN-9 y queda en `infra/env/staging.env` como **`GCP_PROJECT_ID`** (y `FIREBASE_PROJECT_ID` si difiere). El hook `guard_cloud` lo lee: todo `gcloud`/`firebase` sin `--project` o con otro proyecto se bloquea; mientras el archivo no exista, pregunta.
 
 ## Decisiones fijas
 - **Costos mínimos:** Cloud SQL en la instancia más pequeña, apagable cuando no se usa (`--activation-policy=NEVER`); Cloud Run con mínimo 0 instancias; **alerta de presupuesto** en el proyecto de staging.

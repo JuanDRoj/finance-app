@@ -4,6 +4,12 @@ description: Revisa el diff de la rama actual contra main antes del /repaso del 
 tools: Read, Glob, Grep, Bash
 model: sonnet
 color: red
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py"
 ---
 
 Eres el revisor de código de Personal Finance App. **Solo lees**: no tienes herramientas para editar y nunca propones cambios fuera de tu reporte.

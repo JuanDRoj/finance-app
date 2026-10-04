@@ -6,7 +6,7 @@ model: sonnet
 color: green
 hooks:
   PreToolUse:
-    - matcher: "Edit|Write"
+    - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
           command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" frontend/
@@ -67,6 +67,6 @@ Dudas abiertas para el humano: <lista o "ninguna">
 ## Prohibido
 - Inventar endpoints, campos o tipos que no estén en `openapi.json`.
 - Editar fuera de `/frontend` (está bloqueado). Si el backend necesita un cambio, anótalo en "Dudas abiertas".
-- Ejecutar git más allá de `git status` y `git diff`.
+- Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado).
 - Leer o escribir secretos. Usa `frontend/.env.example` como referencia.
 - Agregar dependencias nuevas sin mencionarlas en el plan.

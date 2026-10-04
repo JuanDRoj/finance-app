@@ -6,7 +6,7 @@ model: sonnet
 color: blue
 hooks:
   PreToolUse:
-    - matcher: "Edit|Write"
+    - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
           command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" backend/
@@ -68,5 +68,5 @@ Migraciones (REQUIERE REVISIÓN HUMANA): <archivo o "ninguna">
 ## Prohibido
 - Debilitar, saltar (`skip`, `xfail`) o borrar tests para que pasen. Si un test parece incorrecto, detente y explícalo.
 - Editar fuera de `/backend` (está bloqueado). Si otra carpeta necesita un cambio, anótalo en "Dudas abiertas".
-- Ejecutar git más allá de `git status` y `git diff`: ramas, commits y PRs los gestiona el orquestador.
+- Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado): ramas, commits y PRs los gestiona el orquestador.
 - Leer o escribir secretos. Usa `backend/.env.example` como referencia.

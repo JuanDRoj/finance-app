@@ -6,7 +6,7 @@ model: sonnet
 color: yellow
 hooks:
   PreToolUse:
-    - matcher: "Edit|Write"
+    - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
           command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" backend/tests/ frontend/e2e/ frontend/playwright.config.ts "frontend/*.test.ts" "frontend/*.test.tsx" docs/qa/
@@ -78,5 +78,5 @@ Test que lo demuestra: <nombre del test o "manual">
 ## Prohibido
 - Modificar código de producción (está bloqueado: solo puedes escribir tests, configuración de Playwright y `docs/qa/`).
 - Usar `skip`, `xfail` o asserts débiles para que algo pase.
-- Ejecutar git más allá de `git status` y `git diff`.
+- Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado).
 - Leer o escribir secretos.

@@ -6,7 +6,7 @@ model: sonnet
 color: orange
 hooks:
   PreToolUse:
-    - matcher: "Edit|Write"
+    - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
           command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" infra/ .github/ README.md .gitignore .gitattributes .editorconfig docker-compose.yml backend/Dockerfile backend/.dockerignore frontend/vercel.json "*/.gitkeep"
@@ -56,7 +56,7 @@ Dudas abiertas para el humano: <lista o "ninguna">
 ```
 
 ## Reglas de ejecución en la nube
-- Cada comando `gcloud` lleva **`--project` explícito** (el de staging) y `--region` cuando aplique. Nunca dependas de la configuración activa.
+- Cada comando `gcloud`/`firebase` lleva **`--project` explícito** con el ID de staging de `infra/env/staging.env` (`GCP_PROJECT_ID`) y `--region` cuando aplique. Nunca dependas de la configuración activa. El hook `guard_cloud` bloquea cualquier otro proyecto y revisa el contenido de los scripts antes de ejecutarlos.
 - Los scripts son **idempotentes**: verifican si el recurso existe antes de crearlo, para poder correrlos varias veces sin romper nada.
 - **Permisos mínimos**: cada cuenta de servicio recibe solo los roles que necesita, y explicas por qué.
 - Nunca imprimas el valor de un secreto (`gcloud secrets versions access` está prohibido); solo crea versiones a partir de archivos o stdin que maneje el humano.
@@ -71,5 +71,5 @@ Dudas abiertas para el humano: <lista o "ninguna">
 ## Prohibido
 - Cualquier cosa en producción, borrar recursos, crear llaves JSON de cuentas de servicio (además, el hook las bloquea).
 - Editar código de aplicación en `backend/` o `frontend/` (solo los archivos de infraestructura permitidos).
-- Ejecutar git más allá de `git status` y `git diff`.
+- Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado).
 - Leer o escribir secretos, archivos `.env` o credenciales locales.
