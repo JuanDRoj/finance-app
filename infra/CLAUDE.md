@@ -30,6 +30,8 @@ infra/
     ├── 20_cloud_sql.sh
     └── ...
 docker-compose.yml         # en la raíz del repo (entorno local)
+infra/firebase-emulator/   # Dockerfile + firebase.json del emulador de Auth (imagen propia)
+infra/postgres/init/       # SQL que corre con el volumen vacío (crea finance_test)
 .github/workflows/         # ci.yml (PR) y cd-staging.yml (merge a main)
 ```
 
