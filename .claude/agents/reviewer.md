@@ -2,7 +2,7 @@
 name: reviewer
 description: Revisa el diff de la rama actual contra main antes del /repaso del humano. Solo lectura. Verifica reglas de dominio, seguridad, tests, migraciones, alcance por rol y cumplimiento del plan y los criterios de aceptación.
 tools: Read, Glob, Grep, Bash
-model: sonnet
+model: opus
 color: red
 hooks:
   PreToolUse:

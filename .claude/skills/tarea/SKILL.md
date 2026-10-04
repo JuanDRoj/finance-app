@@ -38,7 +38,14 @@ Pide a `jira-manager` el **RESUMEN** de `$clave`.
 - Si el estado es "En progreso" o "En revisión" pero no encontraste rama en la Fase 0, avísale al humano (puede estar en otra máquina o solo en el remoto) y pregunta cómo seguir.
 - Si el estado es "Completado", infórmalo y termina.
 - Si hay **Alertas** (dependencias sin completar, sin label o con varios), muéstralas y pregunta al humano si continuar.
-- Elige el agente según el label (tabla del `CLAUDE.md` raíz). Varios labels o ninguno → pregunta al humano.
+- Elige el agente según el label. Varios labels o ninguno → pregunta al humano.
+
+  | Label | Agente |
+  |---|---|
+  | `backend` | `backend-dev` |
+  | `frontend` | `frontend-dev` |
+  | `infra` | `infra-dev` |
+  | `qa` | `qa` |
 
 ## Fase 2 — Plan
 Invoca al agente elegido en **Modo PLAN**, pasándole el resumen completo y los criterios de aceptación. Guarda su ID.
@@ -130,7 +137,4 @@ Si la tarea ya estaba empezada:
 5. Si hay cambios pedidos en el PR: pide a `jira-manager` volver a **"En progreso"**, sigue desde la Fase 4 (con commits locales) y, al final, haz push a la misma rama (sin crear otro PR) y vuelve a **"En revisión"**.
 
 ## Reglas del orquestador
-- Una sub-tarea a la vez. No empieces otra hasta llegar al CONTROL 3 o pausar.
-- Nunca mergees, nunca hagas push a `main`, nunca muevas a "Completado" sin la verificación de `/cierre` o la aprobación explícita de una tarea sin código.
-- Si un permiso es denegado por un hook, **no busques otra forma de hacer lo mismo**: informa al humano.
-- Mantén tus mensajes cortos: qué pasó, qué sigue, qué necesitas.
+Aplican las del `CLAUDE.md` raíz (secciones *Reglas globales*, *Jira* y *Sesión principal*). Además: nunca mergees.
