@@ -10,7 +10,8 @@ Tu objetivo: que Juan David (desarrollador semi senior fullstack: Python, React,
 
 ## 1. Reúne el material
 - Base de comparación: `$ARGUMENTS` (si está vacío, usa `main`).
-- `git diff <base>...HEAD --stat` y `git diff <base>...HEAD`. Agrega `git diff` si hay cambios sin commit.
+- `git diff <base>...HEAD --stat` y `git diff <base>...HEAD`.
+- Revisa `git status --short`. Si hay cambios sin commit, agrega `git diff`; si hay archivos nuevos sin trackear (`??`), léelos completos, porque `git diff` no los muestra. Dentro de `/tarea` no debería haberlos: el orquestador hace commit antes de la revisión.
 - Lee completos los archivos cambiados cuando el diff no alcance para entenderlos.
 - Si estás dentro de `/tarea`, ya tienes la clave, el plan aprobado, los criterios y el reporte del reviewer: úsalos.
 
