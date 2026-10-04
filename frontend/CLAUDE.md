@@ -44,7 +44,8 @@ frontend/
 
 ## Convenciones
 - **API:** solo vía `lib/api/server.ts` o `lib/api/browser.ts`, tipados con `schema.d.ts`. Nunca `fetch` suelto al backend ni tipos de respuesta escritos a mano.
-- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI falla si los tipos generados no coinciden.
+- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI falla si los tipos generados no coinciden. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
+- **Rewrite:** `/api/:path*` → `${BACKEND_URL}/:path*` en `next.config.ts` (lo mantiene frontend; quita el prefijo `/api`). Funciona igual en local y en Vercel.
 - **Server vs. client:** Server Components por defecto; `"use client"` solo donde haga falta interactividad o Firebase.
 - **Sesión:** el login con Firebase entrega un ID token → `POST /api/auth/session` → el backend responde con la cookie HttpOnly. El frontend **no guarda tokens**. Logout = `DELETE /api/auth/session`.
 - **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante.

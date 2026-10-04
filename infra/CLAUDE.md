@@ -13,7 +13,7 @@ Región única: **`southamerica-east1`** (GCP) y **`gru1`** (funciones de Vercel
 | KAN-11 INF-05 | Firebase staging: proveedores email y Google (consola → checklist humana) |
 | KAN-12 INF-06 | Workload Identity Federation GitHub → GCP |
 | KAN-13 INF-07 | Cloud Run: servicio backend + Cloud Run Job de migraciones |
-| KAN-14 INF-08 | Vercel staging: proyecto, variables y rewrite `/api/*` |
+| KAN-14 INF-08 | Vercel staging: proyecto, variables (`BACKEND_URL`…) y región `gru1` en `frontend/vercel.json`. El rewrite `/api/*` vive en `frontend/next.config.ts` (frontend) |
 | KAN-15 INF-09 | CI en PR (GitHub Actions) |
 | KAN-16 INF-10 | CD a staging en merge a `main` |
 
@@ -54,7 +54,7 @@ docker-compose.yml         # en la raíz del repo (entorno local)
 - **GitHub → GCP:** solo Workload Identity Federation, restringido a este repositorio. **Nunca llaves JSON.**
 - **CI (PR):** ruff + mypy · eslint + tsc · tests backend con PostgreSQL · `alembic upgrade` sobre BD vacía · tipos TS regenerados sin diferencias · build del frontend.
 - **CD (merge a `main`):** build de imagen → Artifact Registry → job de migraciones → deploy a Cloud Run staging. Prod será promoción manual de la **misma imagen**.
-- **Vercel:** las previews solo verifican build; staging apunta al rewrite `/api/*` → Cloud Run.
+- **Vercel:** las previews solo verifican build; en staging, `BACKEND_URL` apunta a Cloud Run y el rewrite `/api/*` de `next.config.ts` la usa.
 - **IaC:** scripts `gcloud` en el Hito 0; migrar a Terraform antes de prod.
 
 ## Local (Docker Compose)

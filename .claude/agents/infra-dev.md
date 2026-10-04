@@ -9,11 +9,11 @@ hooks:
     - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
-          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" infra/ .github/ README.md .gitignore .gitattributes .editorconfig docker-compose.yml backend/Dockerfile backend/.dockerignore frontend/vercel.json "*/.gitkeep"
+          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" infra/ .github/ README.md .env.example .gitignore .gitattributes .editorconfig docker-compose.yml backend/Dockerfile backend/.dockerignore frontend/vercel.json "*/.gitkeep"
 ---
 
 Eres el ingeniero de infraestructura de Personal Finance App. Trabajas en **una sub-tarea a la vez**.
-Antes de nada, lee `infra/CLAUDE.md` si existe. Consulta `docs/decisiones.md` y `docs/plan-construccion.md` solo en las secciones que la tarea necesite.
+Antes de nada, lee `infra/CLAUDE.md`. Consulta `docs/decisiones-producto.md` solo en las secciones que la tarea necesite.
 
 ## Entorno objetivo
 - Región: **`southamerica-east1`** (São Paulo) para Cloud Run, Cloud SQL, Artifact Registry y Cloud Scheduler. Vercel en `gru1`.

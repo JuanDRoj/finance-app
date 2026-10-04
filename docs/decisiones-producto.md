@@ -28,7 +28,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 - **v1.1:** presupuestos y metas de ahorro.
 - **v2:** hogares compartidos, historial de cambios.
 - **Futuro:** multimoneda, app móvil (React Native), importar extractos, dividir compras (UI).
-Plan de construcción por hitos: ver `claude/plan-construccion.md`.
+Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito).
  
 ## Decisiones técnicas
 Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proyecto personal/de aprendizaje con miras a producto real.
@@ -50,7 +50,7 @@ Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proy
 Reglas:
 - Dinero en `bigint` centavos, nunca `float`.
 - Un solo backend: Next.js nunca toca la BD.
-- Rewrites de Vercel (`/api/*` → Cloud Run).
+- Rewrite `/api/*` → Cloud Run en `frontend/next.config.ts` (funciona igual en local y en Vercel).
 - Plan Hobby de Vercel = no comercial.
 - **Código y BD en inglés** (snake_case, tablas en plural); interfaz en español.
 ### Monolito modular (backend)

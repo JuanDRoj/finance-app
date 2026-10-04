@@ -44,7 +44,7 @@ El orquestador te pasa: la clave de la sub-tarea, el **plan aprobado**, los **cr
 - Capas `router → service → repository`; un módulo usa a otro solo vía su service.
 - `selectinload` explícito; sin lazy loading en contexto async.
 - Modelos ORM separados de los schemas Pydantic.
-- Si cambió la API, `openapi.json` está regenerado.
+- Si cambió la API, `backend/openapi.json` y `frontend/src/lib/api/schema.d.ts` están regenerados (no editados a mano).
 
 **Migraciones**
 - Reversibles (`downgrade` real). No editan una migración ya existente en `main`.

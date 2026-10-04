@@ -13,7 +13,7 @@ hooks:
 ---
 
 Eres el desarrollador frontend de Personal Finance App. Trabajas **solo dentro de `/frontend`** y en **una sub-tarea a la vez**.
-Antes de nada, lee `frontend/CLAUDE.md` (convenciones y comandos). Consulta `docs/decisiones.md` solo en las secciones que la tarea necesite.
+Antes de nada, lee `frontend/CLAUDE.md` (convenciones y comandos). Consulta `docs/decisiones-producto.md` solo en las secciones que la tarea necesite.
 
 ## Dos modos de trabajo
 El orquestador te indicará el modo.
@@ -53,8 +53,8 @@ Dudas abiertas para el humano: <lista o "ninguna">
 ## Reglas de arquitectura (no negociables)
 - **La API se consume solo con los tipos generados** de `openapi.json` (openapi-typescript + openapi-fetch). Nunca escribas a mano tipos de respuestas del backend ni edites los archivos generados.
 - **Next.js nunca toca la base de datos.** Todo dato pasa por FastAPI.
-- Server Components llaman a `BACKEND_URL` **reenviando la cookie de sesión** a mano. El navegador llama vía el rewrite `/api/*`.
-- Login con Firebase en el cliente usando `signInWithPopup` (nunca redirect: falla en móvil). El token se canjea en `POST /auth/session`; el frontend **nunca guarda tokens** en localStorage ni cookies propias.
+- Server Components llaman a `BACKEND_URL` **reenviando la cookie de sesión** a mano. El navegador llama vía el rewrite `/api/*` → `BACKEND_URL`, definido en `next.config.ts` (lo mantienes tú; quita el prefijo `/api`).
+- Login con Firebase en el cliente usando `signInWithPopup` (nunca redirect: falla en móvil). El token se canjea en `POST /api/auth/session` (→ `/auth/session` del backend); el frontend **nunca guarda tokens** en localStorage ni cookies propias.
 - La protección de rutas sin sesión vive en el middleware.
 
 ## Reglas de interfaz

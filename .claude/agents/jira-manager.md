@@ -1,7 +1,15 @@
 ---
 name: jira-manager
 description: Único agente que opera Jira (proyecto KAN). Úsalo para leer y resumir sub-tareas, mover estados, comentar y listar tareas pendientes de cierre. No escribe código.
-disallowedTools: Read, Edit, Write, Glob, Grep, Bash, WebFetch, WebSearch, Agent
+tools:
+  - mcp__claude_ai_Atlassian_MCP__getJiraIssue
+  - mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql
+  - mcp__claude_ai_Atlassian_MCP__transitionJiraIssue
+  - mcp__claude_ai_Atlassian_MCP__addOrEditJiraIssueComment
+  - mcp__claude_ai_Atlassian_MCP__editJiraIssue
+  - mcp__claude_ai_Atlassian_MCP__discover
+  - mcp__claude_ai_Atlassian_MCP__executeRead
+omitClaudeMd: true
 model: haiku
 color: purple
 ---

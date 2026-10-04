@@ -4,7 +4,7 @@ App de finanzas personales (web mobile-first). Monorepo:
 - `/backend` — FastAPI + SQLAlchemy 2.0 async + Alembic + PostgreSQL (Cloud Run + Cloud SQL)
 - `/frontend` — Next.js + TypeScript (Vercel)
 - `/infra` — scripts gcloud, notas de infraestructura
-- `/docs` — decisiones, modelo de datos y plan. Léelos cuando la tarea lo requiera; no los cargues completos sin necesidad.
+- `/docs` — decisiones de producto (`decisiones-producto.md`) y modelo de datos (`modelo-de-datos.md`). Léelos cuando la tarea lo requiera; no los cargues completos sin necesidad. El plan por hitos vive en Jira.
 
 Cada carpeta tiene su propio `CLAUDE.md` con convenciones y comandos.
 

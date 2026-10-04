@@ -18,6 +18,7 @@ Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python C
 | Nueva migración | `uv run alembic revision --autogenerate -m "<descripción>"` |
 | Aplicar migraciones | `uv run alembic upgrade head` |
 | Exportar OpenAPI | `uv run python scripts/export_openapi.py` → `backend/openapi.json` |
+| Regenerar tipos TS (si cambió la API) | `cd ../frontend && npm run gen:api` → `frontend/src/lib/api/schema.d.ts` (el CI falla si difieren) |
 
 La BD local y el emulador de Firebase Auth se levantan con `docker compose up -d` desde la raíz del repo.
 
