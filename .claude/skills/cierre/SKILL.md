@@ -14,7 +14,7 @@ Pasa a "Completado" solo lo que **GitHub confirma como mergeado** y el humano ap
    - Sin link en Jira: búscalo con `gh pr list --state all --search "KAN-<n> in:title" --json number,state,mergedAt,url`.
 3. Muestra un resumen:
    ```
-   🔎 Pendientes de cierre
+   Pendientes de cierre
    KAN-<n> · <título> · PR #<número> · MERGED <fecha> | OPEN | CLOSED sin merge | sin PR
    ```
 4. Para las `MERGED`, pregunta: *"KAN-<n> fue mergeada, ¿la paso a Completado?"* (puedes agrupar varias en una sola pregunta). Si acepta, pide a `jira-manager` para cada una:

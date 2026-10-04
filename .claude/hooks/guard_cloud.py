@@ -125,11 +125,11 @@ DENY_RULES = [
 # Reglas de advertencia (ask): se pregunta al humano con un aviso destacado.
 ASK_RULES = [
     (r"\bgcloud\b[^|;&]*\b(add-iam-policy-binding|remove-iam-policy-binding|set-iam-policy)\b",
-     "⚠️ CAMBIO DE PERMISOS IAM. Verifica que el proyecto sea staging y que el rol sea el mínimo necesario."),
+     "CAMBIO DE PERMISOS IAM. Verifica que el proyecto sea staging y que el rol sea el mínimo necesario."),
     (r"\bgcloud\b[^|;&]*\bconfig\s+set\s+project\b",
-     "⚠️ Cambio del proyecto activo de gcloud. Verifica que sea el de staging."),
+     "Cambio del proyecto activo de gcloud. Verifica que sea el de staging."),
     (r"\b(alembic)\b[^|;&]*\b(downgrade)\b",
-     "⚠️ Alembic downgrade: revierte migraciones de la base de datos."),
+     "Alembic downgrade: revierte migraciones de la base de datos."),
 ]
 
 # Los heredocs de git/gh (mensajes de commit, cuerpos de PR) son texto, no comandos.
@@ -290,10 +290,10 @@ class Checker:
             for value in values:
                 project = self.resolve(value)
                 if project is None:
-                    self.asks.append(f"⚠️ No puedo verificar el proyecto `{value}`{where}. Confirma que sea staging.")
+                    self.asks.append(f"No puedo verificar el proyecto `{value}`{where}. Confirma que sea staging.")
                 elif not self.allowed:
                     self.asks.append(
-                        f"⚠️ Aún no existe {STAGING_ENV} con GCP_PROJECT_ID (lo crea KAN-9). "
+                        f"Aún no existe {STAGING_ENV} con GCP_PROJECT_ID (lo crea KAN-9). "
                         f"Verifica que `{project}`{where} sea el proyecto de staging."
                     )
                 elif project not in self.allowed:
@@ -380,7 +380,7 @@ def check(command: str, cwd: str, project_dir: str) -> None:
         lines = checker.script_cloud_lines
         listing = "\n".join(f"  · {line}" for line in lines[:10])
         extra = f"\n  · … y {len(lines) - 10} más" if len(lines) > 10 else ""
-        asks.append(f"⚠️ El script ejecuta {len(lines)} comando(s) de nube:\n{listing}{extra}")
+        asks.append(f"El script ejecuta {len(lines)} comando(s) de nube:\n{listing}{extra}")
     if asks:
         decide("ask", "\n".join(asks))
 

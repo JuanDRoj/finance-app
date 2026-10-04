@@ -42,7 +42,7 @@ Si "Contrato faltante" no está vacío, **no propongas inventarlo**: el plan deb
 
 Al terminar devuelve:
 ```
-Resultado KAN-<n>: ✅ listo | ⚠️ bloqueado
+Resultado KAN-<n>: LISTO | BLOQUEADO
 Archivos cambiados: <lista>
 Lint/tipos/build: <ok | errores>
 Cómo probarlo a mano: <pasos cortos: URL local, usuario del emulador, qué deberías ver>

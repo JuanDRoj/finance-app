@@ -63,16 +63,16 @@ results = {"ok": 0, "fail": 0}
 
 
 def expect(label, got, expected, reason):
-    status = "✅" if got == expected else "❌"
+    status = "OK  " if got == expected else "FAIL"
     results["ok" if got == expected else "fail"] += 1
-    short = reason.replace("\n", " ⏎ ")[:150]
+    short = reason.replace("\n", " | ")[:150]
     print(f"{status} {label:<64} → {str(got):<5} (esperado {expected}) {short if got != expected or got else ''}")
 
 
 def cloud(project, command, expected, cwd=None):
     payload = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd or project}
     got, reason = run_hook("guard_cloud.py", [], payload, project)
-    expect(command.replace("\n", "⏎")[:64], got, expected, reason)
+    expect(command.replace("\n", "\\n")[:64], got, expected, reason)
 
 
 def scope(project, label, rules, tool, value, expected, agent="backend-dev", main_only=False, cwd=None):

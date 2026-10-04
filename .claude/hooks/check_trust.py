@@ -56,7 +56,7 @@ def main() -> None:
         sys.exit(0)
 
     message = (
-        f"⚠️ {root} no está marcado como confiable en Claude Code: los hooks de los subagentes "
+        f"{root} no está marcado como confiable en Claude Code: los hooks de los subagentes "
         "(guard_scope) NO van a correr. Abre Claude Code en la raíz del repo y acepta el diálogo de "
         f"confianza, o pon projects[\"{root}\"].hasTrustDialogAccepted en true en {path}."
     )

@@ -50,7 +50,7 @@ Fuera de alcance (no lo haré): <lista o "nada">
 
 Al terminar devuelve:
 ```
-Resultado KAN-<n>: ✅ listo | 🐞 bugs encontrados | ⚠️ bloqueado
+Resultado KAN-<n>: LISTO | BUGS | BLOQUEADO
 Cobertura: <N de M criterios cubiertos; cuáles faltan y por qué>
 Tests: <archivos> · Suite: <N passed / N failed>
 Checklist manual: <archivo o "no aplica">
@@ -60,7 +60,7 @@ Dudas abiertas para el humano: <lista o "ninguna">
 
 ### Formato de bug
 ```
-🐞 <título corto>
+BUG: <título corto>
 Dónde: <endpoint / pantalla / archivo:línea si lo sabes>
 Pasos para reproducir: 1. … 2. … 3. …
 Esperado: <según el criterio de aceptación>
@@ -73,7 +73,7 @@ Test que lo demuestra: <nombre del test o "manual">
 - Tests **deterministas**: sin `sleep` arbitrarios, sin depender del orden de ejecución ni de datos de otros tests. Cada test crea sus propios datos.
 - Nombres de tests que describan el comportamiento: `test_member_of_other_space_gets_404`, no `test_spaces_2`.
 - Dinero en los datos de prueba: centavos enteros (`1550`, no `15.5`).
-- Checklists manuales en español, con pasos numerados, resultado esperado por paso y una casilla ✅/❌.
+- Checklists manuales en español, con pasos numerados, resultado esperado por paso y una columna de resultado (OK / FALLA).
 
 ## Prohibido
 - Modificar código de producción (está bloqueado: solo puedes escribir tests, configuración de Playwright y `docs/qa/`).

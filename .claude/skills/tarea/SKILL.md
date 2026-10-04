@@ -15,8 +15,8 @@ hooks:
 # Ciclo de la sub-tarea $clave
 
 Eres el **orquestador**. Coordinas a los subagentes; **no escribes código de producción tú mismo**.
-Sigue las fases en orden. En cada ✋ CONTROL **te detienes y esperas la respuesta del humano**; nunca lo des por aprobado.
-Al empezar cada fase, escribe una línea: `▶ Fase N — <nombre>`.
+Sigue las fases en orden. En cada CONTROL **te detienes y esperas la respuesta del humano**; nunca lo des por aprobado.
+Al empezar cada fase, escribe una línea: `Fase N — <nombre>`.
 
 ## Cómo delegar
 - Usa la herramienta de agentes con el nombre exacto del subagente: `jira-manager`, `backend-dev`, `frontend-dev`, `infra-dev`, `qa`, `reviewer`.
@@ -52,14 +52,14 @@ Invoca al agente elegido en **Modo PLAN**, pasándole el resumen completo y los 
 Luego presenta al humano un plan consolidado:
 
 ```
-📋 Plan $clave — <título>
+Plan $clave — <título>
 Agente principal: <nombre> · Revisión: reviewer
 <plan devuelto por el agente, sin recortar lo importante>
 Tipo de entrega: PR | Sin código (cierre con evidencia en Jira)
 Rama: kan-<n>-<slug-corto>
 ```
 
-## ✋ CONTROL 1 — Aprobación del plan
+## CONTROL 1 — Aprobación del plan
 Pregunta: *"¿Apruebas el plan? (sí / cambios)"*.
 - Si pide cambios, pásaselos al mismo agente con `SendMessage`, pide el plan corregido y repite el control.
 - **No avances sin un "sí" explícito.**
@@ -70,9 +70,9 @@ Pregunta: *"¿Apruebas el plan? (sí / cambios)"*.
 
 ## Fase 4 — Desarrollo
 1. Continúa al mismo agente con `SendMessage` en **Modo IMPLEMENTACIÓN**, pasándole el **plan aprobado textual** (con los cambios que pidió el humano).
-2. Si devuelve ⚠️ bloqueado o 🐞 bugs: muestra el motivo al humano y pregunta cómo seguir (corregir, ajustar el plan o pausar). No sigas por tu cuenta.
+2. Si devuelve BLOQUEADO o BUGS: muestra el motivo al humano y pregunta cómo seguir (corregir, ajustar el plan o pausar). No sigas por tu cuenta.
 3. Si devuelve dudas abiertas que afecten al diseño, pregúntalas al humano antes de seguir.
-4. **Commit local** (sin push) cuando el agente devuelva ✅. Si no cambió ningún archivo, no hay commit.
+4. **Commit local** (sin push) cuando el agente devuelva LISTO. Si no cambió ningún archivo, no hay commit.
    - Revisa `git status --short`. Si hay archivos fuera del alcance del rol del agente, **detente** y pregunta al humano.
    - `git add` de los archivos de la tarea (nunca `git add .` a ciegas).
    - `git commit -m "KAN-<n> <tipo>(<alcance>): <descripción>"`.
@@ -82,13 +82,13 @@ Pregunta: *"¿Apruebas el plan? (sí / cambios)"*.
 ## Fase 5 — Revisión
 Invoca a `reviewer` pasándole la clave, el agente que trabajó, el plan aprobado y los criterios. Guarda su ID.
 - Si el veredicto es **CAMBIOS NECESARIOS**:
-  1. Pasa los hallazgos 🔴 y 🟠 al agente de desarrollo con `SendMessage` ("corrige estos hallazgos").
+  1. Pasa los hallazgos [BLOQUEANTE] e [IMPORTANTE] al agente de desarrollo con `SendMessage` ("corrige estos hallazgos").
   2. Commit local: `KAN-<n> fix(<alcance>): address review findings`.
   3. Pide al **mismo** reviewer con `SendMessage` que verifique las correcciones.
 
-  **Máximo 2 rondas** de revisión; si siguen apareciendo 🔴, detente y consulta al humano.
-- Las ❓ decisiones para el humano se las preguntas a él.
-- Los 🟢 no bloquean: guárdalos para el cuerpo del PR.
+  **Máximo 2 rondas** de revisión; si siguen apareciendo [BLOQUEANTE], detente y consulta al humano.
+- Las [DECISIÓN] se las preguntas al humano.
+- Las [SUGERENCIA] no bloquean: guárdalas para el cuerpo del PR.
 
 ## Fase 6 — Verificación final
 Confirma que lint, tipos y la suite completa del área afectada están en verde (comandos en el `CLAUDE.md` de la carpeta).
@@ -96,9 +96,9 @@ Si algo falla, pásale el error al agente con `SendMessage` (cuenta dentro de su
 
 ## Fase 7 — Repaso
 Ejecuta las instrucciones de la skill `/repaso` (base `main`) y muéstralo al humano.
-Agrega al final: veredicto del reviewer, sugerencias 🟢 pendientes y migraciones que requieren revisión humana.
+Agrega al final: veredicto del reviewer, [SUGERENCIA] pendientes y migraciones que requieren revisión humana.
 
-## ✋ CONTROL 2 — ¿Generar el PR?
+## CONTROL 2 — ¿Generar el PR?
 Pregunta: *"¿Genero el PR? (sí / pido cambios / pausar)"*.
 - **Pido cambios** → pásaselos al agente con `SendMessage` (Fase 4, con su commit) y repite desde la Fase 5.
 - **Pausar** → pide a `jira-manager` un comentario *Bloqueada* con el estado actual y termina. El trabajo queda en los commits locales de la rama.
@@ -118,10 +118,10 @@ Pregunta: *"¿Genero el PR? (sí / pido cambios / pausar)"*.
 ```
 4. Pide a `jira-manager`: transición a **"En revisión"** y comentario *PR abierto* con el link.
 
-## ✋ CONTROL 3 — Merge (lo hace el humano)
+## CONTROL 3 — Merge (lo hace el humano)
 Cierra con este mensaje:
 ```
-✅ $clave lista para tu revisión: <link del PR>
+$clave lista para tu revisión: <link del PR>
 Cuando el CI esté en verde, mergea en GitHub (recomendado: "Squash and merge", un commit por sub-tarea en main).
 Se cerrará en Jira con /cierre o al iniciar el próximo /tarea.
 ```
@@ -131,7 +131,7 @@ Se cerrará en Jira con /cierre o al iniciar el próximo /tarea.
 ## Modo reanudación
 Si la tarea ya estaba empezada:
 1. Cambia a su rama (`git switch kan-<n>-…`) y lee el estado: `git log main..HEAD --oneline` y, si hay PR, `gh pr view --comments`.
-2. Pide a `jira-manager` el **RESUMEN** de `$clave` y sus comentarios 🤖 (el de *Inicio* tiene el plan resumido).
+2. Pide a `jira-manager` el **RESUMEN** de `$clave` y sus comentarios `[Agente]` (el de *Inicio* tiene el plan resumido).
 3. Resume al humano dónde quedó y qué falta (incluidos los comentarios de revisión del PR).
 4. Pregunta cómo seguir. Si vienes de otra sesión, crea un agente nuevo y pásale el plan recuperado, el `git log` y los cambios pedidos.
 5. Si hay cambios pedidos en el PR: pide a `jira-manager` volver a **"En progreso"**, sigue desde la Fase 4 (con commits locales) y, al final, haz push a la misma rama (sin crear otro PR) y vuelve a **"En revisión"**.

@@ -48,12 +48,12 @@ Solo cuando el orquestador te lo pida explícitamente, indicando la clave y el e
 - **A "Completado" solo si el pedido incluye** el número de PR y la frase "MERGED verificado", **o** la frase "SIN CÓDIGO aprobado por el humano" (tareas sin PR).
 - Si no incluye ninguna de las dos, niégate y explica qué falta.
 - Nunca saltes estados hacia adelante (ej. de "Tareas por hacer" directo a "Completado").
-- Confirma con: `KAN-<n>: <estado anterior> → <estado nuevo> ✔`
+- Confirma con: `KAN-<n>: <estado anterior> → <estado nuevo>`
 
 ### 3. COMENTARIO
 Agrega un comentario con este formato (en español):
 ```
-🤖 <Evento: Inicio | PR abierto | Cerrada | Bloqueada>
+[Agente] <Evento: Inicio | PR abierto | Cerrada | Bloqueada>
 <qué se hizo, 1–4 líneas>
 PR: <link o "—"> · Rama: <rama o "—">
 Dudas abiertas: <lista o "ninguna">

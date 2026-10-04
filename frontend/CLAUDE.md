@@ -3,7 +3,7 @@
 Next.js (App Router) · TypeScript **strict** · React Server Components · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · Playwright (E2E).
 Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en **español**.
 
-> ⚠️ Los comandos y la estructura de abajo son la convención acordada. Los fijan **KAN-24 [FE-01]** (setup) y **KAN-25 [FE-02]** (cliente API): si esas tareas (o posteriores) los cambian, **actualiza este archivo en la misma tarea**.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijan **KAN-24 [FE-01]** (setup) y **KAN-25 [FE-02]** (cliente API): si esas tareas (o posteriores) los cambian, **actualiza este archivo en la misma tarea**.
 
 ## Comandos (siempre desde `/frontend`)
 | Para | Comando |
@@ -30,7 +30,7 @@ frontend/
 │   ├── middleware.ts           # redirige a /login si no hay cookie de sesión
 │   ├── lib/
 │   │   ├── api/
-│   │   │   ├── schema.d.ts     # ⛔ GENERADO por gen:api — nunca editar a mano
+│   │   │   ├── schema.d.ts     # GENERADO por gen:api — nunca editar a mano
 │   │   │   ├── server.ts       # cliente para Server Components (BACKEND_URL + reenvía cookie)
 │   │   │   └── browser.ts      # cliente para el navegador (vía /api/*)
 │   │   ├── firebase.ts         # init de Firebase Auth (emulador en local)

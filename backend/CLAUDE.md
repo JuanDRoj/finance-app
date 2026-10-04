@@ -3,7 +3,7 @@
 Python **3.14** · FastAPI · SQLAlchemy 2.0 async (asyncpg) · Alembic (async) · PostgreSQL · pytest · uv · ruff · mypy.
 Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python Connector.
 
-> ⚠️ Los comandos de abajo son la convención acordada. Los fija **KAN-17 [BE-01]**: si esa tarea (o una posterior) los cambia, **actualiza este archivo en la misma tarea**.
+> **Nota:** los comandos de abajo son la convención acordada. Los fija **KAN-17 [BE-01]**: si esa tarea (o una posterior) los cambia, **actualiza este archivo en la misma tarea**.
 
 ## Comandos (siempre desde `/backend`)
 | Para | Comando |

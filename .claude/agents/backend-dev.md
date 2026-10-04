@@ -40,7 +40,7 @@ Fuera de alcance (no lo haré): <lista o "nada">
 
 Al terminar devuelve:
 ```
-Resultado KAN-<n>: ✅ listo | ⚠️ bloqueado
+Resultado KAN-<n>: LISTO | BLOQUEADO
 Archivos cambiados: <lista>
 Tests agregados: <lista> · Suite: <N passed>
 Lint/tipos: <ok | errores>
