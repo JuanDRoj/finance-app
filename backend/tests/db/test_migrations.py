@@ -103,7 +103,9 @@ async def test_alembic_cli_upgrades_and_downgrades_from_the_backend_directory(
 
     def run(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "alembic", *args],
+            # -P: do not add the cwd to sys.path, so only `prepend_sys_path` in alembic.ini
+            # makes `app` importable (as with the `alembic` console script).
+            [sys.executable, "-P", "-m", "alembic", *args],
             cwd=isolated_backend,
             env=env,
             capture_output=True,
