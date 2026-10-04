@@ -64,7 +64,7 @@ frontend/
   - Servidor: `const api = await getServerApi();` (una vez por render) y `await api.GET("/ruta")`. Lee los headers de la petición, así que la ruta pasa a ser dinámica. No usa caché (`cache: "no-store"`).
   - Navegador: `browserApi.GET("/ruta")` desde handlers o efectos de componentes cliente. Su `baseUrl` es relativa, así que en Node falla con `Failed to parse URL`: en Server Components usa `getServerApi()`.
   - Las llamadas devuelven `{ data, error, response }`, ya tipados con `schema.d.ts`: no los redeclares a mano.
-- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI falla si los tipos generados no coinciden. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
+- **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI fallará si los tipos generados no coinciden _(pendiente: KAN-15)_. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
   - Un cambio del contrato que rompa lo que usa el frontend se ve en `npm run typecheck`. `lib/api/contract.check.ts` lo garantiza para `/healthz` y el cableado de los clientes (sus `@ts-expect-error` fallan si el cliente deja de rechazar llamadas erróneas).
   - Los endpoints reales se tipan al usarlos en la app; no hay que registrarlos en ningún sitio.
 - **Rewrite:** `/api/:path*` → `${BACKEND_URL}/:path*` en `next.config.ts` (lo mantiene frontend; quita el prefijo `/api`). Funciona igual en local y en Vercel.
