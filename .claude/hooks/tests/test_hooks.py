@@ -107,6 +107,13 @@ try:
     cloud(P, "firebase emulators:start --only auth", None)
     cloud(P, "firebase deploy --only hosting", "deny")
     cloud(P, "firebase deploy -P finance-stg-123", None)
+    cloud(P, "npm view firebase version", None)  # `firebase` es el paquete npm, no la CLI
+    cloud(P, "npm install firebase zod", None)
+    cloud(P, "pnpm add -D firebase-tools firebase", None)
+    cloud(P, "cd frontend && npm i firebase", None)
+    cloud(P, "npx firebase deploy", "deny")  # npx y exec sí ejecutan la CLI
+    cloud(P, "npm exec firebase deploy", "deny")
+    cloud(P, "npm exec -- firebase deploy -P finance-stg-123", None)
     cloud(P, "vercel --prod", "deny")
     cloud(P, 'bash -c "gcloud run deploy x --project finance-other"', "deny")
     cloud(P, "bash infra/scripts/20_cloud_sql.sh", "ask")

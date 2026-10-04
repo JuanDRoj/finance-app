@@ -71,6 +71,14 @@ POSITIONAL_PROJECT = [
     (["use"], 1),                       # firebase use <ID>
 ]
 
+# Gestores de paquetes: en estos subcomandos `firebase` es el nombre de un paquete, no la CLI
+# (`npm install firebase`, `npm view firebase version`). exec/x/dlx y npx sí ejecutan la CLI.
+PACKAGE_MANAGERS = {"npm", "pnpm", "yarn"}
+PACKAGE_SUBCOMMANDS = {
+    "view", "info", "show", "v", "install", "i", "ci", "add", "uninstall", "remove", "rm", "un",
+    "ls", "list", "search", "outdated", "update", "up", "audit", "why", "explain",
+}
+
 MAX_SCRIPT_DEPTH = 3
 MAX_SCRIPT_BYTES = 200_000
 
@@ -215,6 +223,15 @@ def project_values(cli: str, args: list[str]) -> list[str]:
     return []
 
 
+def is_package_query(tokens: list[str]) -> bool:
+    """True para `npm|pnpm|yarn <subcomando de paquetes> …`: los argumentos son paquetes, no comandos."""
+    p = program_index(tokens)
+    if p is None or os.path.basename(tokens[p]) not in PACKAGE_MANAGERS:
+        return False
+    sub = next((a for a in tokens[p + 1:] if not a.startswith("-")), None)
+    return sub in PACKAGE_SUBCOMMANDS
+
+
 class Checker:
     def __init__(self, project_dir: str):
         self.project_dir = os.path.realpath(project_dir)
@@ -274,6 +291,8 @@ class Checker:
             self.script_cloud_lines.append(f"{origin}: {seg[:140]}")
 
     def check_projects(self, tokens: list[str], where: str) -> None:
+        if is_package_query(tokens):
+            return
         for i, token in enumerate(tokens):
             cli = os.path.basename(token)
             if cli not in PROJECT_CLIS:
