@@ -1,6 +1,7 @@
 # Claude Code (personal, no se comparte)
 CLAUDE.local.md
 .claude/settings.local.json
+docs/guia-de-trabajo.md
 
 # Secretos
 .env
