@@ -69,4 +69,6 @@ Las variables de los servicios locales van documentadas en `.env.example` (raíz
 
 ## GitHub
 - Protección de `main` (KAN-7): PR obligatorio + CI en verde, sin force push. **Verificar primero** si el plan de GitHub lo permite (repos privados en plan Free no tienen protección de ramas); si no, es una decisión del humano.
+- Decisión KAN-7: el repo es **público** (los rulesets no existen en privado/Free). `main` se protege con el ruleset `protect-main` (`infra/scripts/05_github_main_protection.sh`): PR obligatorio, sin force push ni borrado, sin bypass (aplica también al admin). Antes de publicar se corre `infra/scripts/04_scan_history.sh`.
+- Checks requeridos: el ruleset nace **sin** checks porque aún no hay CI. **KAN-15** debe poner los nombres de sus jobs en `REQUIRED_CHECKS` (ej. `REQUIRED_CHECKS=backend,frontend`) y volver a correr el script 05.
 - Workflows con `permissions:` explícitos y actions fijadas a una versión.
