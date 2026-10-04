@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Personal Finance App - backend API"
 requires-python = ">=3.14,<3.15"
 dependencies = [
+    "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
+    "cloud-sql-python-connector[asyncpg]>=1.22.0",
     "fastapi[standard]>=0.115",
     "pydantic-settings>=2",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [dependency-groups]
@@ -32,6 +36,11 @@ python_version = "3.14"
 strict = true
 files = ["app", "tests"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# asyncpg ships no type information; tests use it directly to fake the Cloud SQL Connector.
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
