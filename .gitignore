@@ -1,0 +1,8 @@
+# Claude Code (personal, no se comparte)
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Secretos
+.env
+.env.*
+!.env.example
