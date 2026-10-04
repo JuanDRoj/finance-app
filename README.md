@@ -9,7 +9,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 ### Requisitos
 - Docker con Compose v2 (`docker compose version`).
 - Python con `uv` (versión exacta: la fija el backend).
-- Node.js LTS con npm (versión exacta: la fija el frontend).
+- Node.js 24 con npm (fijado en `frontend/.nvmrc`; con nvm o fnm: `nvm use` dentro de `frontend/`).
 
 ### Puertos
 | Servicio | Puerto |
@@ -20,14 +20,14 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 | Frontend | 3000 |
 
 ### Pasos
-1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Backend: `cp backend/.env.example backend/.env` es opcional (el backend funciona con los valores por defecto). El `.env.example` de `frontend/` sigue pendiente de su tarea.
+1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Backend: `cp backend/.env.example backend/.env` es opcional (el backend funciona con los valores por defecto). Frontend: `cp frontend/.env.example frontend/.env.local` es **obligatorio** (sin él, `npm run dev` y `npm run build` fallan listando las variables que faltan).
 2. PostgreSQL y emulador de Firebase Auth: `docker compose up -d` desde la raíz (la primera vez construye la imagen del emulador). Comprueba con `docker compose ps` que ambos estén `healthy`.
    - UI del emulador: <http://localhost:4000> · Auth en `localhost:9099`.
    - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
    - `finance_test` solo se crea con el volumen vacío. Si ya existía el volumen: `docker compose exec postgres createdb -U finance finance_test`.
    - Los datos de PostgreSQL persisten en el volumen `finance_pgdata`; `docker compose down` los conserva y `docker compose down -v` los borra. Los usuarios del emulador no persisten.
 3. Backend en el puerto 8000: `cd backend && uv sync && uv run alembic upgrade head && uv run fastapi dev app/main.py` (Python 3.14; uv lo descarga si falta). `alembic upgrade head` aplica las migraciones a la BD `finance`; repítelo cada vez que llegue una migración nueva. Comprueba con `curl localhost:8000/healthz`.
-4. Frontend en el puerto 3000 con `npm run dev`. Pendiente: disponible con las tareas de frontend.
+4. Frontend en el puerto 3000: `cd frontend && npm ci && npm run dev` (requiere el `.env.local` del paso 1). Abre <http://localhost:3000>.
 
 ## Flujo de trabajo y `main` protegida
 
