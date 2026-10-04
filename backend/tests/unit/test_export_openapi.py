@@ -60,18 +60,23 @@ def test_render_has_sorted_keys_two_space_indent_and_single_trailing_newline() -
     assert "\r" not in text
 
 
-def test_non_ascii_text_is_written_as_utf8_not_escaped(app: FastAPI, tmp_path: Path) -> None:
+def test_non_ascii_text_is_written_as_utf8_not_escaped(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     @app.get("/summary", summary="Resumen de categorías (ñ)")
     async def _summary() -> dict[str, str]:
         return {}
 
-    text = render_openapi(app)
-
-    assert "Resumen de categorías (ñ)" in text
-    assert "\\u00" not in text
+    # The real schema is all ASCII, so serve main() an app that has non-ASCII text.
+    monkeypatch.setattr("app.export_openapi.create_app", lambda: app)
     target = tmp_path / "openapi.json"
-    target.write_bytes(text.encode("utf-8"))
-    assert "Resumen de categorías (ñ)" in target.read_text(encoding="utf-8")
+
+    assert main(["-o", str(target)]) == 0
+
+    data = target.read_bytes()
+    assert "Resumen de categorías (ñ)" in data.decode("utf-8")
+    assert "ñ".encode() in data  # the literal UTF-8 bytes, not a \uXXXX escape
+    assert b"\\u00" not in data
 
 
 def test_main_writes_rendered_schema_to_the_given_output(
@@ -93,6 +98,10 @@ def test_default_output_is_openapi_json_next_to_the_app_package() -> None:
 def test_export_never_runs_the_lifespan_or_creates_a_database(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # Covers the lifespan only: `app.main` is already imported here, so a module-level
+    # `get_settings()` in a future router would not be seen. That import-time case is covered by
+    # `test_export_runs_without_env_vars_and_output_does_not_depend_on_hash_seed`, which imports
+    # the app in a fresh subprocess with ENV=prod and no DATABASE_URL.
     def forbidden(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("the export must not touch settings or the database")
 
