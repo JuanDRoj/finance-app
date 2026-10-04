@@ -34,6 +34,17 @@ export default defineConfig([
         "error",
         ...PROCESS_ENV_SELECTORS.map((selector) => ({ selector, message: PROCESS_ENV_MESSAGE })),
       ],
+      // `import { env } from "node:process"` is the same read through the module API.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["process", "node:process"].map((name) => ({
+            name,
+            importNames: ["env"],
+            message: PROCESS_ENV_MESSAGE,
+          })),
+        },
+      ],
     },
   },
   // Must come last: turns off rules that conflict with Prettier.

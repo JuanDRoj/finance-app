@@ -76,7 +76,7 @@ frontend/
 - **Servidor:** `BACKEND_URL` (URL http(s), sin barra final). Solo se lee desde `lib/env/server.ts` (`serverEnv`), que lleva `import "server-only"`: importarlo desde un componente cliente rompe el build.
 - **Cliente:** `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID` (obligatorias) y `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` (opcional, solo local). Se leen desde `lib/env/client.ts` (`clientEnv`). Son públicas: se incrustan en el bundle al hacer build, **nunca secretos**. Next solo las incrusta si se escriben como `process.env.NEXT_PUBLIC_X` literal (`client.ts` ya lo hace); no uses claves dinámicas ni pases `process.env` entero.
 - **No leas `process.env` directamente** fuera de `lib/env/` (ESLint lo prohíbe): añade la variable al schema y léela vía `serverEnv` / `clientEnv`.
-- **Emulador solo en local:** el build falla si `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` está definida y existe `VERCEL_ENV` (misma regla que el backend).
+- **Emulador solo en local:** el build falla si `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` está definida y existe `VERCEL_ENV` (misma regla que el backend). `vercel dev` también define `VERCEL_ENV=development`, así que la guarda impide usarlo con el emulador: en local usa `npm run dev`.
 - Los schemas de servidor y cliente están en archivos separados a propósito: así el bundle del navegador no contiene los nombres de las variables de servidor.
 - Lista comentada en `frontend/.env.example` (nunca leas `.env.local`). Cualquier variable nueva se añade a su schema **y** al `.env.example` en el mismo cambio.
 
