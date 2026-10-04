@@ -18,7 +18,7 @@
       "Bash(uv run pytest *)",
       "Bash(uv run ruff *)",
       "Bash(uv run mypy *)",
-      "Bash(uv run python scripts/export_openapi.py *)",
+      "Bash(uv run python -m app.export_openapi *)",
       "Bash(npm run lint *)",
       "Bash(npm run typecheck *)",
       "Bash(npm run build *)",

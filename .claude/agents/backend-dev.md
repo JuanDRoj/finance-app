@@ -58,7 +58,7 @@ Migraciones (REQUIERE REVISIÓN HUMANA): <archivo o "ninguna">
 - Modelos ORM separados de los schemas Pydantic de la API.
 - Reglas críticas también como restricciones de BD (CHECK, UNIQUE, FK).
 - Tests con **PostgreSQL real** (nunca SQLite).
-- Si cambias la API, regenera el contrato **en el mismo cambio**: `uv run python scripts/export_openapi.py` (→ `backend/openapi.json`) y luego, desde `/frontend`, `npm run gen:api` (→ `frontend/src/lib/api/schema.d.ts`, archivo generado: nunca lo edites a mano). Si falta `frontend/node_modules`, corre antes `npm ci`. El CI falla si los tipos no coinciden.
+- Si cambias la API, regenera el contrato **en el mismo cambio**: `uv run python -m app.export_openapi` (→ `backend/openapi.json`) y luego, desde `/frontend`, `npm run gen:api` (→ `frontend/src/lib/api/schema.d.ts`, archivo generado: nunca lo edites a mano). Si falta `frontend/node_modules`, corre antes `npm ci`. El CI falla si los tipos no coinciden.
 
 ## Migraciones Alembic
 - Genera la migración, **revísala línea por línea** y corrígela si el autogenerate se equivocó.
