@@ -20,8 +20,12 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 | Frontend | 3000 |
 
 ### Pasos
-1. Copiar los `.env.example` (raíz, `backend/`, `frontend/`) a `.env` y ajustar. Pendiente: los archivos los crean KAN-8 y las tareas de backend y frontend.
-2. PostgreSQL y emulador de Firebase Auth con `docker compose up -d`. Pendiente: `docker-compose.yml` llega con KAN-8.
+1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Los `.env.example` de `backend/` y `frontend/` los crean las tareas de backend y frontend. Pendiente.
+2. PostgreSQL y emulador de Firebase Auth: `docker compose up -d` desde la raíz (la primera vez construye la imagen del emulador). Comprueba con `docker compose ps` que ambos estén `healthy`.
+   - UI del emulador: <http://localhost:4000> · Auth en `localhost:9099`.
+   - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
+   - `finance_test` solo se crea con el volumen vacío. Si ya existía el volumen: `docker compose exec postgres createdb -U finance finance_test`.
+   - Los datos de PostgreSQL persisten en el volumen `finance_pgdata`; `docker compose down` los conserva y `docker compose down -v` los borra. Los usuarios del emulador no persisten.
 3. Backend en el puerto 8000 con `uv run`. Pendiente: comando exacto con las tareas de backend.
 4. Frontend en el puerto 3000 con `npm run dev`. Pendiente: disponible con las tareas de frontend.
 
