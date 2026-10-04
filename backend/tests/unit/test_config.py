@@ -42,3 +42,9 @@ def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     s = _settings()
     assert s.ENV == "staging"
     assert s.LOG_LEVEL == "DEBUG"
+
+
+def test_log_level_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "LOUD")
+    with pytest.raises(ValidationError):
+        _settings()

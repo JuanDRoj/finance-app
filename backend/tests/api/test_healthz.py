@@ -2,6 +2,7 @@ import io
 import json
 import logging
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
@@ -57,6 +58,9 @@ async def test_every_log_line_during_request_has_request_id(
 
     parsed = [json.loads(line) for line in log_stream.getvalue().splitlines()]
     # The httpx test client logs its own call from outside the app's request scope.
+    excluded = [line for line in parsed if line["logger"] == "httpx"]
+    assert len(excluded) == 1
+    assert excluded[0]["message"].startswith("HTTP Request:")
     lines = [line for line in parsed if line["logger"] != "httpx"]
     messages = {line["message"] for line in lines}
     assert {"inside handler", "request_completed"} <= messages
@@ -68,3 +72,27 @@ async def test_every_log_line_during_request_has_request_id(
     assert completed["status"] == 200
     assert "duration_ms" in completed
     assert "secret" not in json.dumps(completed)
+
+
+async def test_unhandled_exception_is_logged_with_traceback_and_request_id(
+    app: FastAPI, client: AsyncClient, log_stream: io.StringIO
+) -> None:
+    @app.get("/_test/boom")
+    async def _boom() -> dict[str, str]:
+        raise RuntimeError("kaboom")
+
+    with pytest.raises(RuntimeError):
+        await client.get("/_test/boom?token=s3cret", headers={"X-Request-ID": "rid-500"})
+
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    lines = [line for line in lines if line["logger"] != "httpx"]
+    errors = [line for line in lines if "exception" in line]
+    assert len(errors) == 1
+    assert errors[0]["request_id"] == "rid-500"
+    assert errors[0]["level"] == "ERROR"
+    assert "RuntimeError: kaboom" in errors[0]["exception"]
+    assert "s3cret" not in json.dumps(errors[0]["path"])
+
+    completed = next(line for line in lines if line["message"] == "request_completed")
+    assert completed["status"] == 500
+    assert completed["request_id"] == "rid-500"

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     ENV: Literal["local", "staging", "prod"] = "local"
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     # Only valid locally; never set it in staging/prod.
     FIREBASE_AUTH_EMULATOR_HOST: str | None = None
 

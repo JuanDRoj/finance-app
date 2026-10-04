@@ -6,8 +6,20 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import get_settings
 from app.core.logging import JsonFormatter, RequestIdFilter
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Keep tests independent of the developer's shell and backend/.env."""
+    monkeypatch.setenv("ENV", "local")
+    monkeypatch.setenv("LOG_LEVEL", "INFO")
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

@@ -41,7 +41,7 @@ class JsonFormatter(logging.Formatter):
             "request_id": getattr(record, "request_id", request_id_ctx.get()),
         }
         for key, value in record.__dict__.items():
-            if key not in _STANDARD_ATTRS:
+            if key not in _STANDARD_ATTRS and key not in data:
                 data[key] = value
         if record.exc_info:
             data["exception"] = self.formatException(record.exc_info)
@@ -96,6 +96,13 @@ class RequestIdMiddleware:
 
         try:
             await self.app(scope, receive, send_wrapper)
+        except Exception:
+            # Traceback only; no query string, headers or body.
+            _logger.exception(
+                "unhandled_exception",
+                extra={"method": scope["method"], "path": scope["path"]},
+            )
+            raise
         finally:
             _logger.info(
                 "request_completed",
