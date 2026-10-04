@@ -20,7 +20,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 | Frontend | 3000 |
 
 ### Pasos
-1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Los `.env.example` de `backend/` y `frontend/` los crean las tareas de backend y frontend. Pendiente.
+1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Backend: `cp backend/.env.example backend/.env` es opcional (el backend funciona con los valores por defecto). El `.env.example` de `frontend/` sigue pendiente de su tarea.
 2. PostgreSQL y emulador de Firebase Auth: `docker compose up -d` desde la raíz (la primera vez construye la imagen del emulador). Comprueba con `docker compose ps` que ambos estén `healthy`.
    - UI del emulador: <http://localhost:4000> · Auth en `localhost:9099`.
    - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
