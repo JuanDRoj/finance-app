@@ -27,6 +27,7 @@ import re
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True  # sin __pycache__ dentro de .claude/hooks
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from shell_utils import (

@@ -46,6 +46,7 @@ def decide(decision: str, reason: str) -> None:
     sys.exit(0)
 
 
+sys.dont_write_bytecode = True  # sin __pycache__ dentro de .claude/hooks
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from shell_utils import SHELLS, program_index, shell_inline_command, split_segments, strip_heredocs, tokenize
