@@ -26,7 +26,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
    - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
    - `finance_test` solo se crea con el volumen vacío. Si ya existía el volumen: `docker compose exec postgres createdb -U finance finance_test`.
    - Los datos de PostgreSQL persisten en el volumen `finance_pgdata`; `docker compose down` los conserva y `docker compose down -v` los borra. Los usuarios del emulador no persisten.
-3. Backend en el puerto 8000: `cd backend && uv sync && uv run fastapi dev app/main.py` (Python 3.14; uv lo descarga si falta). Comprueba con `curl localhost:8000/healthz`.
+3. Backend en el puerto 8000: `cd backend && uv sync && uv run alembic upgrade head && uv run fastapi dev app/main.py` (Python 3.14; uv lo descarga si falta). `alembic upgrade head` aplica las migraciones a la BD `finance`; repítelo cada vez que llegue una migración nueva. Comprueba con `curl localhost:8000/healthz`.
 4. Frontend en el puerto 3000 con `npm run dev`. Pendiente: disponible con las tareas de frontend.
 
 ## Flujo de trabajo y `main` protegida
