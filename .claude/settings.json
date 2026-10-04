@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources",
+      "mcp__claude_ai_Atlassian_MCP__atlassianUserInfo",
+      "mcp__claude_ai_Atlassian_MCP__getJiraIssue",
+      "mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql",
+      "mcp__claude_ai_Atlassian_MCP__addOrEditJiraIssueComment",
+      "mcp__claude_ai_Atlassian_MCP__discover",
+      "mcp__claude_ai_Atlassian_MCP__executeRead",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh auth status *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run mypy *)",
+      "Bash(uv run python scripts/export_openapi.py *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run build *)",
+      "Bash(npm run gen:api *)",
+      "Bash(npm test *)",
+      "Bash(npx playwright test *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(gh pr create *)",
+      "Bash(gcloud *)",
+      "Bash(firebase *)",
+      "Bash(vercel *)",
+      "mcp__claude_ai_Atlassian_MCP__transitionJiraIssue",
+      "mcp__claude_ai_Atlassian_MCP__editJiraIssue",
+      "mcp__claude_ai_Atlassian_MCP__createJiraIssue",
+      "mcp__claude_ai_Atlassian_MCP__executeWrite"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(!.env.example)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(!.env.example)",
+      "Read(**/*credentials*.json)",
+      "Read(**/*service-account*.json)",
+      "Read(~/.ssh/**)",
+      "Read(~/.config/gcloud/**)",
+      "Bash(sudo *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push --force-with-lease *)",
+      "Bash(git push * main)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh repo delete *)",
+      "mcp__claude_ai_Atlassian_MCP__executeDestructive"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check_trust.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard_cloud.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
