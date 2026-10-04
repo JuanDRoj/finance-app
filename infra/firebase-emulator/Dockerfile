@@ -1,5 +1,5 @@
 # Emulador local de Firebase Auth (no existe imagen oficial de Google).
-FROM node:22-slim
+FROM node:22.23.3-slim
 
 # Version fija de firebase-tools para que el entorno sea reproducible.
 ARG FIREBASE_TOOLS_VERSION=15.32.1

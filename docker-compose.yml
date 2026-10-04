@@ -37,8 +37,8 @@ services:
       - "127.0.0.1:${FIREBASE_AUTH_EMULATOR_PORT:-9099}:9099"
       - "127.0.0.1:${FIREBASE_EMULATOR_UI_PORT:-4000}:4000"
     healthcheck:
-      # node ya esta en la imagen: evita instalar curl.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # node ya esta en la imagen: evita instalar curl. Comprueba Auth (9099) y la UI (4000).
+      test: ["CMD", "node", "-e", "Promise.all(['http://127.0.0.1:9099/','http://127.0.0.1:4000/'].map(u=>fetch(u).then(r=>{if(!r.ok)throw 1}))).then(()=>process.exit(0),()=>process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 12
