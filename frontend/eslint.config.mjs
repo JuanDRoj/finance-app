@@ -3,6 +3,25 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import prettier from "eslint-config-prettier/flat";
 
+const PROCESS_ENV_MESSAGE =
+  "Do not read process.env directly: import from @/lib/env/server or @/lib/env/client.";
+
+// Where `process` is the source of a destructuring pattern: `const { env } = process`,
+// `({ env } = process)` and `function f({ env } = process)`.
+const PROCESS_DESTRUCTURING =
+  ":matches(VariableDeclarator[init.name='process'], AssignmentExpression[right.name='process'], AssignmentPattern[right.name='process']) > ObjectPattern > Property";
+
+const PROCESS_ENV_SELECTORS = [
+  // process.env
+  "MemberExpression[object.name='process'][computed=false][property.name='env']",
+  // process["env"]
+  "MemberExpression[object.name='process'][computed=true][property.value='env']",
+  // const { env } = process  /  const { env: e } = process  /  const { env = {} } = process
+  `${PROCESS_DESTRUCTURING}[computed=false][key.name='env']`,
+  // const { "env": e } = process  /  const { ["env"]: e } = process
+  `${PROCESS_DESTRUCTURING}[key.value='env']`,
+];
+
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -13,11 +32,7 @@ export default defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
-        {
-          selector: "MemberExpression[object.name='process'][property.name='env']",
-          message:
-            "Do not read process.env directly: import from @/lib/env/server or @/lib/env/client.",
-        },
+        ...PROCESS_ENV_SELECTORS.map((selector) => ({ selector, message: PROCESS_ENV_MESSAGE })),
       ],
     },
   },

@@ -19,6 +19,8 @@ export function assertValidEnv(env: Env = process.env): void {
 
   // Same rule as the backend: the Firebase emulator exists only locally. VERCEL_ENV is set by
   // Vercel (production | preview | development) and is absent on a developer machine.
+  // Note: `vercel dev` also sets VERCEL_ENV=development, so this guard rules out running
+  // `vercel dev` together with the emulator. Use `npm run dev` for local work instead.
   if (env.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST?.trim() && env.VERCEL_ENV) {
     problems.push(
       `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST must not be set on Vercel (VERCEL_ENV=${env.VERCEL_ENV}); it is for local development only`,
