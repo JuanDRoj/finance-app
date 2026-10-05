@@ -37,7 +37,7 @@ Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proy
 | Capa | Decisión |
 |---|---|
 | Arquitectura | **Monolito modular** en el backend; frontend y backend separados, comunicados por API |
-| Frontend | **Next.js** + TypeScript (Server Components), en **Vercel** |
+| Frontend | **Next.js** + TypeScript (Server Components), en **Vercel**. Librerías, tokens y dirección visual: [`frontend/docs/diseno.md`](../frontend/docs/diseno.md) |
 | Backend | FastAPI (Python) en **Cloud Run** |
 | Base de datos | PostgreSQL en **Cloud SQL** |
 | ORM / migraciones | **SQLAlchemy 2.0 async (asyncpg) + Alembic** |

@@ -3,6 +3,8 @@
 Next.js (App Router) · TypeScript **strict** · React Server Components · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · Playwright (E2E).
 Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en **español**.
 
+**Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
+
 > **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijan **KAN-24 [FE-01]** (setup, ya hecho) y **KAN-25 [FE-02]** (cliente API): si esas tareas (o posteriores) los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
@@ -51,6 +53,7 @@ frontend/
 │   │   ├── i18n.ts             # (pendiente) mapa único de traducciones de valores del backend
 │   │   └── money.ts            # (pendiente) formateo de unidades menores → texto
 │   └── components/             # (pendiente)
+├── docs/diseno.md              # decisiones de diseño y librerías (FE-06); léelo antes de una pantalla nueva
 ├── e2e/                        # (pendiente) Playwright (qa)
 ├── .env.example                # lista comentada de variables; se copia a .env.local
 ├── .nvmrc                      # versión de Node
