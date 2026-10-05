@@ -1,7 +1,9 @@
 # Backend — FastAPI
 
-Python **3.14** · FastAPI · SQLAlchemy 2.0 async (asyncpg) · Alembic (async) · PostgreSQL · pytest · uv · ruff · mypy.
+Python **3.14** · FastAPI · SQLAlchemy 2.1 async (asyncpg) · Alembic (async) · PostgreSQL · pytest · uv · ruff · mypy.
 Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python Connector.
+
+Patrones de arquitectura con su porqué y un esqueleto de módulo: `docs/arquitectura-backend.md`. **Léelo al crear un módulo, una capa o un patrón nuevo.** Lo marcado *(pendiente)* abajo lo implementa **KAN-37 [BE-10] Base de arquitectura**, salvo los errores, que van en **KAN-35 [BE-08]**; hasta entonces, el código aún no lo hace.
 
 > **Nota:** los comandos de abajo son la convención acordada. Los fija **KAN-17 [BE-01]**: si esa tarea (o una posterior) los cambia, **actualiza este archivo en la misma tarea**.
 
@@ -28,7 +30,7 @@ backend/
 ├── app/
 │   ├── main.py                 # crea la app, registra routers y middlewares
 │   ├── export_openapi.py       # CLI: escribe openapi.json sin levantar el servidor
-│   ├── core/                   # config (pydantic-settings), db, seguridad, logging
+│   ├── core/                   # config (pydantic-settings), db, seguridad, logging, errors y schemas base (pendiente)
 │   └── modules/
 │       └── <módulo>/           # spaces, accounts, categories, transactions, recurring, dashboard
 │           ├── router.py       # HTTP: valida entrada, llama al service, arma la respuesta
@@ -50,18 +52,28 @@ backend/
 ```
 
 ## Convenciones de código
-- **Capas:** `router → service → repository`. Un módulo usa otro **solo vía su `service`**. Las operaciones que cruzan módulos van en **una sola transacción**.
-- **Dinero:** `int` en Python, `BigInteger` en BD, siempre **centavos**. Sin `float` ni `Decimal` en la BD.
+- **Capas:** `router → service → repository`. Services y repositories son **funciones async con `session` como primer parámetro** (no clases ni interfaces ABC). El service no conoce HTTP ni hace commit. El repository solo guarda consultas.
+- **Entre módulos:** orden fijo `users/auth → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard`.
+  - Un service solo llama services de módulos **anteriores**; los routers pueden combinar services de cualquier módulo.
+  - De otro módulo solo se importan `service`, `schemas` y (desde routers) `dependencies`, nunca `repository` ni `models`. Se intercambian schemas (`XRead`) o valores simples, nunca objetos ORM.
+  - Si un caso de uso necesita un dato de un módulo posterior, el router lo trae y se lo pasa al service.
+  - *(pendiente)* Lo vigila `tests/unit/test_module_boundaries.py`.
+- **Multi-espacio:** toda función de repository recibe `space_id` y filtra por él. El borrado suave se filtra en una consulta base del repository, nunca en cada llamada.
+- **Dinero:** `int` en Python, `BigInteger` en BD, siempre **centavos**. Sin `float` ni `Decimal` en la BD. En los schemas, un tipo común para montos *(pendiente: `app/core/schemas.py`)*: int estricto, > 0, ≤ 2^53 − 1 (el límite seguro de JavaScript). Su nombre y la unidad (menor ISO 4217, no siempre centavos) los fija **KAN-36 [BE-09]**. El signo lo pone el backend según el tipo.
+- **IDs:** UUIDv7 generados en Python (`default=uuid.uuid7`).
+- **Schemas:** `XCreate` / `XUpdate` (PATCH con `exclude_unset`) / `XRead`. Las entradas heredan de `InputModel` (`extra="forbid"`) y las salidas de `ReadModel` (`from_attributes`) *(pendiente)*. Crear transacción = unión discriminada por `type`.
+- **Endpoints:** `response_model=XRead` devolviendo el objeto ORM, `status_code` explícito (201 al crear, 204 sin cuerpo) y `responses={404: {"model": ErrorResponse}}` con los errores posibles.
 - **Tiempo:** momentos como `timestamptz` en UTC; la fecha de una transacción como `date` local del usuario. La zona horaria vive en `spaces.timezone`.
 - **Nombres:** tablas en plural y snake_case; JSON en snake_case; URLs con guiones (`/recurring-templates`).
-- **Rutas de espacio:** `/spaces/{space_id}/...` con la dependencia `require_space_member`. No miembro → **404** (no revelar que existe).
+- **Rutas de espacio:** `/spaces/{space_id}/...` con `require_space_member` declarada en el `APIRouter` (`dependencies=[...]`), no endpoint por endpoint. No miembro → **404** (no revelar que existe).
 - **Acciones de negocio** como endpoints explícitos: `POST .../confirm`, `/skip`, `/cancel`, `/archive`.
 - **Crear por intención:** el cliente manda "gasto de 1550 en Comida desde Itaú"; el backend arma los `entries`.
 - **Editar** = rehacer los entries. **Borrar** = `deleted_at` (borrado suave).
-- **Paginación por cursor**, orden `date desc, id desc`.
-- **Errores:** `HTTPException` con mensajes en inglés y códigos estables; nunca filtrar trazas ni SQL al cliente.
+- **Paginación por cursor**, orden `date desc, id desc`: cursor opaco (base64 de `date` + `id`), `limit` de 1 a 100, respuesta `Page[T]` (`items`, `next_cursor`). Filtros como modelo de query `Annotated[Filtros, Query()]` con `extra="forbid"`. Nunca ordenar por un texto del cliente.
+- **Errores** *(pendiente: `app/core/errors.py`, KAN-35 [BE-08])*: el service lanza `AppError`: `NotFoundError` 404, `ConflictError` 409, `UnauthenticatedError` 401, e `InvalidFieldError` 422 con el formato de validación de FastAPI. Respuesta `{"detail": "<inglés>", "code": "<snake_case estable>"}`; el frontend traduce `code`. No uses `HTTPException` en código nuevo. Nunca filtrar trazas ni SQL al cliente.
 - **Logs:** JSON con `request_id`. Nunca loguear tokens, cookies ni datos personales completos.
-- **Async:** relaciones con `selectinload` explícito; nunca lazy loading.
+- **Async:** relaciones con `selectinload` explícito y `lazy="raise"` en toda `relationship()`; nunca lazy loading. Una sesión no se comparte entre tareas (`asyncio.gather` con la misma sesión, no). Librerías síncronas (`firebase-admin`, `google-auth`) con `await asyncio.to_thread(...)`.
+- **Cloud Run:** sin `BackgroundTasks` para trabajo importante (la CPU se limita tras responder), sin estado en memoria entre requests y sin caché de respuestas.
 
 ## Configuración
 - Variables vía `pydantic-settings`. La lista completa y comentada está en `backend/.env.example` (nunca leas `.env`).
@@ -70,7 +82,7 @@ backend/
   - `DATABASE_URL` (driver `postgresql+asyncpg://`): con `ENV=local` tiene valor por defecto; en staging/prod es obligatoria, salvo que exista `INSTANCE_CONNECTION_NAME`.
   - Con `INSTANCE_CONNECTION_NAME` se usa el Cloud SQL Python Connector (`DB_USER`, `DB_PASSWORD`, `DB_NAME` obligatorias; `DB_IP_TYPE` por defecto `PUBLIC`) y `DATABASE_URL` se ignora.
   - Pool pequeño (2–5): `DB_POOL_SIZE=2` + `DB_MAX_OVERFLOW=3`, `DB_POOL_TIMEOUT=30`.
-- **Sesión por request:** `DbSession` (`from app.core.db import DbSession`). La dependencia **no hace commit**: el service es la unidad de trabajo y llama `await session.commit()`; lo que quede sin commit se revierte al terminar el request. Una operación que cruza módulos usa la misma sesión y un solo commit.
+- **Sesión y transacción por request:** `DbSession` (`from app.core.db import DbSession`). *(pendiente)* La dependencia usa `scope="function"`: hace **commit si el endpoint termina bien y rollback si falla, antes de enviar la respuesta**. Los services **nunca** llaman `commit()` ni `rollback()`; usan `flush()` si necesitan el id o detectar una restricción (un `IntegrityError` esperable → `ConflictError`). Así, una operación que cruza módulos es una sola transacción. Fuera de HTTP (scripts), commit explícito. Hasta que se implemente, la dependencia no hace commit.
 - **Modelos ORM:** heredan de `app.core.db.Base`. Toda restricción tiene nombre predecible (convención `pk_`, `fk_`, `uq_`, `ck_`, `ix_`); cada `CheckConstraint` **debe llevar `name=`**. Al crear los modelos de un módulo, importa su `models.py` en `migrations/env.py` para que autogenerate los vea.
 
 ## Contrato OpenAPI
@@ -82,8 +94,10 @@ backend/
 - **PostgreSQL real** (contenedor de Docker Compose), nunca SQLite. `docker compose up -d postgres` desde la raíz antes de correr la suite.
 - `TEST_DATABASE_URL` (por defecto `finance_test`): su nombre **debe terminar en `_test`** o la suite se niega a correr (los tests de migraciones hacen `downgrade base`). `finance_test` solo se crea con el volumen vacío (ver README).
 - Fixtures de BD en `tests/conftest.py`: `database` (BD de test compartida, solo lectura), `scratch_database_url` (BD nueva y vacía por test, se borra al terminar: úsala para escribir o migrar) y `settings_factory`.
+- *(pendiente)* **Tests de services y API: savepoint por test.** La BD de test se migra una vez por sesión de pytest y cada test corre en una transacción que se revierte al final (`join_transaction_mode="create_savepoint"`), así que los `commit()` no dejan datos. En los tests de API se sobreescribe la fábrica de sesiones (`app.dependency_overrides`) para que corra el commit/rollback real. `scratch_database_url` queda para los tests de `tests/db` (migraciones, engine).
 - `alembic.command.*` llama `asyncio.run` internamente: desde un test async, invócalo con `await asyncio.to_thread(...)`.
-- Cada test crea sus datos; nada depende del orden de ejecución.
+- Cada test crea sus datos con funciones async de ayuda (`await make_space(session, ...)`), sin librerías de factories; nada depende del orden de ejecución.
+- Las funciones puras (armado de entries, cursor) se prueban en `tests/unit` sin BD.
 - Prioridad alta: reglas de negocio (transferencias suman cero, saldo ignora pendientes y borrados, idempotencia del cron) y API (contratos, 422, 401, **IDOR**).
 - Nombres que describen comportamiento: `test_non_member_gets_404_on_space_detail`.
 
