@@ -83,6 +83,18 @@ async def test_connector_is_used_when_instance_connection_name_is_set(
     assert kwargs == {"user": "app-user", "password": "app-password", "db": "app-db"}
 
 
+async def test_connector_engine_hides_sql_parameters(
+    settings_factory: Callable[..., Settings], fake_connector: FakeConnector
+) -> None:
+    db = await Database.create(
+        settings_factory(**CONNECTOR_ENV), connector_factory=FakeFactory(fake_connector)
+    )
+    try:
+        assert db.engine.sync_engine.hide_parameters is True
+    finally:
+        await db.dispose()
+
+
 async def test_connector_ip_type_comes_from_settings(
     settings_factory: Callable[..., Settings], fake_connector: FakeConnector
 ) -> None:

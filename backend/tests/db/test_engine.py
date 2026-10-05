@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from sqlalchemy.pool import QueuePool
 
@@ -66,3 +67,22 @@ async def test_dispose_is_idempotent(database: Database) -> None:
     await database.dispose()
     await database.dispose()
     assert database.closed
+
+
+@pytest.mark.parametrize("null_pool", [False, True])
+async def test_sql_errors_do_not_leak_parameter_values(
+    settings_factory: Callable[..., Settings], null_pool: bool
+) -> None:
+    db = await Database.create(settings_factory(), null_pool=null_pool)
+    try:
+        async with db.engine.connect() as conn:
+            with pytest.raises(DBAPIError) as excinfo:
+                await conn.execute(
+                    text("SELECT 1 FROM missing_table WHERE email = :email"),
+                    {"email": "ana@example.com"},
+                )
+    finally:
+        await db.dispose()
+    message = str(excinfo.value)
+    assert "ana@example.com" not in message
+    assert "hidden due to hide_parameters=True" in message
