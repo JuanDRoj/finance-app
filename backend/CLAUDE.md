@@ -17,7 +17,7 @@ Patrones de arquitectura con su porqué y un esqueleto de módulo: `docs/arquite
 | Lint | `uv run ruff check .` |
 | Formato (verificar) | `uv run ruff format --check .` |
 | Tipos | `uv run mypy .` |
-| Nueva migración | `uv run alembic revision --autogenerate -m "<descripción>"` |
+| Nueva migración | `uv run alembic upgrade head` y luego `uv run alembic revision --autogenerate -m "<descripción>"` |
 | Aplicar migraciones | `uv run alembic upgrade head` |
 | Exportar OpenAPI | `uv run python -m app.export_openapi` → `backend/openapi.json` (opcional `-o <ruta>`; no levanta el servidor ni necesita BD) |
 | Regenerar tipos TS (si cambió la API) | `cd ../frontend && npm run gen:api` → `frontend/src/lib/api/schema.d.ts` (el CI falla si difieren) |
@@ -109,6 +109,7 @@ backend/
 
 ## Migraciones
 - Revisadas a mano después del autogenerate; con `downgrade` funcional.
+- Antes del autogenerate, `uv run alembic upgrade head` sobre la BD local `finance`: autogenerate compara contra ella y falla ("Target database is not up to date") si no está en la última revisión. Después, `uv run alembic check` confirma que no quedan cambios sin migrar.
 - Nunca editar una migración que ya está en `main`.
 - Revision IDs secuenciales de 4 dígitos (`0001`, `0002`…): `uv run alembic revision --autogenerate --rev-id 0002 -m "<descripción>"`. Su `down_revision` apunta a la anterior (`"0001"`).
 - Se aplican como paso separado (Cloud Run Job), **nunca** al arrancar la app.
