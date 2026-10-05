@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -91,16 +92,55 @@ async def test_migration_creates_the_three_tables(engine: AsyncEngine) -> None:
     assert ("space_members", "updated_at") not in columns
 
 
-async def test_inserts_get_default_timestamps(engine: AsyncEngine) -> None:
+async def test_inserts_get_utc_timestamps_close_to_now(engine: AsyncEngine) -> None:
     user_id = await _user(engine)
     await _space(engine, user_id)
 
     rows = await _rows(
         engine,
-        "SELECT u.created_at IS NOT NULL, u.updated_at IS NOT NULL, s.created_at IS NOT NULL, "
-        "s.updated_at IS NOT NULL FROM users u, spaces s",
+        "SELECT u.created_at, u.updated_at, s.created_at, s.updated_at FROM users u, spaces s",
     )
-    assert rows == [(True, True, True, True)]
+
+    now = datetime.now(UTC)
+    assert len(rows) == 1
+    for value in rows[0]:
+        assert isinstance(value, datetime)
+        assert value.utcoffset() == timedelta(0)
+        assert abs(now - value) < timedelta(minutes=1)
+
+
+async def test_orm_update_moves_updated_at_forward_on_users_and_spaces(
+    engine: AsyncEngine,
+) -> None:
+    # Separate commits: now() is the transaction start, so one transaction cannot show a change.
+    async with AsyncSession(engine, expire_on_commit=False) as s:
+        user = User(firebase_uid="upd", email="u@example.com")
+        s.add(user)
+        await s.flush()
+        space = Space(
+            name="Mi espacio",
+            type="personal",
+            currency="UYU",
+            timezone="America/Montevideo",
+            created_by=user.id,
+        )
+        s.add(space)
+        await s.commit()
+        user_before, space_before = user.updated_at, space.updated_at
+
+    async with AsyncSession(engine, expire_on_commit=False) as s:
+        user = await s.get_one(User, user.id)
+        space = await s.get_one(Space, space.id)
+        user.display_name = "New name"
+        space.name = "Renamed"
+        await s.commit()
+        await s.refresh(user)
+        await s.refresh(space)
+
+        assert user.updated_at > user_before
+        assert space.updated_at > space_before
+        assert user.created_at == user_before
+        assert space.created_at == space_before
 
 
 async def test_duplicate_firebase_uid_is_rejected(engine: AsyncEngine) -> None:
@@ -228,13 +268,15 @@ async def test_downgrade_removes_the_tables_and_upgrade_recreates_them(
     engine: AsyncEngine,
 ) -> None:
     config = _config()
+    currencies_before = await _rows(engine, "SELECT count(*) FROM currencies")
+    assert currencies_before != [(0,)]
     await asyncio.to_thread(command.downgrade, config, "0001")
     sql = (
         "SELECT table_name FROM information_schema.tables "
         "WHERE table_name IN ('users', 'spaces', 'space_members')"
     )
     assert await _rows(engine, sql) == []
-    assert await _rows(engine, "SELECT count(*) FROM currencies") == [(8,)]
+    assert await _rows(engine, "SELECT count(*) FROM currencies") == currencies_before
 
     await asyncio.to_thread(command.downgrade, config, "base")
     await asyncio.to_thread(command.upgrade, config, "head")
