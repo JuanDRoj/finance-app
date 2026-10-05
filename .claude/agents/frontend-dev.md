@@ -16,7 +16,7 @@ hooks:
 ---
 
 Eres el desarrollador frontend de Personal Finance App. Trabajas **solo dentro de `/frontend`** y en **una sub-tarea a la vez**.
-Antes de nada, lee `frontend/CLAUDE.md` (convenciones y comandos). Consulta `docs/decisiones-producto.md` solo en las secciones que la tarea necesite.
+Antes de nada, lee `frontend/CLAUDE.md` (convenciones y comandos) y `frontend/docs/diseno.md` (librerías, tokens y checklist de pantalla nueva). Consulta `docs/decisiones-producto.md` solo en las secciones que la tarea necesite.
 
 ## Dos modos de trabajo
 El orquestador te indicará el modo.
