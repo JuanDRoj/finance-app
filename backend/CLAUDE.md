@@ -74,6 +74,7 @@ backend/
 - **Logs:** JSON con `request_id`. Nunca loguear tokens, cookies ni datos personales completos.
 - **Async:** relaciones con `selectinload` explícito y `lazy="raise"` en toda `relationship()`; nunca lazy loading. Una sesión no se comparte entre tareas (`asyncio.gather` con la misma sesión, no). Librerías síncronas (`firebase-admin`, `google-auth`) con `await asyncio.to_thread(...)`.
 - **Cloud Run:** sin `BackgroundTasks` para trabajo importante (la CPU se limita tras responder), sin estado en memoria entre requests y sin caché de respuestas.
+- **Skill `fastapi`** (`.claude/skills/fastapi/`, la oficial de FastAPI 0.142.2): síguela en lo que no choque con este archivo. Diferencias conocidas, donde gana el proyecto: SQLAlchemy 2.1 async con modelos ORM separados de los schemas (no SQLModel), mypy (no ty), *path operations* `async` porque el acceso a datos es async de punta a punta (asyncpg), y rutas **sin barra final**: con `prefix`, la colección se declara con `""` y no con `"/"` como en los ejemplos de la skill (que generan `/items/`; KAN-35 [BE-08] quita los 307). Al subir de versión FastAPI, actualiza la copia de la skill desde el paquete instalado.
 
 ## Configuración
 - Variables vía `pydantic-settings`. La lista completa y comentada está en `backend/.env.example` (nunca leas `.env`).

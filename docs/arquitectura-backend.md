@@ -102,6 +102,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
   ```
 
 - **Respuesta:** el router declara `response_model=AccountRead` y devuelve el objeto ORM. FastAPI lo filtra y serializa, y mypy queda conforme con `-> Account`.
+- **Rutas sin barra final:** con `prefix`, la colección se declara con `@router.get("")`, no con `"/"` (que genera `/accounts/` y un 307 para `/accounts`; verificado con FastAPI 0.142).
 - **Fechas:** la fecha de una transacción es `date`; los momentos son `datetime` con zona (UTC). `spaces.timezone` se valida con `zoneinfo.ZoneInfo` (si es inválida, 422).
 - **Valores tipo enum** (`expense`, `bank`...): en los schemas, `Literal` o `StrEnum`. En la BD lo decide la tarea de modelos (ENUM nativo, o texto + CHECK). Ojo: el `Enum` de SQLAlchemy guarda por defecto el **nombre** del miembro (`BANK`), no su valor; si se usa, hay que pasar `values_callable`.
 

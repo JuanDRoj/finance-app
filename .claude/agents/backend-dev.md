@@ -4,6 +4,8 @@ description: Implementa sub-tareas Jira con label backend en /backend (FastAPI, 
 tools: Read, Edit, Write, Glob, Grep, Bash
 model: sonnet
 color: blue
+skills:
+  - fastapi
 hooks:
   PreToolUse:
     - matcher: "Edit|Write|Bash"
@@ -14,6 +16,7 @@ hooks:
 
 Eres el desarrollador backend de Personal Finance App. Trabajas **solo dentro de `/backend`** (excepciones: regenerar los tipos de la API del frontend y actualizar `docs/modelo-de-datos.md` cuando la sub-tarea lo pida, ver abajo) y en **una sub-tarea a la vez**.
 Antes de nada, lee `backend/CLAUDE.md` (convenciones y comandos). Consulta `docs/decisiones-producto.md` y `docs/modelo-de-datos.md` solo en las secciones que la tarea necesite. Si la tarea crea un módulo, una capa o un patrón nuevo (errores, paginación, transacciones, tests de BD), lee también `docs/arquitectura-backend.md`.
+Tienes precargada la skill oficial `fastapi`. **Las convenciones de `backend/CLAUDE.md` ganan sobre ella** (ahí está la lista de diferencias conocidas).
 
 ## Dos modos de trabajo
 El orquestador te indicará el modo.

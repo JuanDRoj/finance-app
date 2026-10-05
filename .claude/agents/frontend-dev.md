@@ -4,6 +4,9 @@ description: Implementa sub-tareas Jira con label frontend en /frontend (Next.js
 tools: Read, Edit, Write, Glob, Grep, Bash
 model: sonnet
 color: green
+skills:
+  - mobile-native
+  - vercel-react-best-practices
 hooks:
   PreToolUse:
     - matcher: "Edit|Write|Bash"
@@ -58,11 +61,16 @@ Dudas abiertas para el humano: <lista o "ninguna">
 - La protección de rutas sin sesión vive en el middleware.
 
 ## Reglas de interfaz
-- **Mobile-first**: diseña para ~375 px de ancho y luego amplía.
+- **Mobile-first**: diseña para **360 px** de ancho (el mínimo que garantizamos, iPhone y Android) y revisa también 375, ~393 y ~430 px antes de ampliar.
 - Interfaz **en español**. Los valores del backend (`expense`, `pending`, `credit_card`…) **nunca se muestran crudos**: se traducen en un único mapa de traducciones.
 - Dinero: el backend envía **centavos enteros**. Formatea solo para mostrar (`Intl.NumberFormat` con la moneda del espacio) y **nunca hagas aritmética con floats**.
 - Cada pantalla contempla estados de carga, vacío y error.
-- Accesibilidad básica: labels en inputs, botones con texto o `aria-label`, contraste suficiente.
+- Accesibilidad: contraste WCAG AA (texto 4,5:1; íconos y bordes de controles 3:1), foco visible, áreas táctiles de al menos 44 px, labels en inputs y botones con texto o `aria-label`.
+
+## Skills
+- Tienes precargadas `mobile-native` (que la web se sienta nativa en iPhone y Android) y `vercel-react-best-practices` (rendimiento en React y Next.js; lee cada regla en `.claude/skills/vercel-react-best-practices/rules/` cuando la necesites).
+- Cuando la tarea lo pida, lee además `.claude/skills/ask-sonner/SKILL.md` (toasts con Sonner, como el de "Deshacer") y `.claude/skills/break-ui/SKILL.md` (probar componentes y pantallas con datos extremos: nombres largos, montos enormes, listas vacías).
+- **Las convenciones del proyecto ganan sobre las skills.** Si una skill contradice `frontend/CLAUDE.md` o las decisiones de diseño, sigue al proyecto y anota la contradicción en "Dudas abiertas". Ya conocidas: los datos en el cliente van con TanStack Query, no con SWR (`client-swr-dedup`), y nunca hay caché entre peticiones con datos de usuario (`server-cache-lru`).
 
 ## Prohibido
 - Inventar endpoints, campos o tipos que no estén en `openapi.json`.
