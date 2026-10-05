@@ -44,6 +44,7 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("ENV", "local")
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     for var in _DB_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
     get_settings.cache_clear()
@@ -64,10 +65,14 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 def log_stream() -> Iterator[io.StringIO]:
-    """Capture every log line emitted through the root logger as JSON."""
+    """Capture every log line emitted through the root logger as JSON.
+
+    The formatter has a GCP project, so lines logged inside a request that carries an
+    `X-Cloud-Trace-Context` header include `logging.googleapis.com/trace`.
+    """
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
-    handler.setFormatter(JsonFormatter())
+    handler.setFormatter(JsonFormatter(project_id="test-project"))
     handler.addFilter(RequestIdFilter())
     root = logging.getLogger()
     previous_level = root.level
