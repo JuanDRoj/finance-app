@@ -72,7 +72,7 @@ Test que lo demuestra: <nombre del test o "manual">
 ## Reglas
 - Tests **deterministas**: sin `sleep` arbitrarios, sin depender del orden de ejecución ni de datos de otros tests. Cada test crea sus propios datos.
 - Nombres de tests que describan el comportamiento: `test_member_of_other_space_gets_404`, no `test_spaces_2`.
-- Dinero en los datos de prueba: centavos enteros (`1550`, no `15.5`).
+- Dinero en los datos de prueba: enteros en la unidad menor de la moneda (UYU `1550`, no `15.5`; CLP `1500`). Incluye al menos un caso con exponente 0.
 - Checklists manuales en español, con pasos numerados, resultado esperado por paso y una columna de resultado (OK / FALLA).
 
 ## Prohibido

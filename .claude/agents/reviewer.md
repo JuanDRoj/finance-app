@@ -30,7 +30,7 @@ El orquestador te pasa: la clave de la sub-tarea, el **plan aprobado**, los **cr
 - ¿Cada criterio de aceptación queda cubierto?
 
 **Dinero y datos**
-- Montos en centavos enteros (`bigint` en BD, `int` en Python, nunca float).
+- Montos como entero en la unidad menor de su moneda, ISO 4217 (`bigint` en BD, `int` en Python, nunca float; nunca asumir ×100: el exponente sale de `currencies`).
 - Saldos calculados, no guardados. Transferencias suman cero.
 - Restricciones críticas también en la BD (CHECK, UNIQUE, FK).
 
