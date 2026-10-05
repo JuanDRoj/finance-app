@@ -59,7 +59,7 @@ La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`
 ## 3. Transacciones: una por request
 
 - **La dependencia de sesión es la unidad de trabajo.** `get_session` usa `Depends(..., scope="function")`: si el endpoint termina bien hace `commit()`, si lanza una excepción hace `rollback()`, y las dos cosas ocurren **antes** de enviar la respuesta (doc oficial de FastAPI, *dependencies with yield*). El cliente nunca ve un 200 de algo que no se guardó.
-- **Para revertir hay que lanzar, no devolver.** Solo una excepción (`AppError`) provoca el rollback; un endpoint que devuelve una respuesta 4xx sin lanzar hace commit.
+- **Para revertir hay que lanzar, no devolver.** Solo una excepción (en código de negocio, un `AppError`) provoca el rollback; un endpoint que devuelve una respuesta 4xx sin lanzar hace commit.
 - Una dependencia con `yield` que use `DbSession` debe declararse también con `scope="function"`: FastAPI no deja que una de scope `"request"` dependa de una de scope `"function"`. Las dependencias sin `yield` no tienen esa restricción.
 - **Los services nunca llaman `commit()` ni `rollback()`.** Usan `await session.flush()` cuando necesitan el id generado o detectar una restricción a tiempo.
 - Una operación que cruza módulos es una sola transacción por construcción: todos usan la misma sesión del request.
@@ -175,7 +175,7 @@ UUIDv7 generados en Python: `mapped_column(primary_key=True, default=uuid.uuid7)
 | `tests/unit` | Funciones puras: builders de entries, cursor, validadores, fronteras entre módulos | Ninguna |
 | `tests/services` | Reglas de negocio llamando funciones del service | Savepoint por test |
 | `tests/api` | Contratos HTTP, 401/404/409/422, IDOR | Savepoint por test |
-| `tests/db` | Engine, pool, Connector, sesión, migraciones | BD nueva por test (`scratch_database_url`) |
+| `tests/db` | Engine, pool, Connector, sesión, migraciones | BD nueva por test (`scratch_database_url`); los tests de las fixtures de savepoint usan `session` |
 
 - **Savepoint por test.** La BD de test se migra una vez por sesión de pytest. Cada test corre dentro de una transacción externa, con la sesión en `join_transaction_mode="create_savepoint"`: los `commit()` del código se convierten en savepoints y al final todo se revierte (receta oficial de SQLAlchemy, probada con `AsyncSession` + asyncpg + PostgreSQL 16). Es mucho más rápido que crear una BD por test.
 - **Tests de API:** se sobreescribe (`app.dependency_overrides`) la fábrica de sesiones (`get_sessionmaker`) para que use la conexión del test. Así corre el commit/rollback real de `get_session`. El usuario autenticado también se sobreescribe; unos pocos tests de auth usan el emulador de Firebase de punta a punta.
