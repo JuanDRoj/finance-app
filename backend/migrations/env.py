@@ -13,6 +13,7 @@ from sqlalchemy.engine import Connection
 from app.core.config import get_settings
 from app.core.db import Base, Database
 from app.core.logging import configure_logging
+from app.modules.currencies import models as currencies_models  # noqa: F401
 
 # Importing a module's models registers its tables on Base.metadata, which autogenerate
 # compares against the database. Add one import per module here when it gets models, e.g.:
