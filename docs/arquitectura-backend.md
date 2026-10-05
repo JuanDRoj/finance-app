@@ -38,7 +38,7 @@ Reparto entre service y repository: el repository guarda las consultas (`select`
 Orden fijo, sin ciclos (de abajo hacia arriba):
 
 ```
-users/auth → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
+users/auth → currencies → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
 ```
 
 Reglas:
