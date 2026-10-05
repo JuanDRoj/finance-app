@@ -380,8 +380,8 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 - Solo en cromo flotante (nav, sheet, toast, header sticky) y en tiles bento o grupos sobre el fondo decorativo.
 - Qué token usa cada superficie: **tiles bento y grupos → `card`**; **nav, toast y header sticky → `glass`**; **sheet → `glass-strong`** (D14).
 - Nunca por fila de lista (un grupo glass por día); nunca en popovers, menús ni texto largo.
-- Fallback a `card-solid` con `@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))` y con `prefers-reduced-transparency: reduce`. La consulta lleva las dos formas porque Safari 16.4–17 solo soporta `backdrop-filter` con prefijo `-webkit-` y ese es el piso de navegadores de D3 (`@supports not (backdrop-filter)` no es una condición válida: le falta el valor). El soporte de `prefers-reduced-transparency` es desigual: no dependas solo de ella.
-- El CSS de glass declara `backdrop-filter` y `-webkit-backdrop-filter`. **Verificar en KAN-33** que el CSS generado trae ambas y que el fallback se activa en un Safari 16.4–17.
+- Fallback a `card-solid` con `@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))` y con `prefers-reduced-transparency: reduce`. La consulta lleva las dos formas porque Safari 16.4–17 solo soporta `backdrop-filter` con prefijo `-webkit-` y ese es el piso de navegadores de D3 (`@supports not (backdrop-filter)` no es una condición válida: le falta el valor). En Safari 16.4–17 se cumple la variante `-webkit-`, así que el `not` da falso: **el fallback no se activa y se ve el glass**. El fallback solo se activa en un navegador sin soporte de ninguna de las dos formas o con `prefers-reduced-transparency: reduce`. El soporte de `prefers-reduced-transparency` es desigual: no dependas solo de ella.
+- El CSS de glass declara `backdrop-filter` y `-webkit-backdrop-filter`. **Verificar en KAN-33** que el CSS generado trae ambas; que en un Safari 16.4–17 **se ve el glass** (el fallback no se activa); y que el fallback `card-solid` **sí se activa** con `prefers-reduced-transparency: reduce` o en un navegador sin soporte de `backdrop-filter`.
 - Máximo 2 blobs decorativos por pantalla, estáticos y con `aria-hidden`.
 - Probar en un Android de gama baja.
 
@@ -532,7 +532,7 @@ Tabla de pendientes por tarea:
 | ESLint o convención para importar Phosphor de `/ssr` en Server Components (ESLint no distingue Server de Client Component: ¿prohibir el import raíz y usar siempre `/ssr`?) | KAN-33 |
 | Verificaciones al correr `shadcn init`: Base UI por defecto, `iconLibrary: "phosphor"`, nombre del paquete de Base UI, compatibilidad `@hookform/resolvers` + zod 4 | KAN-33 |
 | `optimizePackageImports` para `@phosphor-icons/react` en `next.config.ts` | KAN-33 |
-| Glass: comprobar que el CSS generado declara `backdrop-filter` y `-webkit-backdrop-filter` y que el fallback `@supports not (...)` (D13 › Glass) se activa en Safari 16.4–17 | KAN-33 |
+| Glass: comprobar que el CSS generado declara `backdrop-filter` y `-webkit-backdrop-filter`; que en Safari 16.4–17 se ve el glass (el fallback `@supports not (...)` no se activa); y que el fallback `card-solid` sí se activa con `prefers-reduced-transparency: reduce` o en un navegador sin soporte de `backdrop-filter` (D13 › Glass) | KAN-33 |
 | Comparar la salida del formateador de dinero y fechas en el servidor (Node) con la de WebKit y Chromium, por ejemplo en el E2E de iPhone y Pixel, para detectar diferencias de ICU (NBSP o NNBSP, símbolos, separadores de grupo) | KAN-33 / KAN-34 |
 | Export `viewport`: `viewportFit: "cover"`, `interactiveWidget: "resizes-content"`, `themeColor` por esquema | KAN-33 |
 | Adaptar el CSS de shadcn (clase `.dark`) a `prefers-color-scheme` y definir las variables de tokens, radios y blobs | KAN-33 |
