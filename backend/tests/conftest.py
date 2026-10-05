@@ -11,12 +11,18 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.config import Settings, get_settings
-from app.core.db import Database
+from app.core.db import Database, get_sessionmaker
 from app.core.logging import JsonFormatter, RequestIdFilter
 from app.main import create_app
+from tests.db_migration import upgrade_test_database
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -186,3 +192,65 @@ async def scratch_database_url(
         async with admin.connect() as conn:
             await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         await admin.dispose()
+
+
+# --- Savepoint per test: migrated once per pytest session ----------------------------------
+
+
+@pytest.fixture(scope="session")
+def migrated_test_database(test_database_url: URL) -> None:
+    """Bring the shared test database to `alembic upgrade head`, once per pytest session.
+
+    Sync on purpose: `alembic.command` calls `asyncio.run`, which needs no running loop.
+    Nothing is downgraded afterwards; the migration tests use scratch databases.
+    """
+    upgrade_test_database(test_database_url, BACKEND_DIR / "alembic.ini")
+
+
+@pytest.fixture
+async def db_connection(
+    migrated_test_database: None, settings_factory: Callable[..., Settings]
+) -> AsyncIterator[AsyncConnection]:
+    """One connection inside an outer transaction that is rolled back when the test ends."""
+    db = await Database.create(settings_factory(), null_pool=True)
+    try:
+        async with db.engine.connect() as conn:
+            outer = await conn.begin()
+            try:
+                yield conn
+            finally:
+                await outer.rollback()
+    finally:
+        await db.dispose()
+
+
+@pytest.fixture
+def session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
+    """Sessions bound to the test connection: their `commit()` only releases a savepoint."""
+    return async_sessionmaker(
+        db_connection, join_transaction_mode="create_savepoint", expire_on_commit=False
+    )
+
+
+@pytest.fixture
+async def session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    """For service and repository tests (real PostgreSQL, rolled back after each test)."""
+    async with session_factory() as s:
+        yield s
+
+
+@pytest.fixture
+async def api_client(
+    app: FastAPI, session_factory: async_sessionmaker[AsyncSession]
+) -> AsyncIterator[AsyncClient]:
+    """HTTP client whose requests use the test connection through the real `get_session`.
+
+    Its commit/rollback logic runs for real. Requests must not run concurrently: they
+    share one connection.
+    """
+    app.dependency_overrides[get_sessionmaker] = lambda: session_factory
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.pop(get_sessionmaker, None)

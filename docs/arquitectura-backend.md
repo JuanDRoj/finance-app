@@ -6,8 +6,6 @@ Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQ
 
 Fuentes: el artículo *FastAPI Best Practices and Design Patterns* (SOLID, DAO, Service Layer), el repo `Aavache/fastapi-designs`, la documentación oficial (FastAPI 0.142, SQLAlchemy 2.1, Python 3.14, Cloud Run) y pruebas propias contra PostgreSQL. Lo que se descartó de las fuentes está al final, con el motivo.
 
-> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, las bases de `core/schemas.py` (`Amount` ya existe), el test de fronteras y la fixture de savepoint.
-
 ---
 
 ## 1. Capas
@@ -35,7 +33,7 @@ Reparto entre service y repository: el repository guarda las consultas (`select`
 
 ## 2. Módulos y sus dependencias
 
-Orden fijo, sin ciclos (de abajo hacia arriba):
+Orden fijo, sin ciclos (de abajo hacia arriba). La fuente de verdad es `ORDER` en `backend/tests/unit/test_module_boundaries.py`: si cambia, se actualizan los dos.
 
 ```
 users/auth → currencies → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
@@ -46,7 +44,7 @@ Reglas:
 2. **Los routers pueden combinar services de cualquier módulo.** Son la capa de composición.
 3. **De otro módulo solo se importan su `service`, sus `schemas` y (desde routers) sus `dependencies`.** Nunca su `repository` ni sus `models`. Las FK entre módulos van por nombre (`ForeignKey("spaces.id")`) y no hay `relationship()` entre módulos.
 4. **Entre módulos se intercambian schemas (`XRead`) o valores simples, nunca objetos ORM.** Así nadie modifica ni carga relaciones de un modelo ajeno.
-5. *(pendiente)* `tests/unit/test_module_boundaries.py` lo hace cumplir con `ast`, sin dependencias nuevas.
+5. `tests/unit/test_module_boundaries.py` lo hace cumplir con `ast`, sin dependencias nuevas.
 
 **Cuando un caso de uso necesita datos de un módulo posterior**, el router los obtiene y se los pasa al service, que aplica la regla. Ejemplo: archivar una cuenta exige saldo 0, y el saldo vive en `transactions` (dueño de los `entries`):
 
@@ -58,9 +56,11 @@ return await service.archive_account(session, space_id, account_id, balance=bala
 
 La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`; el router solo trae el dato. Si un caso de uso necesita muchos datos de arriba, es señal de que pertenece al módulo de arriba.
 
-## 3. Transacciones: una por request *(pendiente)*
+## 3. Transacciones: una por request
 
 - **La dependencia de sesión es la unidad de trabajo.** `get_session` usa `Depends(..., scope="function")`: si el endpoint termina bien hace `commit()`, si lanza una excepción hace `rollback()`, y las dos cosas ocurren **antes** de enviar la respuesta (doc oficial de FastAPI, *dependencies with yield*). El cliente nunca ve un 200 de algo que no se guardó.
+- **Para revertir hay que lanzar, no devolver.** Solo una excepción (en código de negocio, un `AppError`) provoca el rollback; un endpoint que devuelve una respuesta 4xx sin lanzar hace commit.
+- Una dependencia con `yield` que use `DbSession` debe declararse también con `scope="function"`: FastAPI no deja que una de scope `"request"` dependa de una de scope `"function"`. Las dependencias sin `yield` no tienen esa restricción.
 - **Los services nunca llaman `commit()` ni `rollback()`.** Usan `await session.flush()` cuando necesitan el id generado o detectar una restricción a tiempo.
 - Una operación que cruza módulos es una sola transacción por construcción: todos usan la misma sesión del request.
 - **Restricciones que pueden fallar por datos del usuario** (UNIQUE): el service hace `flush()` dentro de `try/except IntegrityError` y lanza `ConflictError` con su código. El nombre predecible de la restricción (`uq_...`) permite distinguir cuál fue.
@@ -87,7 +87,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 ## 5. Schemas y validación
 
 - **Un schema por uso:** `AccountCreate`, `AccountUpdate` (PATCH: todo opcional, se aplica con `model_dump(exclude_unset=True)`) y `AccountRead`.
-- *(pendiente: `app/core/schemas.py`)* Bases comunes: `InputModel` con `extra="forbid"` (un campo desconocido da 422, lo que atrapa errores del cliente) y `ReadModel` con `from_attributes=True`.
+- Bases comunes (`app/core/schemas.py`): `InputModel` con `extra="forbid"` (un campo desconocido da 422, lo que atrapa errores del cliente) y `ReadModel` con `from_attributes=True`.
 - **Dinero:** un tipo común `Amount = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]` (`app/core/schemas.py`), expresado en la **unidad menor de la moneda del espacio** (ISO 4217: valor × 10^exponente, no siempre centavos). El exponente sale de la tabla `currencies`, que el API expone junto a `currency` (KAN-22).
   - `strict` rechaza `"1550"`, `15.0` y `true` (verificado con Pydantic 2.13).
   - El tope es `Number.MAX_SAFE_INTEGER`: JavaScript pierde precisión por encima, aunque `bigint` admita más.
@@ -175,10 +175,10 @@ UUIDv7 generados en Python: `mapped_column(primary_key=True, default=uuid.uuid7)
 | `tests/unit` | Funciones puras: builders de entries, cursor, validadores, fronteras entre módulos | Ninguna |
 | `tests/services` | Reglas de negocio llamando funciones del service | Savepoint por test |
 | `tests/api` | Contratos HTTP, 401/404/409/422, IDOR | Savepoint por test |
-| `tests/db` | Engine, pool, Connector, sesión, migraciones | BD nueva por test (`scratch_database_url`) |
+| `tests/db` | Engine, pool, Connector, sesión, migraciones | BD nueva por test (`scratch_database_url`); los tests de las fixtures de savepoint usan `session` |
 
-- *(pendiente)* **Savepoint por test.** La BD de test se migra una vez por sesión de pytest. Cada test corre dentro de una transacción externa, con la sesión en `join_transaction_mode="create_savepoint"`: los `commit()` del código se convierten en savepoints y al final todo se revierte (receta oficial de SQLAlchemy, probada con `AsyncSession` + asyncpg + PostgreSQL 16). Es mucho más rápido que crear una BD por test.
-- **Tests de API:** se sobreescribe (`app.dependency_overrides`) la fábrica de sesiones para que use la conexión del test. Así corre el commit/rollback real de `get_session`. El usuario autenticado también se sobreescribe; unos pocos tests de auth usan el emulador de Firebase de punta a punta.
+- **Savepoint por test.** La BD de test se migra una vez por sesión de pytest. Cada test corre dentro de una transacción externa, con la sesión en `join_transaction_mode="create_savepoint"`: los `commit()` del código se convierten en savepoints y al final todo se revierte (receta oficial de SQLAlchemy, probada con `AsyncSession` + asyncpg + PostgreSQL 16). Es mucho más rápido que crear una BD por test.
+- **Tests de API:** se sobreescribe (`app.dependency_overrides`) la fábrica de sesiones (`get_sessionmaker`) para que use la conexión del test. Así corre el commit/rollback real de `get_session`. El usuario autenticado también se sobreescribe; unos pocos tests de auth usan el emulador de Firebase de punta a punta.
 - **Datos:** funciones async de ayuda (`await make_space(session, ...)`), sin librerías de factories. Cada test crea lo suyo.
 
 ## 11. Esqueleto de un módulo
