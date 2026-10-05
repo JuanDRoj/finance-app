@@ -40,7 +40,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 3. **Estados de pantalla.** Carga, vacío (invita a actuar) y error (qué pasó + qué hacer + datos a salvo). (D13 › Tono)
 4. **Layout.** Diseña a 360 px y revisa 375, ~393 y ~430 antes de ampliar. Safe areas, `dvh`/`svh` (nunca `100vh`), inputs ≥16 px. (D15)
 5. **Componentes.** Busca en `components/ui` y en el catálogo (KAN-34). Si falta, añádelo con la CLI de shadcn (Base UI); no lo escribas desde cero. (D4)
-6. **Tokens.** Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`…). Nada de hex ni `rgb()` sueltos. Dinero: `income` / `expense` / `debt`. Glass solo en cromo flotante y tiles. (D14, D13 › Glass)
+6. **Tokens.** Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`…). Nada de hex ni `rgb()` sueltos. Dinero: `income` / `expense` / `debt`. Glass solo en cromo flotante y tiles: tiles bento → `card`; nav, toast y header sticky → `glass`; sheet → `glass-strong`. (D14, D13 › Glass)
 7. **Tipografía.** Montserrat para números y títulos, Karla para texto; montos con `tabular-nums`. Usa la escala de D13. (D6, D13)
 8. **Iconos.** Phosphor: regular 20–22 px, fill solo en el tab activo, duotone en iconos de categoría. En Server Components importa de `@phosphor-icons/react/ssr`. (D5)
 9. **Dinero y fechas.** Solo con los formateadores de `lib/core`: locale derivado de la moneda del espacio, exactamente `exponent` decimales, zona horaria del espacio. Sin aritmética con floats. (D11)
@@ -65,7 +65,10 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Un icono | Phosphor | D5 |
 | Avisar de algo o "Deshacer" | Sonner | D8 |
 | Botón, campo, selector, tarjeta, hoja inferior, nav, lista, skeleton, estado vacío | Componente de `components/ui` (se añaden en KAN-34) | D4 |
-| Tile bento, nav flotante, sheet, header sticky | Tokens `glass` / `glass-strong` | D13, D14 |
+| Tile bento o grupo de lista sobre el fondo decorativo | Token `card` (glass) | D13, D14 |
+| Nav flotante, toast, header sticky | Token `glass` | D13, D14 |
+| Hoja inferior (sheet) | Token `glass-strong` | D13, D14 |
+| Superficie sólida (fallback, campos de formulario) | `card-solid`; popovers y menús: `popover` | D13, D14 |
 | Barra de progreso o top-5 | Barras CSS accesibles (v1), `Progress` (v1.1) | D9 |
 | Un color | Token; nunca un valor suelto | D14 |
 | Probar datos extremos | Skill `break-ui` | sección 3 |
@@ -274,7 +277,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 **Reglas de uso**
 - Tests de lógica junto al archivo (`*.test.ts` o `*.test.tsx`), solo para lógica no trivial: formateo de dinero y fechas, traducciones, esquemas y utilidades. Tests de componentes solo para lógica no trivial.
 - E2E en `e2e/`, 3–5 flujos reales; los escribe qa.
-- Los tests de formato de dinero comparan con el espacio **NBSP** (U+00A0) entre símbolo y cifra y con el signo menos **U+2212** (ver D11).
+- Los tests de formato de dinero comparan con el espacio **NBSP** (U+00A0) entre símbolo y cifra y con el signo menos **U+2212** (ver D11). Esos tests corren en Node: la salida de WebKit y Chromium se contrasta aparte (Pendientes).
 - WebKit de Playwright aproxima Safari iOS, no lo reemplaza: la prueba en dispositivo real sigue siendo obligatoria (skill `mobile-native`).
 
 ### D11. Formato de dinero y fechas
@@ -284,7 +287,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Locale derivado de la moneda del espacio, con mapa fijo en core | **Elegida** |
-| Locale del dispositivo | Descartada: el mismo monto se vería distinto según el teléfono, y hay desajuste servidor y cliente (hydration mismatch) |
+| Locale del dispositivo | Descartada: el mismo monto se vería distinto según el teléfono, y el servidor no conoce el locale del dispositivo (mismatch de hidratación casi seguro) |
 | Decimales por excepción de moneda | Descartada: se usa una regla genérica: mostrar `exponent` decimales (opción A) |
 
 **Elección y reglas**
@@ -293,9 +296,10 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Los montos llegan como enteros en la unidad menor (10^exponent). Para mostrarlos se convierten a **texto decimal con operaciones sobre enteros o cadenas** (nunca `/ 100` ni floats) y esa cadena se pasa a `Intl.NumberFormat`, que formatea cadenas decimales de forma exacta.
 - **Signo:** el gasto va con el signo menos tipográfico **"−" (U+2212)**, generado con `formatToParts` (reemplazando la parte `minusSign`, que `Intl` emite como "-" ASCII). El ingreso va con "+". Entre símbolo y cifra `Intl` pone NBSP (U+00A0).
 - **Fechas** siempre con la **zona horaria del espacio** (`spaces.timezone`); el servidor corre en UTC. Los instantes (`timestamptz`) se convierten a esa zona. La fecha de una transacción es un `date` local sin hora: se formatea tal cual, sin aplicar zona horaria (así no se corre un día).
-- Hallazgos de `Intl` (verificados en Node 24): es-UY muestra COP como "COP" y es-CO muestra UYU como "UYU"; `Intl` formatea COP con 0 decimales (redondea) si no se le pasan los decimales explícitos.
+- Hallazgos de `Intl`, **verificados solo en Node 24** (no en WebKit ni en Chromium): es-UY muestra COP como "COP" y es-CO muestra UYU como "UYU"; `Intl` formatea COP con 0 decimales (redondea) si no se le pasan los decimales explícitos.
+- **El servidor y el navegador no comparten ICU.** El texto lo formatea en el servidor el ICU de Node y en el cliente el de cada navegador (Safari trae el suyo), y pueden diferir en espacios (NBSP o NNBSP), símbolos o separadores de grupo. Fijar el locale por moneda y los decimales explícitos reduce las diferencias, pero no las garantiza cero: por eso se compara la salida real (ver Pendientes).
 
-Ejemplos (unidad menor → texto):
+Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar espacios o símbolos):
 
 | Moneda | Locale | Unidad menor | Texto |
 |---|---|---|---|
@@ -305,7 +309,7 @@ Ejemplos (unidad menor → texto):
 | CLP (exp. 0, fuera del mapa) | es-UY | `1500` | `CLP 1.500` |
 | UYU, gasto | es-UY | `-155050` | `−$ 1.550,50` |
 
-**Motivo:** el mismo número se ve igual para todos los miembros de un espacio, lo mostrado coincide con lo guardado y no hay hydration mismatch.
+**Motivo:** el formato depende del espacio y no del teléfono, lo mostrado coincide con lo guardado y se minimiza el riesgo de mismatch de hidratación entre servidor y cliente.
 
 **Pendiente de backend:** el API aún no expone `timezone`, `currency` ni `exponent` del espacio (KAN-36 [BE-09] los incluirá). Hasta entonces, el formateo con datos reales está bloqueado.
 
@@ -374,8 +378,10 @@ Ejemplos (unidad menor → texto):
 
 **Glass**
 - Solo en cromo flotante (nav, sheet, toast, header sticky) y en tiles bento o grupos sobre el fondo decorativo.
+- Qué token usa cada superficie: **tiles bento y grupos → `card`**; **nav, toast y header sticky → `glass`**; **sheet → `glass-strong`** (D14).
 - Nunca por fila de lista (un grupo glass por día); nunca en popovers, menús ni texto largo.
-- Fallback a `card-solid` con `@supports not (backdrop-filter)` y con `prefers-reduced-transparency: reduce`. El soporte de esa media query es desigual: no dependas solo de ella.
+- Fallback a `card-solid` con `@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))` y con `prefers-reduced-transparency: reduce`. La consulta lleva las dos formas porque Safari 16.4–17 solo soporta `backdrop-filter` con prefijo `-webkit-` y ese es el piso de navegadores de D3 (`@supports not (backdrop-filter)` no es una condición válida: le falta el valor). El soporte de `prefers-reduced-transparency` es desigual: no dependas solo de ella.
+- El CSS de glass declara `backdrop-filter` y `-webkit-backdrop-filter`. **Verificar en KAN-33** que el CSS generado trae ambas y que el fallback se activa en un Safari 16.4–17.
 - Máximo 2 blobs decorativos por pantalla, estáticos y con `aria-hidden`.
 - Probar en un Android de gama baja.
 
@@ -408,7 +414,7 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 |---|---|---|---|
 | `background` | `#E9F4EE` | `#08110D` | Fondo de la app |
 | `foreground` | `#0E1A14` | `#EAF5EF` | Texto principal |
-| `card` (glass) | `rgba(255,255,255,0.62)` | `rgba(28,44,36,0.55)` | Tiles bento y grupos sobre el fondo decorativo |
+| `card` (glass) | `rgba(255,255,255,0.62)` | `rgba(28,44,36,0.55)` | **Tiles bento y grupos de lista** sobre el fondo decorativo |
 | `card-solid` | `#F7FBF9` | `#142019` | Fallback sólido de `card` |
 | `card-foreground` | = `foreground` | = `foreground` | Texto sobre `card` |
 | `popover` | `#FFFFFF` | `#12201A` | Popovers y menús: **sólido, nunca glass** |
@@ -429,8 +435,8 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 | `income` | = `primary` | = `primary` | Ingresos, con "+" (token separado) |
 | `expense` | = `foreground` | = `foreground` | Gastos, con "−" |
 | `debt` | `#96560A` | `#F0B45A` | Deuda de tarjetas |
-| `glass` | `rgba(255,255,255,0.58)` | `rgba(20,32,26,0.60)` | Nav, toasts; desenfoque 24 px |
-| `glass-strong` | `rgba(255,255,255,0.74)` | `rgba(16,28,22,0.82)` | Sheets; desenfoque 28 px |
+| `glass` | `rgba(255,255,255,0.58)` | `rgba(20,32,26,0.60)` | **Nav, toasts y header sticky**; desenfoque 24 px |
+| `glass-strong` | `rgba(255,255,255,0.74)` | `rgba(16,28,22,0.82)` | **Sheets**; desenfoque 28 px |
 | `glass-border` | `rgba(255,255,255,0.9)` | `rgba(255,255,255,0.10)` | Borde de superficies glass |
 | blobs decorativos | `#9FE0BF`, `#CDEFD9` | `#1E6B4C`, `#12432F` | Fondo decorativo (máximo 2 por pantalla) |
 | `chart-1..5` | por definir | por definir | Se definen con el primer gráfico real |
@@ -438,7 +444,7 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 **Reglas de uso**
 - **Controles:** el borde de campos y selectores usa `--input` (≥3:1), no `--border`. `--border` queda para separadores y tarjetas y nunca es el único indicador de un estado o de un control.
 - **Dinero:** `income` con "+", `expense` con "−" y color `foreground`, `debt` en ámbar. El signo informa, no solo el color. `destructive` nunca marca un gasto.
-- **Glass:** solo donde D13 › Glass lo permite; el resto usa `card-solid`, `popover` o `card`.
+- **Superficies:** tiles bento y grupos de lista → `card` (glass); nav, toast y header sticky → `glass`; sheet → `glass-strong`; popovers y menús → `popover` (sólido). Fuera de esos casos y como fallback de glass, `card-solid`. Glass solo donde D13 › Glass lo permite.
 - **Campos sobre glass:** pon los campos sobre `card-solid`, `popover` o la hoja (`glass-strong`). En oscuro, `--input` sobre `card` con un blob detrás queda en 2,61:1 (ver abajo): evita ese caso.
 - **Foco:** `ring` visible; en un botón `primary` separa el anillo con un offset del color del fondo para que se distinga del relleno.
 - Radios y tamaños: tablas de D13.
@@ -526,6 +532,8 @@ Tabla de pendientes por tarea:
 | ESLint o convención para importar Phosphor de `/ssr` en Server Components (ESLint no distingue Server de Client Component: ¿prohibir el import raíz y usar siempre `/ssr`?) | KAN-33 |
 | Verificaciones al correr `shadcn init`: Base UI por defecto, `iconLibrary: "phosphor"`, nombre del paquete de Base UI, compatibilidad `@hookform/resolvers` + zod 4 | KAN-33 |
 | `optimizePackageImports` para `@phosphor-icons/react` en `next.config.ts` | KAN-33 |
+| Glass: comprobar que el CSS generado declara `backdrop-filter` y `-webkit-backdrop-filter` y que el fallback `@supports not (...)` (D13 › Glass) se activa en Safari 16.4–17 | KAN-33 |
+| Comparar la salida del formateador de dinero y fechas en el servidor (Node) con la de WebKit y Chromium, por ejemplo en el E2E de iPhone y Pixel, para detectar diferencias de ICU (NBSP o NNBSP, símbolos, separadores de grupo) | KAN-33 / KAN-34 |
 | Export `viewport`: `viewportFit: "cover"`, `interactiveWidget: "resizes-content"`, `themeColor` por esquema | KAN-33 |
 | Adaptar el CSS de shadcn (clase `.dark`) a `prefers-color-scheme` y definir las variables de tokens, radios y blobs | KAN-33 |
 | Playwright: proyecto "Pixel" con viewport de 360 px de ancho | KAN-33 |
