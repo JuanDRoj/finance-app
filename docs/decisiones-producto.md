@@ -1,6 +1,6 @@
 # Personal Finance App — Decisiones de producto
  
-Última actualización: 2026-10-03
+Última actualización: 2026-10-05
  
 ## Visión
 App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero (pensada para celular), app móvil después.
@@ -16,6 +16,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Tipos de movimiento | Gasto, Ingreso, Transferencia, **Ajuste**. Pagar la tarjeta = transferencia (no gasto). El gasto cuenta al comprar. Ajuste = saldo inicial y cuadre con el banco; no cuenta en reportes. |
 | Moneda | Nivel 0: una moneda **por espacio**, de una lista de monedas soportadas (tabla `currencies`, con su exponente ISO 4217). Cada transacción la hereda; preparado para multimoneda. |
 | Zona horaria | Por espacio (`spaces.timezone`, ej. `America/Montevideo`). Momentos en UTC (`timestamptz`); fecha de una transacción como `date` local. |
+| Nombre de usuario | `users.display_name` es opcional. Si es `NULL`, la interfaz muestra la parte local del email (lo anterior a `@`); no se guarda un valor derivado. |
 | Categorías | Predefinidas y editables, con subcategorías (2 niveles). |
 | Espacios | Los datos pertenecen a un **espacio**; los usuarios son miembros. "Mi espacio" privado + espacios de hogar con cuentas propias. Aporte personal → hogar = gasto "Aporte al hogar" + ingreso en el hogar (enlazados). Sin división de deudas. |
 | Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. |
