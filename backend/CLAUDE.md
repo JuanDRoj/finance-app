@@ -84,6 +84,7 @@ backend/
 - **Base de datos** (`app/core/db.py`):
   - `DATABASE_URL` (driver `postgresql+asyncpg://`): con `ENV=local` tiene valor por defecto; en staging/prod es obligatoria, salvo que exista `INSTANCE_CONNECTION_NAME`.
   - Con `INSTANCE_CONNECTION_NAME` se usa el Cloud SQL Python Connector (`DB_USER`, `DB_PASSWORD`, `DB_NAME` obligatorias; `DB_IP_TYPE` por defecto `PUBLIC`) y `DATABASE_URL` se ignora.
+  - Los engines usan `hide_parameters=True`: los errores de SQL no incluyen los valores de los parámetros.
   - Pool pequeño (2–5): `DB_POOL_SIZE=2` + `DB_MAX_OVERFLOW=3`, `DB_POOL_TIMEOUT=30`.
 - **Sesión y transacción por request:** `DbSession` (`from app.core.db import DbSession`). *(pendiente)* La dependencia usa `scope="function"`: hace **commit si el endpoint termina bien y rollback si falla, antes de enviar la respuesta**. Los services **nunca** llaman `commit()` ni `rollback()`; usan `flush()` si necesitan el id o detectar una restricción (un `IntegrityError` esperable → `ConflictError`). Así, una operación que cruza módulos es una sola transacción. Fuera de HTTP (scripts), commit explícito. Hasta que se implemente, la dependencia no hace commit.
 - **Modelos ORM:** heredan de `app.core.db.Base`. Toda restricción tiene nombre predecible (convención `pk_`, `fk_`, `uq_`, `ck_`, `ix_`); cada `CheckConstraint` **debe llevar `name=`**. Al crear los modelos de un módulo, importa su `models.py` en `migrations/env.py` para que autogenerate los vea.

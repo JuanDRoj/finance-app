@@ -84,7 +84,8 @@ class Database:
         `null_pool=True` is for short-lived processes (migrations) that must not keep
         connections around. Async because the Connector has to be created in the running loop.
         """
-        pool_options: dict[str, Any] = {"pool_pre_ping": True}
+        # hide_parameters: SQL errors must not carry parameter values (emails...) into the logs.
+        pool_options: dict[str, Any] = {"pool_pre_ping": True, "hide_parameters": True}
         if null_pool:
             pool_options["poolclass"] = NullPool
         else:
