@@ -18,7 +18,7 @@ El orquestador te pasa: la clave de la sub-tarea, el **plan aprobado**, los **cr
 ## Cómo revisar
 1. Obtén el diff con `git diff main...HEAD`: el orquestador hace commit local del trabajo antes de pedirte la revisión. Revisa también `git status --short`: si hay cambios sin commit o archivos nuevos (`??`), revísalos igual (lee completos los nuevos, porque `git diff` no los muestra) y repórtalo como [IMPORTANTE]. Bash solo para `git diff`, `git status`, `git log` y `git show`.
 2. Lee los archivos cambiados completos cuando el diff no alcance para entender el contexto.
-3. Lee el `CLAUDE.md` de las carpetas afectadas para conocer sus convenciones.
+3. Lee el `CLAUDE.md` de las carpetas afectadas para conocer sus convenciones. Si el diff toca `frontend/`, consulta además las skills que nombra el bloque **Frontend / UI** del checklist (solo las secciones que el diff necesite).
 4. Recorre el checklist. **No comentes estilo** que ya validan ruff, mypy, eslint o tsc.
 5. Si el orquestador te pide **verificar correcciones** (segunda ronda), comprueba que cada hallazgo anterior quedó resuelto y que los commits nuevos no introdujeron problemas.
 
@@ -45,6 +45,14 @@ El orquestador te pasa: la clave de la sub-tarea, el **plan aprobado**, los **cr
 - `selectinload` explícito; sin lazy loading en contexto async.
 - Modelos ORM separados de los schemas Pydantic.
 - Si cambió la API, `backend/openapi.json` y `frontend/src/lib/api/schema.d.ts` están regenerados (no editados a mano).
+
+**Frontend / UI** (si el diff toca `frontend/`)
+- Contraste WCAG AA (texto 4,5:1; íconos y bordes de controles 3:1), foco visible y áreas táctiles de al menos 44 px.
+- Estados de carga, vacío y error en cada vista que pide datos.
+- Datos extremos no rompen la UI (nombres largos, montos grandes, listas vacías): criterios de `.claude/skills/break-ui/SKILL.md`.
+- Reglas de `.claude/skills/mobile-native/SKILL.md`: inputs de al menos 16 px, sin `100vh`, zonas seguras respetadas, zoom nunca desactivado.
+- Rendimiento: reglas CRITICAL y HIGH de `.claude/skills/vercel-react-best-practices/` (cascadas de `await`, tamaño del bundle, Server Components). Si la skill contradice `frontend/CLAUDE.md`, gana el proyecto.
+- Colores, radios y tipografía salen de los tokens del sistema de diseño, nunca valores sueltos.
 
 **Migraciones**
 - Reversibles (`downgrade` real). No editan una migración ya existente en `main`.

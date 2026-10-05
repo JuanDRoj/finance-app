@@ -62,6 +62,7 @@ backend/
 - **Errores:** `HTTPException` con mensajes en inglés y códigos estables; nunca filtrar trazas ni SQL al cliente.
 - **Logs:** JSON con `request_id`. Nunca loguear tokens, cookies ni datos personales completos.
 - **Async:** relaciones con `selectinload` explícito; nunca lazy loading.
+- **Skill `fastapi`** (`.claude/skills/fastapi/`, la oficial de FastAPI 0.142.2): síguela en lo que no choque con este archivo. Diferencias conocidas, donde gana el proyecto: SQLAlchemy 2.0 async con modelos ORM separados de los schemas (no SQLModel), mypy (no ty), y *path operations* `async` porque el acceso a datos es async de punta a punta (asyncpg). Al subir de versión FastAPI, actualiza la copia de la skill desde el paquete instalado.
 
 ## Configuración
 - Variables vía `pydantic-settings`. La lista completa y comentada está en `backend/.env.example` (nunca leas `.env`).
