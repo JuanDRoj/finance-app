@@ -1,3 +1,4 @@
+import os
 import re
 from functools import lru_cache
 from typing import Literal, Self
@@ -10,6 +11,17 @@ LOCAL_DATABASE_URL = "postgresql+asyncpg://finance:finance_dev@localhost:5432/fi
 
 # project:region:instance, as printed by `gcloud sql instances describe`.
 _INSTANCE_CONNECTION_NAME = re.compile(r"[^\s:]+:[^\s:]+:[^\s:]+")
+
+
+def docs_enabled() -> bool:
+    """Whether to serve /docs, /redoc and /openapi.json: only when ENV is exactly "local".
+
+    Reads the process environment instead of building `Settings`, because the app is created at
+    import time and `app.export_openapi` must work with no environment variables (see CLAUDE.md).
+    Anything but "local" (unset counts as "local", like `Settings.ENV`) hides the docs, so an
+    invalid value fails closed. The lifespan double-checks it against the real `Settings`.
+    """
+    return os.environ.get("ENV", "local") == "local"
 
 
 def _is_blank(value: str | SecretStr | None) -> bool:
@@ -26,6 +38,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     # Only valid locally; never set it in staging/prod.
     FIREBASE_AUTH_EMULATOR_HOST: str | None = None
+    # GCP project id (the standard name Google's libraries read). Cloud Run does not expose it to
+    # the container, so set it on the service: it builds the `logging.googleapis.com/trace` log
+    # field. Optional: without it the logs just carry no trace.
+    GOOGLE_CLOUD_PROJECT: str | None = None
 
     # --- Database -------------------------------------------------------------------------
     # Direct connection. Defaults to the local compose database when ENV=local; otherwise it

@@ -6,7 +6,7 @@ Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQ
 
 Fuentes: el artículo *FastAPI Best Practices and Design Patterns* (SOLID, DAO, Service Layer), el repo `Aavache/fastapi-designs`, la documentación oficial (FastAPI 0.142, SQLAlchemy 2.1, Python 3.14, Cloud Run) y pruebas propias contra PostgreSQL. Lo que se descartó de las fuentes está al final, con el motivo.
 
-> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, `core/schemas.py`, el test de fronteras y la fixture de savepoint. **KAN-35 [BE-08]** implementa `core/errors.py`, antes de auth y spaces. La unidad de los montos la fija **KAN-36 [BE-09]**.
+> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, `core/schemas.py`, el test de fronteras y la fixture de savepoint. La unidad de los montos la fija **KAN-36 [BE-09]**.
 
 ---
 
@@ -66,7 +66,7 @@ La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`
 - **Restricciones que pueden fallar por datos del usuario** (UNIQUE): el service hace `flush()` dentro de `try/except IntegrityError` y lanza `ConflictError` con su código. El nombre predecible de la restricción (`uq_...`) permite distinguir cuál fue.
 - Fuera de HTTP (scripts, seeds): se abre `db.sessionmaker()` y se hace commit explícito.
 
-## 4. Errores *(pendiente: `app/core/errors.py`, KAN-35 [BE-08])*
+## 4. Errores (`app/core/errors.py`)
 
 Los services lanzan **errores de dominio**; un handler registrado en `create_app` los convierte en HTTP.
 
@@ -102,7 +102,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
   ```
 
 - **Respuesta:** el router declara `response_model=AccountRead` y devuelve el objeto ORM. FastAPI lo filtra y serializa, y mypy queda conforme con `-> Account`.
-- **Rutas sin barra final:** con `prefix`, la colección se declara con `@router.get("")`, no con `"/"` (que genera `/accounts/` y un 307 para `/accounts`; verificado con FastAPI 0.142).
+- **Rutas sin barra final:** con `prefix`, la colección se declara con `@router.get("")`, no con `"/"` (que genera `/accounts/`; como la app usa `redirect_slashes=False`, `/accounts` daría 404 en vez de un 307). `tests/api/test_routing.py` vigila que ninguna ruta termine en `/`.
 - **Fechas:** la fecha de una transacción es `date`; los momentos son `datetime` con zona (UTC). `spaces.timezone` se valida con `zoneinfo.ZoneInfo` (si es inválida, 422).
 - **Valores tipo enum** (`expense`, `bank`...): en los schemas, `Literal` o `StrEnum`. En la BD lo decide la tarea de modelos (ENUM nativo, o texto + CHECK). Ojo: el `Enum` de SQLAlchemy guarda por defecto el **nombre** del miembro (`BANK`), no su valor; si se usa, hay que pasar `values_callable`.
 
