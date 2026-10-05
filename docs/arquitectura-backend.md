@@ -33,7 +33,7 @@ Reparto entre service y repository: el repository guarda las consultas (`select`
 
 ## 2. Módulos y sus dependencias
 
-Orden fijo, sin ciclos (de abajo hacia arriba):
+Orden fijo, sin ciclos (de abajo hacia arriba). La fuente de verdad es `ORDER` en `backend/tests/unit/test_module_boundaries.py`: si cambia, se actualizan los dos.
 
 ```
 users/auth → currencies → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
