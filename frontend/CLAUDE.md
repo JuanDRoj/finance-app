@@ -49,7 +49,7 @@ frontend/
 │   │   │   └── validate.ts     # `assertValidEnv()`: la llama next.config.ts al arrancar y en el build
 │   │   ├── firebase.ts         # (pendiente) init de Firebase Auth (emulador en local)
 │   │   ├── i18n.ts             # (pendiente) mapa único de traducciones de valores del backend
-│   │   └── money.ts            # (pendiente) formateo de centavos → texto
+│   │   └── money.ts            # (pendiente) formateo de unidades menores → texto
 │   └── components/             # (pendiente)
 ├── e2e/                        # (pendiente) Playwright (qa)
 ├── .env.example                # lista comentada de variables; se copia a .env.local
@@ -75,7 +75,7 @@ frontend/
 - **Server vs. client:** Server Components por defecto; `"use client"` solo donde haga falta interactividad o Firebase.
 - **Sesión:** el login con Firebase entrega un ID token → `POST /api/auth/session` → el backend responde con la cookie HttpOnly. El frontend **no guarda tokens**. Logout = `DELETE /api/auth/session`.
 - **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante: `getServerApi()` copia tal cual la cabecera `Cookie` (`(await headers()).get("cookie")`), no la reconstruye con `cookies()` porque eso re-codifica los valores. Un `Set-Cookie` del backend no se propaga desde un Server Component (no puede escribir cookies).
-- **Dinero:** llega en centavos (`1550`). Se formatea solo para mostrar, con `lib/money.ts` (`Intl.NumberFormat` y la moneda del espacio). Sin aritmética con floats.
+- **Dinero:** llega como entero en la **unidad menor de la moneda** (ISO 4217): valor × 10^exponente, con el `exponent` que el API envía junto a `currency` (UYU 15,50 = `1550`; CLP 1.500 = `1500`). Nunca asumas ×100. Se formatea solo para mostrar, con `lib/money.ts` (`Intl.NumberFormat`, la moneda y su exponente). Sin aritmética con floats.
 - **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → `lib/i18n.ts`.
 - **Estados de pantalla:** carga, vacío y error en cada vista que pide datos.
 - **Estilo de código:** componentes en PascalCase, hooks `useXxx`, archivos de rutas según App Router.

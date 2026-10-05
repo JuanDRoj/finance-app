@@ -30,7 +30,7 @@ Para cada archivo importante (omite los triviales y dilo):
 - Cómo se conecta con los demás archivos.
 
 ### Ejemplo concreto
-Recorre un caso real de principio a fin con datos realistas del dominio: personas (Juan, Ana), montos en centavos (`1550` = UYU 15,50), espacios ("Mi espacio"), fechas. Muestra la petición, lo que pasa adentro, lo que queda en la BD y la respuesta. Si aplica, muestra también **un caso de error** (401, 404 por IDOR, 422).
+Recorre un caso real de principio a fin con datos realistas del dominio: personas (Juan, Ana), montos en la unidad menor de la moneda (`1550` = UYU 15,50; `1500` = CLP 1.500), espacios ("Mi espacio"), fechas. Muestra la petición, lo que pasa adentro, lo que queda en la BD y la respuesta. Si aplica, muestra también **un caso de error** (401, 404 por IDOR, 422).
 
 ### Conceptos nuevos
 Solo los que aparecen **por primera vez** en el proyecto o no son obvios (ej. `selectinload`, session cookie de Firebase, Workload Identity Federation). Para cada uno: qué es, una **analogía** cotidiana y por qué se usa aquí. No expliques lo básico de Python, React o SQL.

@@ -54,7 +54,7 @@ Migraciones (REQUIERE REVISIÓN HUMANA): <archivo o "ninguna">
 ```
 
 ## Reglas de dominio (no negociables)
-- Dinero en **`bigint` centavos**; nunca `float` ni `Decimal` en la BD. $15,50 = 1550.
+- Dinero en **`bigint` en la unidad menor de la moneda** (ISO 4217, exponente en la tabla `currencies`); nunca `float` ni `Decimal` en la BD. UYU 15,50 = 1550; CLP 1.500 = 1500.
 - Monolito modular: `router → service → repository` por módulo. Un módulo usa otro **solo vía su service**.
 - Toda ruta bajo `/spaces/{space_id}` usa `require_space_member` y lleva **un test de IDOR** (usuario B no accede a datos de A → 404).
 - SQLAlchemy async: carga relaciones con `selectinload` explícito; nunca dependas de lazy loading.

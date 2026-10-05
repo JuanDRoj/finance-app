@@ -63,7 +63,7 @@ Dudas abiertas para el humano: <lista o "ninguna">
 ## Reglas de interfaz
 - **Mobile-first**: diseña para **360 px** de ancho (el mínimo que garantizamos, iPhone y Android) y revisa también 375, ~393 y ~430 px antes de ampliar.
 - Interfaz **en español**. Los valores del backend (`expense`, `pending`, `credit_card`…) **nunca se muestran crudos**: se traducen en un único mapa de traducciones.
-- Dinero: el backend envía **centavos enteros**. Formatea solo para mostrar (`Intl.NumberFormat` con la moneda del espacio) y **nunca hagas aritmética con floats**.
+- Dinero: el backend envía **enteros en la unidad menor de la moneda** (ISO 4217) junto con su `exponent`; nunca asumas ×100. Formatea solo para mostrar (`Intl.NumberFormat` con la moneda y el exponente del espacio) y **nunca hagas aritmética con floats**.
 - Cada pantalla contempla estados de carga, vacío y error.
 - Accesibilidad: contraste WCAG AA (texto 4,5:1; íconos y bordes de controles 3:1), foco visible, áreas táctiles de al menos 44 px, labels en inputs y botones con texto o `aria-label`.
 
