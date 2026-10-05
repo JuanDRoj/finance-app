@@ -71,33 +71,57 @@ async def test_each_request_gets_its_own_session(
     assert seen[0] is not seen[1]
 
 
-async def test_writes_are_not_committed_unless_the_handler_commits(
+async def _probe_database(
+    app: FastAPI, scratch_database_url: str, settings_factory: Callable[..., Settings]
+) -> Database:
+    db = await Database.create(settings_factory(database_url=scratch_database_url))
+    app.state.db = db
+    async with db.engine.begin() as conn:
+        await conn.execute(text("CREATE TABLE probe (id integer PRIMARY KEY)"))
+    return db
+
+
+async def _probe_ids(db: Database) -> list[int]:
+    async with db.sessionmaker() as session:
+        rows = (await session.execute(text("SELECT id FROM probe ORDER BY id"))).scalars().all()
+    return list(rows)
+
+
+async def test_writes_are_committed_when_the_handler_finishes(
     app: FastAPI,
     client: AsyncClient,
     scratch_database_url: str,
     settings_factory: Callable[..., Settings],
 ) -> None:
-    db = await Database.create(settings_factory(database_url=scratch_database_url))
-    app.state.db = db
+    db = await _probe_database(app, scratch_database_url, settings_factory)
     try:
-        async with db.engine.begin() as conn:
-            await conn.execute(text("CREATE TABLE probe (id integer PRIMARY KEY)"))
 
-        @app.post("/_test/insert-no-commit")
-        async def insert_no_commit(session: DbSession) -> None:
+        @app.post("/_test/insert")
+        async def insert(session: DbSession) -> None:
             await session.execute(text("INSERT INTO probe VALUES (1)"))
 
-        @app.post("/_test/insert-and-commit")
-        async def insert_and_commit(session: DbSession) -> None:
-            await session.execute(text("INSERT INTO probe VALUES (2)"))
-            await session.commit()
+        assert (await client.post("/_test/insert")).status_code == 200
+        assert await _probe_ids(db) == [1]
+    finally:
+        await db.dispose()
 
-        await client.post("/_test/insert-no-commit")
-        await client.post("/_test/insert-and-commit")
 
-        async with db.sessionmaker() as session:
-            rows = (await session.execute(text("SELECT id FROM probe ORDER BY id"))).scalars().all()
-        assert list(rows) == [2]
+async def test_writes_are_rolled_back_when_the_handler_fails(
+    app: FastAPI,
+    client: AsyncClient,
+    scratch_database_url: str,
+    settings_factory: Callable[..., Settings],
+) -> None:
+    db = await _probe_database(app, scratch_database_url, settings_factory)
+    try:
+
+        @app.post("/_test/insert-then-fail")
+        async def insert_then_fail(session: DbSession) -> None:
+            await session.execute(text("INSERT INTO probe VALUES (1)"))
+            raise HTTPException(status_code=409, detail="conflict")
+
+        assert (await client.post("/_test/insert-then-fail")).status_code == 409
+        assert await _probe_ids(db) == []
     finally:
         await db.dispose()
 

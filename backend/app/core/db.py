@@ -1,9 +1,10 @@
 """Async database access: declarative base, engine/pool, Cloud SQL Connector, request session.
 
-Transactions: the session dependency never commits. A service method is the unit of work and
-calls `await session.commit()` itself; anything left uncommitted is rolled back when the
-request ends. (FastAPI runs the exit code of a `yield` dependency *after* the response is
-sent, so committing there would let the client see success before the commit happens.)
+Transactions: `get_session` is the unit of work of a request. It commits when the endpoint
+finishes and rolls back when it raises, both before the response is sent (the dependency
+uses `scope="function"`; with the default scope FastAPI would run this code after the
+response, and the client could see a success that is not yet committed). Services never call
+`commit()` or `rollback()`.
 """
 
 import logging
@@ -160,12 +161,30 @@ def get_database(request: Request) -> Database:
     return db
 
 
-async def get_session(
+def get_sessionmaker(
     db: Annotated[Database, Depends(get_database)],
+) -> async_sessionmaker[AsyncSession]:
+    """The session factory of the running app. Tests override this one (see conftest)."""
+    return db.sessionmaker
+
+
+async def get_session(
+    sessionmaker: Annotated[async_sessionmaker[AsyncSession], Depends(get_sessionmaker)],
 ) -> AsyncIterator[AsyncSession]:
-    """One session per request. Never commits: services commit; leftovers are rolled back."""
-    async with db.sessionmaker() as session:
-        yield session
+    """One session and one transaction per request: commit on success, rollback on error.
+
+    Only `Exception` is caught: on cancellation, closing the session (the `async with`) already
+    rolls back, and awaiting inside a cancelled task is best avoided.
+    """
+    async with sessionmaker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
 
-DbSession = Annotated[AsyncSession, Depends(get_session)]
+# A `yield` dependency with the default scope cannot depend on a `function`-scoped one, so any
+# dependency with `yield` that takes `DbSession` must also be declared with scope="function".
+DbSession = Annotated[AsyncSession, Depends(get_session, scope="function")]

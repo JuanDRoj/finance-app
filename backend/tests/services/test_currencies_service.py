@@ -1,32 +1,9 @@
-import asyncio
-from collections.abc import AsyncIterator
-from pathlib import Path
-
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import InvalidFieldError
 from app.modules.currencies import service
 from app.modules.currencies.schemas import CurrencyRead
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-def _config() -> Config:
-    return Config(str(BACKEND_DIR / "alembic.ini"))
-
-
-@pytest.fixture
-async def session(scratch_database_url: str) -> AsyncIterator[AsyncSession]:
-    await asyncio.to_thread(command.upgrade, _config(), "head")
-    engine = create_async_engine(scratch_database_url)
-    try:
-        async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-            yield s
-    finally:
-        await engine.dispose()
 
 
 async def test_get_currency_returns_the_two_decimal_exponent(session: AsyncSession) -> None:

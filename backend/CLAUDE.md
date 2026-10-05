@@ -3,7 +3,7 @@
 Python **3.14** · FastAPI · SQLAlchemy 2.1 async (asyncpg) · Alembic (async) · PostgreSQL · pytest · uv · ruff · mypy.
 Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python Connector.
 
-Patrones de arquitectura con su porqué y un esqueleto de módulo: `docs/arquitectura-backend.md`. **Léelo al crear un módulo, una capa o un patrón nuevo.** Lo marcado *(pendiente)* abajo lo implementa **KAN-37 [BE-10] Base de arquitectura**; hasta entonces, el código aún no lo hace.
+Patrones de arquitectura con su porqué y un esqueleto de módulo: `docs/arquitectura-backend.md`. **Léelo al crear un módulo, una capa o un patrón nuevo.**
 
 > **Nota:** los comandos de abajo son la convención acordada. Los fija **KAN-17 [BE-01]**: si esa tarea (o una posterior) los cambia, **actualiza este archivo en la misma tarea**.
 
@@ -30,7 +30,7 @@ backend/
 ├── app/
 │   ├── main.py                 # crea la app, registra routers y middlewares
 │   ├── export_openapi.py       # CLI: escribe openapi.json sin levantar el servidor
-│   ├── core/                   # config (pydantic-settings), db, seguridad, logging, errors y schemas base (schemas, pendiente)
+│   ├── core/                   # config (pydantic-settings), db, seguridad, logging, errors y schemas base (`InputModel`, `ReadModel`, `Amount`)
 │   └── modules/
 │       └── <módulo>/           # spaces, accounts, categories, transactions, recurring, dashboard
 │           ├── router.py       # HTTP: valida entrada, llama al service, arma la respuesta
@@ -57,11 +57,11 @@ backend/
   - Un service solo llama services de módulos **anteriores**; los routers pueden combinar services de cualquier módulo.
   - De otro módulo solo se importan `service`, `schemas` y (desde routers) `dependencies`, nunca `repository` ni `models`. Se intercambian schemas (`XRead`) o valores simples, nunca objetos ORM.
   - Si un caso de uso necesita un dato de un módulo posterior, el router lo trae y se lo pasa al service.
-  - *(pendiente)* Lo vigila `tests/unit/test_module_boundaries.py`.
+  - Lo vigila `tests/unit/test_module_boundaries.py` (`ast`, sin BD): también exige que `service.py`/`repository.py` no llamen `commit()`/`rollback()` ni importen `HTTPException`/`Request`, y que `app/core` no importe módulos. Un módulo nuevo debe añadirse a `ORDER` en ese archivo o el test falla.
 - **Multi-espacio:** toda función de repository recibe `space_id` y filtra por él. El borrado suave se filtra en una consulta base del repository, nunca en cada llamada.
 - **Dinero:** `int` en Python, `BigInteger` en BD, siempre en la **unidad menor de la moneda** según ISO 4217 (valor × 10^exponente: USD/UYU/COP ×100, CLP/PYG ×1; no siempre centavos). Sin `float` ni `Decimal` en la BD. El exponente sale de la tabla `currencies` (módulo `currencies`), única fuente de las monedas soportadas: sumar una moneda es agregar una fila en una migración de datos, y `spaces.currency` es FK a ella. En los schemas, el tipo común `Amount` (`app/core/schemas.py`): int estricto, > 0, ≤ 2^53 − 1 (el límite seguro de JavaScript). Las columnas se llaman `*_minor` (`amount_minor`), no `*_cents`. Los schemas de entrada validan el formato de la moneda con `CurrencyCode` (`app/modules/currencies/schemas.py`: 3 letras mayúsculas); que esté soportada lo decide `currencies` (service o FK). El signo lo pone el backend según el tipo.
 - **IDs:** UUIDv7 generados en Python (`default=uuid.uuid7`).
-- **Schemas:** `XCreate` / `XUpdate` (PATCH con `exclude_unset`) / `XRead`. Las entradas heredan de `InputModel` (`extra="forbid"`) y las salidas de `ReadModel` (`from_attributes`) *(pendiente)*. Crear transacción = unión discriminada por `type`.
+- **Schemas:** `XCreate` / `XUpdate` (PATCH con `exclude_unset`) / `XRead`. Las entradas heredan de `InputModel` (`extra="forbid"`) y las salidas de `ReadModel` (`from_attributes`), ambas en `app/core/schemas.py`. Crear transacción = unión discriminada por `type`.
 - **Endpoints:** `response_model=XRead` devolviendo el objeto ORM, `status_code` explícito (201 al crear, 204 sin cuerpo) y `responses={404: {"model": ErrorResponse}}` con los errores posibles.
 - **Tiempo:** momentos como `timestamptz` en UTC; la fecha de una transacción como `date` local del usuario. La zona horaria vive en `spaces.timezone`.
 - **Nombres:** tablas en plural y snake_case; JSON en snake_case; URLs con guiones (`/recurring-templates`).
@@ -86,7 +86,9 @@ backend/
   - Con `INSTANCE_CONNECTION_NAME` se usa el Cloud SQL Python Connector (`DB_USER`, `DB_PASSWORD`, `DB_NAME` obligatorias; `DB_IP_TYPE` por defecto `PUBLIC`) y `DATABASE_URL` se ignora.
   - Los engines usan `hide_parameters=True`: los errores de SQL no incluyen los valores de los parámetros.
   - Pool pequeño (2–5): `DB_POOL_SIZE=2` + `DB_MAX_OVERFLOW=3`, `DB_POOL_TIMEOUT=30`.
-- **Sesión y transacción por request:** `DbSession` (`from app.core.db import DbSession`). *(pendiente)* La dependencia usa `scope="function"`: hace **commit si el endpoint termina bien y rollback si falla, antes de enviar la respuesta**. Los services **nunca** llaman `commit()` ni `rollback()`; usan `flush()` si necesitan el id o detectar una restricción (un `IntegrityError` esperable → `ConflictError`). Así, una operación que cruza módulos es una sola transacción. Fuera de HTTP (scripts), commit explícito. Hasta que se implemente, la dependencia no hace commit.
+- **Sesión y transacción por request:** `DbSession` (`from app.core.db import DbSession`). La dependencia usa `scope="function"`: hace **commit si el endpoint termina bien y rollback si falla, antes de enviar la respuesta**. Los services **nunca** llaman `commit()` ni `rollback()`; usan `flush()` si necesitan el id o detectar una restricción (un `IntegrityError` esperable → `ConflictError`). Así, una operación que cruza módulos es una sola transacción. Fuera de HTTP (scripts), commit explícito.
+  - `get_sessionmaker` es la dependencia de la que sale la fábrica de sesiones; los tests de API la sobreescriben.
+  - Restricción de FastAPI: una dependencia con `yield` y scope por defecto (`request`) no puede depender de una `scope="function"`. Cualquier dependencia **con `yield`** que use `DbSession` debe declararse también con `scope="function"`; las sin `yield` (p. ej. un futuro `get_current_user`) no tienen esa restricción.
 - **Modelos ORM:** heredan de `app.core.db.Base`. Toda restricción tiene nombre predecible (convención `pk_`, `fk_`, `uq_`, `ck_`, `ix_`); cada `CheckConstraint` **debe llevar `name=`**. Al crear los modelos de un módulo, importa su `models.py` en `migrations/env.py` para que autogenerate los vea.
 
 ## Contrato OpenAPI
@@ -98,7 +100,7 @@ backend/
 - **PostgreSQL real** (contenedor de Docker Compose), nunca SQLite. `docker compose up -d postgres` desde la raíz antes de correr la suite.
 - `TEST_DATABASE_URL` (por defecto `finance_test`): su nombre **debe terminar en `_test`** o la suite se niega a correr (los tests de migraciones hacen `downgrade base`). `finance_test` solo se crea con el volumen vacío (ver README).
 - Fixtures de BD en `tests/conftest.py`: `database` (BD de test compartida, solo lectura), `scratch_database_url` (BD nueva y vacía por test, se borra al terminar: úsala para escribir o migrar) y `settings_factory`.
-- *(pendiente)* **Tests de services y API: savepoint por test.** La BD de test se migra una vez por sesión de pytest y cada test corre en una transacción que se revierte al final (`join_transaction_mode="create_savepoint"`), así que los `commit()` no dejan datos. En los tests de API se sobreescribe la fábrica de sesiones (`app.dependency_overrides`) para que corra el commit/rollback real. `scratch_database_url` queda para los tests de `tests/db` (migraciones, engine).
+- **Tests de services y API: savepoint por test.** La BD de test se migra una vez por sesión de pytest y cada test corre en una transacción que se revierte al final (`join_transaction_mode="create_savepoint"`), así que los `commit()` no dejan datos. Fixtures: `migrated_test_database` (sesión; `alembic upgrade head` sobre `finance_test`; si la BD quedó en una revisión que no existe en la rama, falla con los comandos para recrearla), `db_connection`, `session_factory`, `session` (services) y `api_client` (sobreescribe `get_sessionmaker`, así corre el commit/rollback real de `get_session`; sin requests concurrentes: comparten conexión). `scratch_database_url` queda para los tests de `tests/db` (migraciones, engine).
 - `alembic.command.*` llama `asyncio.run` internamente: desde un test async, invócalo con `await asyncio.to_thread(...)`.
 - Cada test crea sus datos con funciones async de ayuda (`await make_space(session, ...)`), sin librerías de factories; nada depende del orden de ejecución.
 - Las funciones puras (armado de entries, cursor) se prueban en `tests/unit` sin BD.
