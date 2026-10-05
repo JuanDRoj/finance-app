@@ -41,7 +41,7 @@ def _package_of(app_dir: Path, file: Path) -> list[str]:
 
 
 def _imports(tree: ast.AST, package: list[str]) -> list[tuple[int, list[str]]]:
-    """Every import as (line, absolute dotted parts). `from x import y` yields x.y too."""
+    """Every import as (line, absolute dotted parts). `from x import y` yields x.y."""
     found: list[tuple[int, list[str]]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -53,7 +53,6 @@ def _imports(tree: ast.AST, package: list[str]) -> list[tuple[int, list[str]]]:
             else:
                 module = node.module.split(".") if node.module else []
             found.extend((node.lineno, [*module, alias.name]) for alias in node.names)
-            found.append((node.lineno, module))
     return found
 
 
@@ -62,6 +61,23 @@ def _target(parts: list[str]) -> tuple[str, str | None] | None:
     if tuple(parts[:2]) != MODULES_PREFIX or len(parts) < 3:
         return None
     return parts[2], parts[3] if len(parts) > 3 else None
+
+
+HTTP_NAMES = {"HTTPException", "Request"}
+
+
+def _is_http_framework(dotted: str | None) -> bool:
+    return dotted is not None and dotted.split(".")[0] in {"fastapi", "starlette"}
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """`a.b.c` as 'a.b.c' for a chain of names and attributes, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return None if base is None else f"{base}.{node.attr}"
+    return None
 
 
 def find_violations(app_dir: Path) -> list[str]:
@@ -105,7 +121,11 @@ def find_violations(app_dir: Path) -> list[str]:
             if target is None or own is None or target[0] == own:
                 continue
             other, part = target
-            if part is not None and part not in PUBLIC_PARTS:
+            if part is None:
+                # `import app.modules.x` / `from app.modules import x`: the package itself
+                # would let `x.repository.f()` slip past the rule by attribute access.
+                report(line, f"imports the {other} package; import its service or schemas")
+            elif part not in PUBLIC_PARTS:
                 report(line, f"imports {other}.{part}; only service/schemas/dependencies allowed")
             elif part == "dependencies" and not is_router:
                 report(line, f"imports {other}.dependencies outside a router")
@@ -122,15 +142,16 @@ def find_violations(app_dir: Path) -> list[str]:
                     and isinstance(node.ctx, ast.Load)
                 ):
                     report(node.lineno, f"{file.name} must not call {node.attr}()")
-                if isinstance(node, (ast.Import, ast.ImportFrom)):
-                    from_fastapi = isinstance(node, ast.ImportFrom) and node.module == "fastapi"
-                    if from_fastapi and {"HTTPException", "Request"} & {a.name for a in node.names}:
-                        report(node.lineno, "service/repository must not know HTTP")
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and _is_http_framework(node.module)
+                    and HTTP_NAMES & {a.name for a in node.names}
+                ):
+                    report(node.lineno, "service/repository must not know HTTP")
                 if (
                     isinstance(node, ast.Attribute)
-                    and node.attr in {"HTTPException", "Request"}
-                    and isinstance(node.value, ast.Name)
-                    and node.value.id == "fastapi"
+                    and node.attr in HTTP_NAMES
+                    and _is_http_framework(_dotted(node.value))
                 ):
                     report(node.lineno, "service/repository must not know HTTP")
     return violations
@@ -348,3 +369,59 @@ def test_router_may_import_fastapi(tmp_path: Path) -> None:
         tmp_path, {"modules/currencies/router.py": "from fastapi import APIRouter, Request\n"}
     )
     assert find_violations(app) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import app.modules.currencies\n",
+        "from app.modules import currencies\n",
+        "from .. import currencies\n",
+    ],
+)
+def test_importing_another_modules_package_is_forbidden(tmp_path: Path, source: str) -> None:
+    app = _tree(
+        tmp_path,
+        {
+            "modules/currencies/repository.py": "",
+            "modules/spaces/service.py": source,
+        },
+    )
+    violations = find_violations(app)
+    assert len(violations) == 1
+    assert "spaces/service.py:1" in violations[0]
+
+
+def test_importing_the_service_of_another_module_by_name_is_still_allowed(
+    tmp_path: Path,
+) -> None:
+    app = _tree(
+        tmp_path,
+        {
+            "modules/currencies/service.py": "",
+            "modules/spaces/service.py": "from app.modules import currencies\n",
+        },
+    )
+    # `currencies` here is the package: forbidden. The allowed form names the part.
+    assert len(find_violations(app)) == 1
+    app = _tree(
+        tmp_path / "ok",
+        {
+            "modules/currencies/service.py": "",
+            "modules/spaces/service.py": "from app.modules.currencies import service\n",
+        },
+    )
+    assert find_violations(app) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from starlette.requests import Request\n",
+        "from starlette.exceptions import HTTPException\n",
+        "import starlette.requests\n\nx = starlette.requests.Request\n",
+    ],
+)
+def test_service_does_not_know_starlette_http(tmp_path: Path, source: str) -> None:
+    app = _tree(tmp_path, {"modules/currencies/service.py": source})
+    assert len(find_violations(app)) == 1
