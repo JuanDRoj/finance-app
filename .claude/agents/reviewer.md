@@ -41,8 +41,10 @@ El orquestador te pasa: la clave de la sub-tarea, el **plan aprobado**, los **cr
 - Frontend: no guarda tokens; no llama a la BD; solo usa los tipos generados.
 
 **Backend**
-- Capas `router → service → repository`; un módulo usa a otro solo vía su service.
-- `selectinload` explícito; sin lazy loading en contexto async.
+- Capas `router → service → repository`; un módulo usa a otro solo vía su service y respeta el orden entre módulos de `backend/CLAUDE.md` (nada importa el `repository` ni los `models` de otro módulo).
+- Services sin `commit()`/`rollback()` (la transacción es por request); repositories que filtran siempre por `space_id`.
+- Errores como `AppError` (no `HTTPException`); librerías síncronas (`firebase-admin`, `google-auth`) vía `asyncio.to_thread`.
+- `selectinload` explícito y `lazy="raise"`; sin lazy loading en contexto async.
 - Modelos ORM separados de los schemas Pydantic.
 - Si cambió la API, `backend/openapi.json` y `frontend/src/lib/api/schema.d.ts` están regenerados (no editados a mano).
 
