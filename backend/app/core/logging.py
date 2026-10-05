@@ -38,10 +38,31 @@ _STANDARD_ATTRS = frozenset(
     logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
     | {"message", "asctime", "taskName", "request_id", "trace_id"}
 )
-# Fields the formatter owns: `extra=` can never set them. `color_message` is the ANSI copy of the
-# message that uvicorn adds to its records; it is noise in JSON.
+# Fields `extra=` can never set: the ones the formatter owns, `exception` (only `exc_info` may fill
+# it, so a log line cannot pose as a traceback), the special fields Cloud Logging interprets
+# (it would take them as the real severity source, request data, labels, ...), and `color_message`,
+# the ANSI copy of the message that uvicorn adds to its records, which is noise in JSON.
+_CLOUD_LOGGING_SPECIAL_FIELDS = (
+    "httpRequest",
+    "logging.googleapis.com/insertId",
+    "logging.googleapis.com/labels",
+    "logging.googleapis.com/operation",
+    "logging.googleapis.com/sourceLocation",
+    "logging.googleapis.com/spanId",
+    "logging.googleapis.com/trace_sampled",
+)
 _RESERVED_FIELDS = frozenset(
-    {"timestamp", "severity", "logger", "message", "request_id", TRACE_FIELD, "color_message"}
+    {
+        "timestamp",
+        "severity",
+        "logger",
+        "message",
+        "request_id",
+        TRACE_FIELD,
+        "exception",
+        "color_message",
+        *_CLOUD_LOGGING_SPECIAL_FIELDS,
+    }
 )
 
 

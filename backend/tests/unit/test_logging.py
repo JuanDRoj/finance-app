@@ -83,6 +83,43 @@ def test_extra_cannot_override_reserved_fields() -> None:
     assert data["foo"] == "bar"
 
 
+# Fields Cloud Logging gives a special meaning to (besides severity, message and the trace),
+# plus `exception`, which the formatter fills only from `exc_info`.
+EXTRA_CANNOT_SET = [
+    "exception",
+    "httpRequest",
+    "logging.googleapis.com/labels",
+    "logging.googleapis.com/spanId",
+    "logging.googleapis.com/trace_sampled",
+    "logging.googleapis.com/sourceLocation",
+    "logging.googleapis.com/operation",
+    "logging.googleapis.com/insertId",
+]
+
+
+@pytest.mark.parametrize("field", EXTRA_CANNOT_SET)
+def test_extra_cannot_set_fields_that_are_special_for_cloud_logging(field: str) -> None:
+    record = _record()
+    record.__dict__[field] = "injected"
+
+    assert field not in json.loads(JsonFormatter().format(record))
+
+
+def test_exception_only_appears_when_there_is_exc_info() -> None:
+    plain = _record()
+    plain.__dict__["exception"] = "Traceback (most recent call last): fake"
+    assert "exception" not in json.loads(JsonFormatter().format(plain))
+
+    try:
+        raise ValueError("real boom")
+    except ValueError:
+        with_exc = _record(exc_info=sys.exc_info())
+    with_exc.__dict__["exception"] = "Traceback (most recent call last): fake"
+    data = json.loads(JsonFormatter().format(with_exc))
+    assert "ValueError: real boom" in data["exception"]
+    assert "fake" not in data["exception"]
+
+
 def test_extra_cannot_inject_the_trace_field_even_when_there_is_no_trace() -> None:
     record = _record()
     record.__dict__[TRACE_KEY] = "projects/evil/traces/evil"

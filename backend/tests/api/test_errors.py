@@ -17,6 +17,10 @@ from app.core.errors import (
 from app.main import create_app
 
 
+class _ForgotStatusError(AppError):
+    """A subclass that forgot to declare its own status: it inherits the base's 500."""
+
+
 class _Body(BaseModel):
     amount: int
 
@@ -43,6 +47,14 @@ def _add_error_routes(app: FastAPI) -> None:
     @app.get("/_test/legacy-http-exception")
     async def legacy() -> None:
         raise HTTPException(status_code=409, detail="legacy conflict")
+
+    @app.get("/_test/base-app-error")
+    async def base_app_error() -> None:
+        raise AppError("some_problem", "Some internal problem")
+
+    @app.get("/_test/server-error-subclass")
+    async def server_error_subclass() -> None:
+        raise _ForgotStatusError("forgot_status", "Subclass that never set its status")
 
     @app.post("/_test/validated")
     async def validated(body: _Body) -> None:
@@ -172,12 +184,65 @@ async def test_expected_errors_are_not_logged_as_unhandled_exceptions(
 ) -> None:
     _add_error_routes(app)
 
-    for path in ("/_test/not-found", "/_test/conflict", "/_test/invalid-field", "/nope"):
+    paths = (
+        "/_test/not-found",
+        "/_test/conflict",
+        "/_test/unauthenticated",
+        "/_test/invalid-field",
+        "/nope",
+    )
+    for path in paths:
         await client.get(path)
 
     lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
     assert not [line for line in lines if "exception" in line]
     assert "unhandled_exception" not in {line["message"] for line in lines}
+
+
+@pytest.mark.parametrize("path", ["/_test/base-app-error", "/_test/server-error-subclass"])
+async def test_an_app_error_without_a_client_status_is_an_unexpected_500(
+    app: FastAPI, client: AsyncClient, log_stream: io.StringIO, path: str
+) -> None:
+    _add_error_routes(app)
+
+    response = await client.get(path, headers={"X-Request-ID": "rid-base"})
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error", "code": "internal_error"}
+    assert "some_problem" not in response.text
+    assert "forgot_status" not in response.text
+    assert response.headers["x-request-id"] == "rid-base"
+
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    traces = [line for line in lines if "exception" in line]
+    assert len(traces) == 1
+    assert traces[0]["request_id"] == "rid-base"
+    assert traces[0]["message"] == "unhandled_exception"
+    assert "AppError" in traces[0]["exception"] or "_ForgotStatusError" in traces[0]["exception"]
+    completed = next(line for line in lines if line["message"] == "request_completed")
+    assert completed["status"] == 500
+
+
+@pytest.mark.parametrize("loc", [("body", "category_id"), ["body", "category_id"]])
+def test_invalid_field_error_accepts_a_tuple_or_a_list_as_loc(
+    loc: tuple[str | int, ...] | list[str | int],
+) -> None:
+    error = InvalidFieldError(loc, "category_kind_mismatch", "Category kind does not match")
+
+    assert error.loc == ["body", "category_id"]
+
+
+def test_invalid_field_error_loc_can_mix_names_and_indexes() -> None:
+    error = InvalidFieldError(("body", "entries", 0, "account_id"), "x", "y")
+
+    assert error.loc == ["body", "entries", 0, "account_id"]
+
+
+def test_invalid_field_error_rejects_a_string_loc() -> None:
+    # A bare string would be split into characters: ["c", "a", "t", ...]. The `type: ignore` is
+    # also the static check: mypy (warn_unused_ignores) fails if it ever stops rejecting a str.
+    with pytest.raises(TypeError, match="loc"):
+        InvalidFieldError("category_id", "x", "y")  # type: ignore[arg-type]
 
 
 def test_error_response_schema_has_detail_and_code() -> None:

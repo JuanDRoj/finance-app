@@ -14,7 +14,6 @@ find the full error in the logs.
 """
 
 import re
-from collections.abc import Sequence
 from http import HTTPStatus
 from typing import ClassVar, cast
 
@@ -66,7 +65,11 @@ class InvalidFieldError(AppError):
 
     status_code = 422
 
-    def __init__(self, loc: Sequence[str | int], code: str, msg: str) -> None:
+    def __init__(self, loc: tuple[str | int, ...] | list[str | int], code: str, msg: str) -> None:
+        """`loc` is the path of the field, e.g. `("body", "category_id")`, never a bare `str`."""
+        # A str is a Sequence of str: `list("category_id")` would silently give single letters.
+        if not isinstance(loc, tuple | list):
+            raise TypeError(f"loc must be a tuple or a list of str | int, not {type(loc).__name__}")
         super().__init__(code, msg)
         self.loc = list(loc)
 
@@ -98,6 +101,11 @@ def _code_for_http_status(status_code: int) -> str:
 # (the registration below guarantees which one it receives).
 async def _handle_app_error(_request: Request, exc: Exception) -> Response:
     error = cast(AppError, exc)
+    if error.status_code >= 500:
+        # The bare `AppError` (or a subclass that forgot its status) is a bug, not a client error:
+        # let it reach `RequestIdMiddleware`, which logs the traceback once and answers the
+        # generic 500, instead of echoing its code and detail.
+        raise error
     return _error_response(error.status_code, error.detail, error.code)
 
 
