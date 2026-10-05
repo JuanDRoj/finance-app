@@ -60,6 +60,12 @@ class UnauthenticatedError(AppError):
     status_code = 401
 
 
+class ForbiddenError(AppError):
+    """Understood but refused, whatever the credentials (e.g. an origin that is not allowed)."""
+
+    status_code = 403
+
+
 class InvalidFieldError(AppError):
     """Validation that needs the database (category of another kind, archived account, ...)."""
 

@@ -318,6 +318,8 @@ async def test_lifespan_passes_the_gcp_project_to_the_log_formatter(
 def _staging_app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("ENV", "staging")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost:5432/x")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "finance-staging")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     get_settings.cache_clear()
     return create_app()
 

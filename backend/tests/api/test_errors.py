@@ -10,6 +10,7 @@ from app.core.errors import (
     AppError,
     ConflictError,
     ErrorResponse,
+    ForbiddenError,
     InvalidFieldError,
     NotFoundError,
     UnauthenticatedError,
@@ -37,6 +38,10 @@ def _add_error_routes(app: FastAPI) -> None:
     @app.get("/_test/unauthenticated")
     async def unauthenticated() -> None:
         raise UnauthenticatedError("not_authenticated", "Not authenticated")
+
+    @app.get("/_test/forbidden")
+    async def forbidden() -> None:
+        raise ForbiddenError("origin_not_allowed", "Origin not allowed")
 
     @app.get("/_test/invalid-field")
     async def invalid_field() -> None:
@@ -79,6 +84,11 @@ def _add_error_routes(app: FastAPI) -> None:
             401,
             {"detail": "Not authenticated", "code": "not_authenticated"},
         ),
+        (
+            "/_test/forbidden",
+            403,
+            {"detail": "Origin not allowed", "code": "origin_not_allowed"},
+        ),
     ],
 )
 async def test_app_errors_use_the_single_error_format(
@@ -96,6 +106,8 @@ def test_app_error_subclasses_carry_their_http_status() -> None:
     assert NotFoundError.status_code == 404
     assert ConflictError.status_code == 409
     assert UnauthenticatedError.status_code == 401
+    assert ForbiddenError.status_code == 403
+    assert issubclass(ForbiddenError, AppError)
     assert InvalidFieldError.status_code == 422
     assert issubclass(NotFoundError, AppError)
     assert issubclass(InvalidFieldError, AppError)
@@ -188,6 +200,7 @@ async def test_expected_errors_are_not_logged_as_unhandled_exceptions(
         "/_test/not-found",
         "/_test/conflict",
         "/_test/unauthenticated",
+        "/_test/forbidden",
         "/_test/invalid-field",
         "/nope",
     )

@@ -22,7 +22,9 @@ from app.core.config import Settings, get_settings
 from app.core.db import Database, get_sessionmaker
 from app.core.logging import JsonFormatter, RequestIdFilter
 from app.main import create_app
+from app.modules.auth.dependencies import get_firebase_auth
 from tests.db_migration import upgrade_test_database
+from tests.fakes import FakeFirebaseAuth
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -51,6 +53,8 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("LOG_LEVEL", "INFO")
     monkeypatch.delenv("FIREBASE_AUTH_EMULATOR_HOST", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("FIREBASE_PROJECT_ID", raising=False)
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     for var in _DB_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
     get_settings.cache_clear()
@@ -61,6 +65,14 @@ def _isolated_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 @pytest.fixture
 def app() -> FastAPI:
     return create_app()
+
+
+@pytest.fixture
+def fake_firebase(app: FastAPI) -> FakeFirebaseAuth:
+    """Replaces the Firebase boundary of the app: no network, no emulator."""
+    fake = FakeFirebaseAuth()
+    app.dependency_overrides[get_firebase_auth] = lambda: fake
+    return fake
 
 
 @pytest.fixture
