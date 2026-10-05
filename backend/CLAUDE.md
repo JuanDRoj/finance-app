@@ -59,7 +59,7 @@ backend/
   - Si un caso de uso necesita un dato de un módulo posterior, el router lo trae y se lo pasa al service.
   - *(pendiente)* Lo vigila `tests/unit/test_module_boundaries.py`.
 - **Multi-espacio:** toda función de repository recibe `space_id` y filtra por él. El borrado suave se filtra en una consulta base del repository, nunca en cada llamada.
-- **Dinero:** `int` en Python, `BigInteger` en BD, siempre en la **unidad menor de la moneda** según ISO 4217 (valor × 10^exponente: USD/UYU/COP ×100, CLP/PYG ×1; no siempre centavos). Sin `float` ni `Decimal` en la BD. El exponente sale de la tabla `currencies` (módulo `currencies`), única fuente de las monedas soportadas: sumar una moneda es agregar una fila en una migración de datos, y `spaces.currency` es FK a ella. En los schemas, el tipo común `Amount` (`app/core/schemas.py`): int estricto, > 0, ≤ 2^53 − 1 (el límite seguro de JavaScript). Las columnas se llaman `*_minor` (`amount_minor`), no `*_cents`. El signo lo pone el backend según el tipo.
+- **Dinero:** `int` en Python, `BigInteger` en BD, siempre en la **unidad menor de la moneda** según ISO 4217 (valor × 10^exponente: USD/UYU/COP ×100, CLP/PYG ×1; no siempre centavos). Sin `float` ni `Decimal` en la BD. El exponente sale de la tabla `currencies` (módulo `currencies`), única fuente de las monedas soportadas: sumar una moneda es agregar una fila en una migración de datos, y `spaces.currency` es FK a ella. En los schemas, el tipo común `Amount` (`app/core/schemas.py`): int estricto, > 0, ≤ 2^53 − 1 (el límite seguro de JavaScript). Las columnas se llaman `*_minor` (`amount_minor`), no `*_cents`. Los schemas de entrada validan el formato de la moneda con `CurrencyCode` (`app/modules/currencies/schemas.py`: 3 letras mayúsculas); que esté soportada lo decide `currencies` (service o FK). El signo lo pone el backend según el tipo.
 - **IDs:** UUIDv7 generados en Python (`default=uuid.uuid7`).
 - **Schemas:** `XCreate` / `XUpdate` (PATCH con `exclude_unset`) / `XRead`. Las entradas heredan de `InputModel` (`extra="forbid"`) y las salidas de `ReadModel` (`from_attributes`) *(pendiente)*. Crear transacción = unión discriminada por `type`.
 - **Endpoints:** `response_model=XRead` devolviendo el objeto ORM, `status_code` explícito (201 al crear, 204 sin cuerpo) y `responses={404: {"model": ErrorResponse}}` con los errores posibles.
@@ -107,6 +107,7 @@ backend/
 ## Migraciones
 - Revisadas a mano después del autogenerate; con `downgrade` funcional.
 - Nunca editar una migración que ya está en `main`.
+- Revision IDs secuenciales de 4 dígitos (`0001`, `0002`…): `uv run alembic revision --autogenerate --rev-id 0002 -m "<descripción>"`. Su `down_revision` apunta a la anterior (`"0001"`).
 - Se aplican como paso separado (Cloud Run Job), **nunca** al arrancar la app.
 - `env.py` usa la misma config y el mismo `Database` que la API (Connector incluido). `alembic upgrade head --sql` (modo offline) solo funciona con `DATABASE_URL`.
 - Las revisiones generadas se formatean solas con ruff (hook en `alembic.ini`). La primera (`0001`) crea `currencies` con su semilla; las monedas nuevas entran como migración de datos.

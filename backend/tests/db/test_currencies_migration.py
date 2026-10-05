@@ -32,11 +32,11 @@ async def _upgrade(config: Config) -> None:
     await asyncio.to_thread(command.upgrade, config, "head")
 
 
-async def _exec(url: str, sql: str) -> None:
+async def _exec(url: str, sql: str, **params: object) -> None:
     engine = create_async_engine(url)
     try:
         async with engine.begin() as conn:
-            await conn.execute(text(sql))
+            await conn.execute(text(sql), params)
     finally:
         await engine.dispose()
 
@@ -66,7 +66,11 @@ async def test_exponent_outside_0_to_4_is_rejected(
     await _upgrade(_config())
 
     with pytest.raises(IntegrityError, match="ck_currencies_exponent_range"):
-        await _exec(scratch_database_url, f"INSERT INTO currencies VALUES ('XAA', {exponent})")  # noqa: S608 - test-controlled values
+        await _exec(
+            scratch_database_url,
+            "INSERT INTO currencies VALUES ('XAA', :exponent)",
+            exponent=exponent,
+        )
 
 
 @pytest.mark.parametrize("code", ["usd", "US", "US1"])
@@ -74,7 +78,7 @@ async def test_malformed_code_is_rejected(scratch_database_url: str, code: str) 
     await _upgrade(_config())
 
     with pytest.raises(IntegrityError, match="ck_currencies_code_format"):
-        await _exec(scratch_database_url, f"INSERT INTO currencies VALUES ('{code}', 2)")  # noqa: S608 - test-controlled values
+        await _exec(scratch_database_url, "INSERT INTO currencies VALUES (:code, 2)", code=code)
 
 
 async def test_duplicate_code_is_rejected(scratch_database_url: str) -> None:
