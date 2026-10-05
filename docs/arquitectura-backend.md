@@ -104,7 +104,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 - **Respuesta:** el router declara `response_model=AccountRead` y devuelve el objeto ORM. FastAPI lo filtra y serializa, y mypy queda conforme con `-> Account`.
 - **Rutas sin barra final:** con `prefix`, la colección se declara con `@router.get("")`, no con `"/"` (que genera `/accounts/`; como la app usa `redirect_slashes=False`, `/accounts` daría 404 en vez de un 307). `tests/api/test_routing.py` vigila que ninguna ruta termine en `/`.
 - **Fechas:** la fecha de una transacción es `date`; los momentos son `datetime` con zona (UTC). `spaces.timezone` se valida con `zoneinfo.ZoneInfo` (si es inválida, 422).
-- **Valores tipo enum** (`expense`, `bank`...): en los schemas, `Literal` o `StrEnum`. En la BD lo decide la tarea de modelos (ENUM nativo, o texto + CHECK). Ojo: el `Enum` de SQLAlchemy guarda por defecto el **nombre** del miembro (`BANK`), no su valor; si se usa, hay que pasar `values_callable`.
+- **Valores tipo enum** (`expense`, `bank`...): en los schemas, `Literal` o `StrEnum`. En la BD se guardan como `text` + `CheckConstraint` con nombre (`ck_<tabla>_<nombre>`), no como ENUM nativo de PostgreSQL: cambiar los valores es una migración simple y no hay tipos que mantener fuera de la tabla. Ojo: el `Enum` de SQLAlchemy guarda por defecto el **nombre** del miembro (`BANK`), no su valor; si se usa, hay que pasar `values_callable`.
 
 ## 6. Espacios, IDOR y seguridad
 
