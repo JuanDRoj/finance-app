@@ -34,7 +34,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S", "C4", "PT", "RUF"]
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["app", "tests"]
+files = ["app", "tests", "migrations"]
 mypy_path = "."
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]

@@ -14,10 +14,11 @@ from app.core.config import get_settings
 from app.core.db import Base, Database
 from app.core.logging import configure_logging
 from app.modules.currencies import models as currencies_models  # noqa: F401
+from app.modules.spaces import models as spaces_models  # noqa: F401
+from app.modules.users import models as users_models  # noqa: F401
 
 # Importing a module's models registers its tables on Base.metadata, which autogenerate
-# compares against the database. Add one import per module here when it gets models, e.g.:
-#   from app.modules.spaces import models as spaces_models
+# compares against the database. Add one import per module here when it gets models.
 target_metadata = Base.metadata
 
 config = context.config

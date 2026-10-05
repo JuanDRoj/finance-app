@@ -9,6 +9,7 @@ Todas las tablas y cómo se relacionan. Nombres de tablas, columnas y valores en
 ```mermaid
 erDiagram
   USERS ||--o{ SPACE_MEMBERS : "es miembro"
+  USERS ||--o{ SPACES : "crea"
   SPACES ||--o{ SPACE_MEMBERS : "tiene"
   SPACES ||--o{ ACCOUNTS : "contiene"
   SPACES ||--o{ CATEGORIES : "contiene"
@@ -32,12 +33,29 @@ erDiagram
     char code PK "UYU, COP, USD"
     smallint exponent "0..4, ISO 4217"
   }
+  USERS {
+    uuid id PK
+    text firebase_uid UK
+    text email
+    text display_name "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  SPACE_MEMBERS {
+    uuid user_id PK, FK
+    uuid space_id PK, FK
+    enum role "owner | member"
+    timestamptz created_at
+  }
   SPACES {
     uuid id PK
     text name
     enum type "personal | household"
     char currency FK "→ currencies.code"
     text timezone "America/Montevideo"
+    uuid created_by FK "→ users.id"
+    timestamptz created_at
+    timestamptz updated_at
   }
   ACCOUNTS {
     uuid id PK
@@ -75,7 +93,7 @@ erDiagram
   }
 ```
  
-`||--o{` uno a muchos `||--|{` uno a uno o más `|o--o{` opcional El diagrama muestra solo las columnas clave; el detalle está abajo.
+`||--o{` uno a muchos `||--|{` uno a uno o más `|o--o{` opcional El diagrama muestra solo las columnas clave; el detalle está abajo. En el diagrama, `enum` es conceptual: en la BD los valores de ese tipo son `text` con un CHECK con nombre (no un ENUM nativo de PostgreSQL).
  
 ## Reglas que el modelo garantiza
  
@@ -93,6 +111,8 @@ erDiagram
  
 **Solo se aparta dinero que existe**Las metas reservan en cuentas `bank` o `cash`, nunca en una tarjeta.
  
+**Un espacio personal por creador**Índice único parcial `uq_spaces_created_by_personal` sobre `spaces(created_by)` donde `type = 'personal'`. En v1 equivale a un espacio personal por usuario; unirse a un hogar en v2 (`space_members`) no la afecta, porque la regla mira quién creó el espacio, no la membresía.
+ 
 ## Tablas
  
 ### users
@@ -103,9 +123,10 @@ La persona que inicia sesión. Plural porque `user` es palabra reservada en Post
  
 | idPK | uuid |
 | --- | --- |
-| firebase_uid | único, enlaza con Firebase Auth |
-| email |  |
-| display_name |  |
+| firebase_uid | `NOT NULL`, único (`uq_users_firebase_uid`); enlaza con Firebase Auth |
+| email | `NOT NULL`; sin restricción de unicidad (el login es por `firebase_uid`) |
+| display_name | opcional (`NULL`); la interfaz usa la parte local del email al mostrarlo, no se guarda un valor derivado |
+| created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger |
  
 ### spaces
  
@@ -116,9 +137,11 @@ Dueño de todos los datos. Cada usuario recibe "Mi espacio" al registrarse.
 | idPK | uuid |
 | --- | --- |
 | name | "Mi espacio", "Hogar Rodríguez" |
-| type | personal · household |
+| type | personal · household (texto + CHECK `ck_spaces_type`) |
 | currency | FK a `currencies.code` (UYU, COP, USD…); define la unidad menor de todos los montos del espacio |
 | timezone | "America/Montevideo"; el cron la usa para saber qué día es |
+| created_by | FK a `users.id` (`ON DELETE RESTRICT`); con `type = personal` es único (ver la regla "Un espacio personal por creador") |
+| created_at, updated_at | `timestamptz` (UTC) |
  
 ### currencies
 
@@ -136,10 +159,11 @@ v1
  
 Quién tiene acceso a qué espacio. En v1, cada espacio tiene un solo miembro.
  
-| user_idFK |  |
+| user_idFK | `ON DELETE CASCADE`; con `space_id` forma la PK compuesta |
 | --- | --- |
-| space_idFK |  |
-| role | owner · member (v2) |
+| space_idFK | `ON DELETE CASCADE`; índice `ix_space_members_space_id` |
+| role | owner · member (v2); texto + CHECK `ck_space_members_role` |
+| created_at | `timestamptz` (UTC) |
  
 ### accounts
  
