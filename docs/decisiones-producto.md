@@ -14,7 +14,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Cuotas | Se registra la compra una vez (monto + n.º de cuotas); la plantilla genera una cuota pendiente al mes y termina sola. Mostrar "cuotas futuras comprometidas". |
 | Cuentas | Varias (bancos, efectivo, tarjetas). Saldo global: **Disponible · Deuda tarjetas · Neto**. Tarjeta = deuda. |
 | Tipos de movimiento | Gasto, Ingreso, Transferencia, **Ajuste**. Pagar la tarjeta = transferencia (no gasto). El gasto cuenta al comprar. Ajuste = saldo inicial y cuadre con el banco; no cuenta en reportes. |
-| Moneda | Nivel 0: una moneda **por espacio**. Cada transacción la hereda; preparado para multimoneda. |
+| Moneda | Nivel 0: una moneda **por espacio**, de una lista de monedas soportadas (tabla `currencies`, con su exponente ISO 4217). Cada transacción la hereda; preparado para multimoneda. |
 | Zona horaria | Por espacio (`spaces.timezone`, ej. `America/Montevideo`). Momentos en UTC (`timestamptz`); fecha de una transacción como `date` local. |
 | Categorías | Predefinidas y editables, con subcategorías (2 niveles). |
 | Espacios | Los datos pertenecen a un **espacio**; los usuarios son miembros. "Mi espacio" privado + espacios de hogar con cuentas propias. Aporte personal → hogar = gasto "Aporte al hogar" + ingreso en el hogar (enlazados). Sin división de deudas. |
@@ -48,7 +48,7 @@ Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proy
 | Región | **São Paulo**: GCP `southamerica-east1` (Cloud Run, Cloud SQL, Artifact Registry, Cloud Scheduler) y Vercel `gru1` para las funciones. Todo en la misma región. |
  
 Reglas:
-- Dinero en `bigint` centavos, nunca `float`.
+- Dinero en `bigint` en la **unidad menor de su moneda** (ISO 4217: 10^exponente; USD/UYU/COP ×100, CLP/PYG ×1), nunca `float`. Las monedas soportadas y su exponente viven en una única tabla; sumar una moneda es agregar un dato.
 - Un solo backend: Next.js nunca toca la BD.
 - Rewrite `/api/*` → Cloud Run en `frontend/next.config.ts` (funciona igual en local y en Vercel).
 - Plan Hobby de Vercel = no comercial.

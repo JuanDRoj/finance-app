@@ -6,7 +6,7 @@ Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQ
 
 Fuentes: el artículo *FastAPI Best Practices and Design Patterns* (SOLID, DAO, Service Layer), el repo `Aavache/fastapi-designs`, la documentación oficial (FastAPI 0.142, SQLAlchemy 2.1, Python 3.14, Cloud Run) y pruebas propias contra PostgreSQL. Lo que se descartó de las fuentes está al final, con el motivo.
 
-> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, `core/schemas.py`, el test de fronteras y la fixture de savepoint. La unidad de los montos la fija **KAN-36 [BE-09]**.
+> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, las bases de `core/schemas.py` (`Amount` ya existe), el test de fronteras y la fixture de savepoint.
 
 ---
 
@@ -38,7 +38,7 @@ Reparto entre service y repository: el repository guarda las consultas (`select`
 Orden fijo, sin ciclos (de abajo hacia arriba):
 
 ```
-users/auth → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
+users/auth → currencies → spaces → accounts, categories → transactions → recurring, budgets, goals → dashboard
 ```
 
 Reglas:
@@ -88,7 +88,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 
 - **Un schema por uso:** `AccountCreate`, `AccountUpdate` (PATCH: todo opcional, se aplica con `model_dump(exclude_unset=True)`) y `AccountRead`.
 - *(pendiente: `app/core/schemas.py`)* Bases comunes: `InputModel` con `extra="forbid"` (un campo desconocido da 422, lo que atrapa errores del cliente) y `ReadModel` con `from_attributes=True`.
-- **Dinero:** un tipo común `Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]`. Su nombre y la unidad (menor según ISO 4217, no siempre centavos) los fija **KAN-36 [BE-09]**; aquí se llama `Amount`.
+- **Dinero:** un tipo común `Amount = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]` (`app/core/schemas.py`), expresado en la **unidad menor de la moneda del espacio** (ISO 4217: valor × 10^exponente, no siempre centavos). El exponente sale de la tabla `currencies`, que el API expone junto a `currency` (KAN-22).
   - `strict` rechaza `"1550"`, `15.0` y `true` (verificado con Pydantic 2.13).
   - El tope es `Number.MAX_SAFE_INTEGER`: JavaScript pierde precisión por encima, aunque `bigint` admita más.
   - El signo lo pone el backend según el tipo de movimiento, nunca el cliente. Si un caso necesita monto con signo (ajustes), se define un tipo aparte con el mismo tope en valor absoluto.

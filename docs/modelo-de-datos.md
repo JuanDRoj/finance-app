@@ -23,15 +23,20 @@ erDiagram
   ACCOUNTS ||--o{ CARD_STATEMENTS : "cierres"
   SPACES ||--o{ BUDGETS : "v1.1"
   CATEGORIES ||--o{ BUDGETS : "limita"
+  CURRENCIES ||--o{ SPACES : "moneda de"
   SPACES ||--o{ GOALS : "v1.1"
   GOALS ||--o{ GOAL_ALLOCATIONS : "reparte en"
   ACCOUNTS ||--o{ GOAL_ALLOCATIONS : "reserva en"
  
+  CURRENCIES {
+    char code PK "UYU, COP, USD"
+    smallint exponent "0..4, ISO 4217"
+  }
   SPACES {
     uuid id PK
     text name
     enum type "personal | household"
-    char currency "UYU, COP, USD"
+    char currency FK "→ currencies.code"
     text timezone "America/Montevideo"
   }
   ACCOUNTS {
@@ -59,14 +64,14 @@ erDiagram
     uuid id PK
     uuid transaction_id FK
     uuid account_id FK
-    bigint amount_cents "con signo"
+    bigint amount_minor "con signo"
     uuid category_id FK "null en transfer"
   }
   GOAL_ALLOCATIONS {
     uuid id PK
     uuid goal_id FK
     uuid account_id FK "solo bank o cash"
-    bigint amount_cents "+ apartar, - liberar"
+    bigint amount_minor "+ apartar, - liberar"
   }
 ```
  
@@ -84,7 +89,7 @@ erDiagram
  
 **Un pendiente por plantilla y periodo**Restricción única (`template_id`, `period`). Así el cron es idempotente.
  
-**Dinero en centavos enteros**`bigint`, nunca `float`. $15,50 se guarda como 1550.
+**Dinero en unidades menores enteras**`bigint`, nunca `float`. Se guarda ×10^exponente de su moneda (ISO 4217): $15,50 en USD o UYU = 1550; 1.500 en una moneda de exponente 0 (CLP, PYG) = 1500.
  
 **Solo se aparta dinero que existe**Las metas reservan en cuentas `bank` o `cash`, nunca en una tarjeta.
  
@@ -112,9 +117,19 @@ Dueño de todos los datos. Cada usuario recibe "Mi espacio" al registrarse.
 | --- | --- |
 | name | "Mi espacio", "Hogar Rodríguez" |
 | type | personal · household |
-| currency | código ISO: UYU, COP, USD |
+| currency | FK a `currencies.code` (UYU, COP, USD…); define la unidad menor de todos los montos del espacio |
 | timezone | "America/Montevideo"; el cron la usa para saber qué día es |
  
+### currencies
+
+v1
+
+Monedas soportadas y su exponente ISO 4217 (la unidad menor es 10^−exponente). Sumar una moneda es agregar una fila.
+
+| codePK | char(3), tres letras mayúsculas: UYU, COP, USD |
+| --- | --- |
+| exponent | 0 a 4: 2 para UYU, COP, USD, ARS, BRL, EUR; 0 para CLP, PYG |
+
 ### space_members
  
 v1
@@ -179,7 +194,7 @@ Suscripciones, servicios y cuotas. El cron la lee cada madrugada y genera pendie
 | space_idFK |  |
 | description | "Netflix", "TV Samsung" |
 | type | expense · income |
-| estimated_amount_cents |  |
+| estimated_amount_minor |  |
 | account_idFK |  |
 | category_idFK |  |
 | day_of_month | frecuencia mensual en v1 |
@@ -218,7 +233,7 @@ Los asientos: cómo afecta cada cuenta. Una transacción tiene uno o más.
 | --- | --- |
 | transaction_idFK |  |
 | account_idFK |  |
-| amount_cents | bigint con signo |
+| amount_minor | bigint con signo |
 | category_idFK | obligatoria en expense/income; null en transfer y adjustment |
  
 ### budgets
@@ -231,7 +246,7 @@ Límite mensual por categoría principal.
 | --- | --- |
 | space_idFK |  |
 | category_idFK |  |
-| monthly_limit_cents |  |
+| monthly_limit_minor |  |
  
 ### goals
  
@@ -243,7 +258,7 @@ v1.1
 | --- | --- |
 | space_idFK |  |
 | name |  |
-| target_amount_cents |  |
+| target_amount_minor |  |
 | target_date | opcional |
 | archived_at | al cumplirla o abandonarla |
  
@@ -257,7 +272,7 @@ Cada vez que el usuario aparta o libera dinero, y en qué cuenta. No toca entrie
 | --- | --- |
 | goal_idFK |  |
 | account_idFK | solo bank o cash |
-| amount_cents | + apartar · − liberar |
+| amount_minor | + apartar · − liberar |
 | date |  |
  
 ## Notas
