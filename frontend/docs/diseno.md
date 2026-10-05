@@ -129,7 +129,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Tailwind CSS v4 | **Elegida**: es lo que trae shadcn y los tokens quedan como variables CSS |
-| CSS Modules | Alternativa evaluada |
+| CSS Modules | Alternativa evaluada; descartada: los tokens como clases de Tailwind compartidas con shadcn evitan mantener un segundo sistema de estilos † |
 
 **Elección:** Tailwind CSS v4.
 **Motivo:** integración directa con shadcn/ui; los tokens son variables CSS que el tema claro y el oscuro sobrescriben; sin JS para el modo oscuro.
@@ -147,8 +147,8 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 | Opción | Veredicto |
 |---|---|
-| shadcn/ui con primitivas **Base UI**, código copiado al repo | **Elegida** (Base UI es el default de shadcn desde julio 2026) |
-| shadcn/ui con primitivas Radix | Descartada: Base UI es el default actual de shadcn † |
+| shadcn/ui con primitivas **Base UI**, código copiado al repo | **Elegida** (Base UI es el default de shadcn: a verificar en KAN-33 al correr `shadcn init`) |
+| shadcn/ui con primitivas Radix | Descartada: Base UI es el default de shadcn (a verificar en KAN-33) † |
 | Radix o Base UI solos, sin shadcn | Descartada: habría que escribir y mantener a mano el estilo y los estados de cada componente † |
 | Componentes propios desde cero | Descartada: reimplementar accesibilidad (foco, teclado, ARIA) en cada componente † |
 | HeroUI v3 | Descartada: dependencia npm y riesgo de reescritura v2 a v3 |
@@ -178,10 +178,10 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 **Reglas de uso**
 - Regular a 20–22 px en general. **Fill** solo en el tab activo (con su pill glass). **Duotone** en color `primary` para iconos de categoría o tile, dentro de contenedores de 42 px.
 - En Server Components importa de `@phosphor-icons/react/ssr`. Habrá una regla ESLint (el mecanismo se decide en KAN-33).
-- Importa icono por icono, nunca el barrel completo (`bundle-barrel-imports` de la skill `vercel-react-best-practices`).
+- Forma esperada del import: **con nombre desde la raíz del paquete** (`import { House } from "@phosphor-icons/react"`) o desde `/ssr` en Server Components. Sin `import *` ni rutas profundas por archivo, salvo que KAN-33 decida otra cosa. Con `experimental.optimizePackageImports` (abajo) Next carga solo los iconos usados, así que el barrel de la raíz o de `/ssr` es correcto (regla `bundle-barrel-imports` de la skill `vercel-react-best-practices`).
 - Iconos decorativos con `aria-hidden`; un botón solo con icono lleva `aria-label` en español.
 
-**Verificar en KAN-33:** añadir `@phosphor-icons/react` a `optimizePackageImports` en `next.config.ts` (no está en la lista por defecto de Next 16).
+**Verificar en KAN-33:** añadir `@phosphor-icons/react` a `experimental.optimizePackageImports` en `next.config.ts` (no está en la lista por defecto de Next 16; ver `node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/optimizePackageImports.md`).
 
 ### D6. Fuentes
 
@@ -194,7 +194,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Una sola familia para todo | Descartada: la dirección visual separa números y títulos del texto corrido † |
 
 **Elección:** Montserrat 600/700 para números y títulos; Karla 400–700 para texto.
-**Motivo:** identidad "Menta"; Montserrat da legibilidad y presencia a los montos; ambas con `tnum`, así que los montos se alinean en columnas.
+**Motivo:** identidad "Menta"; Montserrat da legibilidad y presencia a los montos y lleva `tnum`, así que los montos se alinean en columnas; que Karla también tenga `tnum` (cifras en texto corrido) se verifica en KAN-34.
 
 **Reglas de uso**
 - Carga con `next/font/google` (autoalojada en el build, subset `latin`, que cubre el español).
@@ -269,7 +269,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 |---|---|
 | vitest + Testing Library | **Elegida** |
 | Jest | Descartada: más configuración para TypeScript y módulos ESM, sin ventaja para este proyecto † |
-| Playwright con un solo navegador | Descartada: todos los navegadores iOS son WebKit, así que se prueban los dos motores |
+| Playwright con un solo navegador | Descartada: en iOS, en la práctica, casi todos los navegadores son WebKit (la UE permite otros motores desde iOS 17.4) y Safari es la referencia, así que se prueban los dos motores |
 
 **Elección:** vitest + Testing Library para lógica y componentes; Playwright para E2E en dos proyectos: **"iPhone"** (WebKit) y **"Pixel"** (Chromium, con **viewport de 360 px de ancho**).
 **Motivo:** cubre los dos motores móviles; el ancho de 360 px es el mínimo que garantizamos.
@@ -531,7 +531,7 @@ Tabla de pendientes por tarea:
 | ESLint: `no-restricted-imports` para core (fusionándolo con la regla actual de `process`: en flat config un bloque posterior reemplaza las opciones de la regla) | KAN-33 |
 | ESLint o convención para importar Phosphor de `/ssr` en Server Components (ESLint no distingue Server de Client Component: ¿prohibir el import raíz y usar siempre `/ssr`?) | KAN-33 |
 | Verificaciones al correr `shadcn init`: Base UI por defecto, `iconLibrary: "phosphor"`, nombre del paquete de Base UI, compatibilidad `@hookform/resolvers` + zod 4 | KAN-33 |
-| `optimizePackageImports` para `@phosphor-icons/react` en `next.config.ts` | KAN-33 |
+| `experimental.optimizePackageImports` para `@phosphor-icons/react` en `next.config.ts` | KAN-33 |
 | Glass: comprobar que el CSS generado declara `backdrop-filter` y `-webkit-backdrop-filter`; que en Safari 16.4–17 se ve el glass (el fallback `@supports not (...)` no se activa); y que el fallback `card-solid` sí se activa con `prefers-reduced-transparency: reduce` o en un navegador sin soporte de `backdrop-filter` (D13 › Glass) | KAN-33 |
 | Comparar la salida del formateador de dinero y fechas en el servidor (Node) con la de WebKit y Chromium, por ejemplo en el E2E de iPhone y Pixel, para detectar diferencias de ICU (NBSP o NNBSP, símbolos, separadores de grupo) | KAN-33 / KAN-34 |
 | Export `viewport`: `viewportFit: "cover"`, `interactiveWidget: "resizes-content"`, `themeColor` por esquema | KAN-33 |
