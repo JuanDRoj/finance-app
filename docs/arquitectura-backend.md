@@ -6,7 +6,7 @@ Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQ
 
 Fuentes: el artículo *FastAPI Best Practices and Design Patterns* (SOLID, DAO, Service Layer), el repo `Aavache/fastapi-designs`, la documentación oficial (FastAPI 0.142, SQLAlchemy 2.1, Python 3.14, Cloud Run) y pruebas propias contra PostgreSQL. Lo que se descartó de las fuentes está al final, con el motivo.
 
-> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, `core/schemas.py`, el test de fronteras y la fixture de savepoint. **KAN-35 [BE-08]** implementa `core/errors.py`, antes de auth y spaces. La unidad de los montos la fija **KAN-36 [BE-09]**.
+> **Estado.** Algunas piezas aún no existen en el código. Están marcadas como *(pendiente)*. **KAN-37 [BE-10] Base de arquitectura** (bloquea a KAN-19 [BE-03]) implementa el commit por request, `core/schemas.py`, el test de fronteras y la fixture de savepoint. La unidad de los montos la fija **KAN-36 [BE-09]**.
 
 ---
 
@@ -66,7 +66,7 @@ La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`
 - **Restricciones que pueden fallar por datos del usuario** (UNIQUE): el service hace `flush()` dentro de `try/except IntegrityError` y lanza `ConflictError` con su código. El nombre predecible de la restricción (`uq_...`) permite distinguir cuál fue.
 - Fuera de HTTP (scripts, seeds): se abre `db.sessionmaker()` y se hace commit explícito.
 
-## 4. Errores *(pendiente: `app/core/errors.py`, KAN-35 [BE-08])*
+## 4. Errores (`app/core/errors.py`)
 
 Los services lanzan **errores de dominio**; un handler registrado en `create_app` los convierte en HTTP.
 
