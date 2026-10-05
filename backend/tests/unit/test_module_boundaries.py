@@ -117,6 +117,12 @@ def find_violations(app_dir: Path) -> list[str]:
         for line, parts in _imports(tree, _package_of(app_dir, file)):
             if in_core and parts[:2] == list(MODULES_PREFIX):
                 report(line, "app/core must not import app.modules")
+            if parts in (["app"], list(MODULES_PREFIX)) and own is not None:
+                # `import app`, `import app.modules`, `from app import modules`: with the bare
+                # package in hand, `modules.x.repository` slips past the rules by attribute.
+                report(line, "imports app.modules without naming a module")
+            elif parts == ["app"]:
+                report(line, "imports the bare app package")
             target = _target(parts)
             if target is None or own is None or target[0] == own:
                 continue
@@ -424,4 +430,45 @@ def test_importing_the_service_of_another_module_by_name_is_still_allowed(
 )
 def test_service_does_not_know_starlette_http(tmp_path: Path, source: str) -> None:
     app = _tree(tmp_path, {"modules/currencies/service.py": source})
+    assert len(find_violations(app)) == 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app import modules\n",
+        "import app\n",
+        "import app.modules\n",
+        "from ... import modules\n",
+    ],
+)
+def test_reaching_app_modules_without_naming_a_module_is_forbidden(
+    tmp_path: Path, source: str
+) -> None:
+    app = _tree(tmp_path, {"modules/spaces/service.py": source})
+    violations = find_violations(app)
+    assert len(violations) == 1
+    assert "spaces/service.py:1" in violations[0]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app.core.db import DbSession\n",
+        "from app import core\n",
+        "from ...core import db\n",
+        "from . import repository\n",
+        "import app.core.db\n",
+    ],
+)
+def test_legitimate_app_imports_inside_a_module_are_allowed(tmp_path: Path, source: str) -> None:
+    app = _tree(
+        tmp_path,
+        {"modules/spaces/service.py": source, "modules/spaces/repository.py": ""},
+    )
+    assert find_violations(app) == []
+
+
+def test_core_importing_the_bare_app_package_is_forbidden(tmp_path: Path) -> None:
+    app = _tree(tmp_path, {"core/db.py": "import app\n"})
     assert len(find_violations(app)) == 1

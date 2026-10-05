@@ -7,9 +7,6 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from alembic.util.exc import CommandError
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -25,6 +22,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import Database, get_sessionmaker
 from app.core.logging import JsonFormatter, RequestIdFilter
 from app.main import create_app
+from tests.db_migration import upgrade_test_database
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -206,23 +204,7 @@ def migrated_test_database(test_database_url: URL) -> None:
     Sync on purpose: `alembic.command` calls `asyncio.run`, which needs no running loop.
     Nothing is downgraded afterwards; the migration tests use scratch databases.
     """
-    patch = pytest.MonkeyPatch()  # the autouse fixture is per-test; this one outlives it
-    patch.setenv("DATABASE_URL", _as_string(test_database_url))
-    get_settings.cache_clear()
-    try:
-        command.upgrade(Config(str(BACKEND_DIR / "alembic.ini")), "head")
-    except CommandError as exc:
-        name = test_database_url.database
-        pytest.fail(
-            f"Cannot migrate {name}: {exc}\n"
-            "It is probably at a revision that does not exist on this branch. Recreate it:\n"
-            f"  docker compose exec postgres dropdb -U finance {name}\n"
-            f"  docker compose exec postgres createdb -U finance {name}",
-            pytrace=False,
-        )
-    finally:
-        patch.undo()
-        get_settings.cache_clear()
+    upgrade_test_database(test_database_url, BACKEND_DIR / "alembic.ini")
 
 
 @pytest.fixture
