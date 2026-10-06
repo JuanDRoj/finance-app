@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -125,3 +126,62 @@ async def test_require_member_gives_the_same_error_for_a_space_that_does_not_exi
         await service.require_member(session, uuid.uuid7(), user_id)
 
     assert (exc.value.code, exc.value.detail) == ("space_not_found", "Space not found")
+
+
+async def test_list_spaces_returns_only_spaces_where_the_user_is_a_member(
+    session: AsyncSession,
+) -> None:
+    a = await _make_user(session, "uid-list-a")
+    b = await _make_user(session, "uid-list-b")
+    await service.ensure_personal_space(session, a, "America/Montevideo")
+    await service.ensure_personal_space(session, b, "America/Bogota")
+
+    spaces = await service.list_spaces(session, a)
+
+    assert [(s.name, s.timezone, s.currency.code, s.currency.exponent) for s in spaces] == [
+        ("Mi espacio", "America/Montevideo", "UYU", 2)
+    ]
+
+
+async def test_get_space_raises_not_found_for_an_unknown_id(session: AsyncSession) -> None:
+    with pytest.raises(NotFoundError) as error:
+        await service.get_space(session, uuid.uuid4())
+
+    assert error.value.code == "space_not_found"
+
+
+async def test_get_space_returns_the_currency_exponent(session: AsyncSession) -> None:
+    user_id = await _make_user(session, "uid-get-1")
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    [listed] = await service.list_spaces(session, user_id)
+
+    space = await service.get_space(session, listed.id)
+
+    assert space == listed
+    assert space.currency.exponent == 2
+
+
+async def test_list_spaces_is_ordered_by_creation_time_not_by_insertion_order(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-order")
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    [personal] = await _spaces_of(session, user_id)
+    personal.created_at = datetime(2026, 1, 2, tzinfo=UTC)
+    # Inserted later (larger uuid7) but created earlier: only `created_at` puts it first.
+    older = Space(
+        name="Casa",
+        type="household",
+        currency="UYU",
+        timezone="America/Montevideo",
+        created_by=user_id,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    session.add(older)
+    await session.flush()
+    session.add(SpaceMember(space_id=older.id, user_id=user_id, role="owner"))
+    await session.flush()
+
+    spaces = await service.list_spaces(session, user_id)
+
+    assert [s.name for s in spaces] == ["Casa", "Mi espacio"]

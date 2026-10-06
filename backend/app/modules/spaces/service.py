@@ -3,8 +3,11 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
+from app.modules.currencies import service as currencies_service
+from app.modules.currencies.schemas import CurrencyRead
 from app.modules.spaces import repository
-from app.modules.spaces.schemas import SpaceMemberRead
+from app.modules.spaces.models import Space
+from app.modules.spaces.schemas import SpaceMemberRead, SpaceRead
 
 # What every user gets on their first login. UYU is seeded in `currencies` (spaces.currency is a
 # foreign key to it); the user can change both later.
@@ -43,3 +46,33 @@ async def require_member(
     if member is None:
         raise NotFoundError("space_not_found", "Space not found")
     return SpaceMemberRead.model_validate(member)
+
+
+def _to_read(space: Space, currencies: dict[str, CurrencyRead]) -> SpaceRead:
+    # `spaces.currency` is a foreign key to `currencies`, so the lookup cannot miss.
+    return SpaceRead(
+        id=space.id,
+        name=space.name,
+        type=space.type,
+        currency=currencies[space.currency],
+        timezone=space.timezone,
+    )
+
+
+async def _currencies(session: AsyncSession) -> dict[str, CurrencyRead]:
+    return {c.code: c for c in await currencies_service.list_currencies(session)}
+
+
+async def list_spaces(session: AsyncSession, user_id: uuid.UUID) -> list[SpaceRead]:
+    """The spaces where the user is a member."""
+    spaces = await repository.list_for_user(session, user_id=user_id)
+    currencies = await _currencies(session)
+    return [_to_read(s, currencies) for s in spaces]
+
+
+async def get_space(session: AsyncSession, space_id: uuid.UUID) -> SpaceRead:
+    """A space with its currency exponent. Membership is checked by the caller (the router)."""
+    space = await repository.get(session, space_id=space_id)
+    if space is None:
+        raise NotFoundError("space_not_found", "Space not found")
+    return _to_read(space, await _currencies(session))
