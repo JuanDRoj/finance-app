@@ -80,11 +80,18 @@ describe("formatInstant", () => {
       "2026-10-15T02:30:00+00:00",
       "2026-10-14T23:30:00-03:00",
       "2026-10-15T02:30Z",
+      // Pydantic serializes microseconds.
+      "2026-10-15T02:30:00.123456Z",
+      "2026-10-14T23:30:00.123456-03:00",
     ]) {
       expect(formatInstant(text, "America/Montevideo", "dateTime")).toBe(
         "14 oct. 2026, 11:30 p. m.",
       );
     }
+  });
+
+  it("formats microsecond instants by truncating, never rounding up to the next minute", () => {
+    expect(formatInstant("2026-10-15T02:30:59.999999Z", "UTC", "time")).toBe("2:30 a. m.");
   });
 
   it("rejects text without a UTC offset, which would depend on the device zone", () => {
