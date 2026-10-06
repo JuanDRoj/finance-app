@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node -e \"require('fs').rmSync('.next/dev',{recursive:true,force:true})\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

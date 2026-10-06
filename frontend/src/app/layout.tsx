@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Karla, Montserrat } from "next/font/google";
 import type { ReactNode } from "react";
 import { Providers } from "@/components/providers";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 // Montserrat: numbers and headings. Karla: body text. Self-hosted at build time (no request to
@@ -29,8 +30,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Lets the page paint under the notch. Nothing pads the content back yet: each fixed element
-  // (nav, "+" button, toast, sheet) must apply env(safe-area-inset-*) itself (KAN-34).
+  // Lets the page paint under the notch. AppShell and the Toaster pad it back with
+  // env(safe-area-inset-*); each new fixed element (nav, "+" button, sheet) must do the same.
   viewportFit: "cover",
   // Android Chrome shrinks the layout viewport when the keyboard opens (iOS ignores it).
   interactiveWidget: "resizes-content",
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     <html lang="es" className={`${montserrat.variable} ${karla.variable}`}>
       <body className="antialiased">
         <Providers>{children}</Providers>
+        <Toaster />
       </body>
     </html>
   );

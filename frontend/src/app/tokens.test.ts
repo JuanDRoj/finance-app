@@ -44,7 +44,7 @@ function contrast(a: string, b: string): number {
 
 // [foreground token, background token, minimum ratio, ratio documented in docs/diseno.md D14
 // (undefined where D14 has no number for the pair)]
-// 4.5 for text, 3 for icons and focus rings (WCAG AA). Glass over a blob is checked in KAN-34.
+// 4.5 for text, 3 for icons and focus rings (WCAG AA). Glass over a blob is checked further down.
 type Pair = [string, string, number, { light: number; dark: number } | undefined];
 const PAIRS: Pair[] = [
   ["foreground", "background", 4.5, { light: 15.84, dark: 17.15 }],
@@ -111,6 +111,88 @@ describe.each([
       expect(contrast(painted, surfaceHex)).toBeGreaterThanOrEqual(3);
     },
   );
+});
+
+// Pairs that components use on solid surfaces (KAN-34): placeholder and disabled text, error text,
+// the secondary button, the icon of an empty state.
+const COMPONENT_PAIRS: [string, string, number][] = [
+  ["muted-foreground", "card-solid", 4.5], // placeholder and help text in a field
+  ["muted-foreground", "popover", 4.5],
+  ["destructive", "card-solid", 4.5], // error text and the title of an error Alert
+  ["destructive", "popover", 4.5],
+  ["foreground", "card-solid", 4.5],
+  ["primary", "secondary", 3], // duotone icon of an empty state (non-text)
+  ["primary", "card-solid", 4.5], // link buttons
+  ["secondary-foreground", "secondary", 4.5],
+];
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("component pairs, %s palette", (_name, palette) => {
+  it.each(COMPONENT_PAIRS)("%s on %s reaches %s:1", (foreground, background, minimum) => {
+    expect(contrast(hexOf(palette, foreground), hexOf(palette, background))).toBeGreaterThanOrEqual(
+      minimum,
+    );
+  });
+});
+
+// Translucent tokens (rgba). They are painted over the page background, and a decorative blob
+// can sit under them, so every combination is composited before measuring.
+function rgbaOf(palette: Map<string, string>, token: string): { hex: string; alpha: number } {
+  const value = palette.get(token) ?? "";
+  const match = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(value);
+  if (!match) throw new Error(`--${token} is not an rgba() color: ${value}`);
+  const hex = [match[1], match[2], match[3]]
+    .map((channel) => Number(channel).toString(16).padStart(2, "0"))
+    .join("");
+  return { hex: `#${hex}`, alpha: Number(match[4]) };
+}
+
+/** What is painted when a translucent token sits over a solid color. */
+function over(palette: Map<string, string>, token: string, under: string): string {
+  const { hex, alpha } = rgbaOf(palette, token);
+  return blend(hex, under, alpha);
+}
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("translucent surfaces, %s palette", (_name, palette) => {
+  // What can be behind a glass surface: the page background or one of the two blobs.
+  const grounds = ["background", "blob-1", "blob-2"].map(
+    (token) => [token, hexOf(palette, token)] as const,
+  );
+  const glassSurfaces = ["card", "glass", "glass-strong"];
+
+  describe.each(glassSurfaces)("text on %s", (surface) => {
+    it.each(["foreground", "muted-foreground", "primary", "debt"])(
+      "%s reaches 4.5:1 over every ground",
+      (text) => {
+        for (const [, ground] of grounds) {
+          const surfaceHex = over(palette, surface, ground);
+          expect(contrast(hexOf(palette, text), surfaceHex)).toBeGreaterThanOrEqual(4.5);
+        }
+      },
+    );
+  });
+
+  // The control border (--input) is painted over the surface behind it: 3:1 (WCAG non-text).
+  // `Input` paints card-solid under its own border, but outline buttons and any control that
+  // is transparent would sit on glass, so every surface is checked.
+  describe("the --input border (3:1)", () => {
+    it.each(["background", "card-solid", "popover", "muted"])("over %s", (surface) => {
+      const surfaceHex = hexOf(palette, surface);
+      expect(contrast(over(palette, "input", surfaceHex), surfaceHex)).toBeGreaterThanOrEqual(3);
+    });
+
+    it.each(glassSurfaces)("over %s, with a blob or the background behind", (surface) => {
+      for (const [, ground] of grounds) {
+        const surfaceHex = over(palette, surface, ground);
+        expect(contrast(over(palette, "input", surfaceHex), surfaceHex)).toBeGreaterThanOrEqual(3);
+      }
+    });
+  });
 });
 
 describe("tokens", () => {
