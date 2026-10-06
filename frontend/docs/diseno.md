@@ -91,9 +91,9 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 **Reglas de uso**
 - En core va: formatos de dinero y fecha, i18n, esquemas zod, valores de tokens y funciones de datos que **reciben un `ApiClient`** (`Client<paths>`) en vez de importar uno.
-- Core **no importa** `next/*`, `react-dom` ni `server-only`. Se impone con ESLint `no-restricted-imports` (KAN-33).
+- Core **no importa** `next/*`, `react-dom` ni `server-only`. Se impone con ESLint `no-restricted-imports` (hecho en KAN-33: también prohíbe `lib/api/server`, `lib/api/browser` y `lib/env/*`).
 - Core puede hacer `import type` de `@/lib/api/schema`; no importa `server.ts` ni `browser.ts`.
-- Estructura propuesta (KAN-33 la confirma): `src/lib/core/{money,dates,i18n,tokens}.ts`, `src/lib/core/schemas/`, `src/lib/core/data/`.
+- Estructura (confirmada en KAN-33): `src/lib/core/{locale,money,dates}.ts` y `src/lib/core/data/` ya existen; `i18n.ts` y `schemas/` se crean con la primera pantalla que los use. No hay `tokens.ts`: los valores viven solo en `globals.css` hasta que empiece la app nativa (un test de contraste lee ese CSS).
 - Quedan fuera de core: `lib/api/` (adaptadores), `lib/env/` y `lib/firebase.ts`.
 - Sin hexagonal completo: no crees puertos "por si acaso".
 
@@ -120,7 +120,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Filtros en la URL; formularios con react-hook-form; estado de UI con `useState` / Context.
 - Realtime (SSE o WebSockets) se evalúa con hogares compartidos (v2).
 - Si algún día se usa Zustand en Next, un store por request (nunca global en el servidor).
-- **Cambia una convención actual de `CLAUDE.md`** (ver sección 4); se actualiza en KAN-33.
+- **Cambia una convención actual de `CLAUDE.md`** (ver sección 4); se actualizó en KAN-33.
 
 ### D3. Estilos
 
@@ -161,7 +161,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Cada componente del catálogo (KAN-34) se prueba a 360 px en sus estados: normal, foco, presionado, deshabilitado, error y carga, en claro y oscuro.
 - Iconos de shadcn: `iconLibrary: "phosphor"` en `components.json` (ver D5).
 
-**Verificar en KAN-33:** que `shadcn init` ofrezca Base UI como primitiva por defecto y `phosphor` como `iconLibrary`, y el nombre exacto del paquete de Base UI.
+**Verificado en KAN-33** (con `shadcn` 4.21.2, en una copia desechable): `shadcn init` ofrece **Base UI como primitiva recomendada** (`--base base`; el preset por defecto es `base-nova`); el paquete es **`@base-ui/react`** (1.8.0); `iconLibrary` por defecto es `lucide` y `phosphor` es un valor válido (lo usa el preset `lyra`), así que `components.json` se escribió a mano con `"iconLibrary": "phosphor"`. Además `init` añade `tw-animate-css` y el paquete `shadcn` (`@import "shadcn/tailwind.css"` trae las variantes `data-open`/`data-closed` que usan los componentes), ambos ya instalados, y un `utils.ts` que importa un paquete `cn` de npm: el repo usa su propio `cn()` con `clsx` + `tailwind-merge`. `init` no se corrió en el repo para no sobrescribir `globals.css`/`layout.tsx` ni generar `button.tsx` (es de KAN-34); al hacer `shadcn add`, revisa que no traiga `lucide-react` ni reescriba los tokens.
 
 ### D5. Iconos
 
@@ -177,11 +177,11 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 **Reglas de uso**
 - Regular a 20–22 px en general. **Fill** solo en el tab activo (con su pill glass). **Duotone** en color `primary` para iconos de categoría o tile, dentro de contenedores de 42 px.
-- En Server Components importa de `@phosphor-icons/react/ssr`. Habrá una regla ESLint (el mecanismo se decide en KAN-33).
-- Forma esperada del import: **con nombre desde la raíz del paquete** (`import { House } from "@phosphor-icons/react"`) o desde `/ssr` en Server Components. Sin `import *` ni rutas profundas por archivo, salvo que KAN-33 decida otra cosa. Con `experimental.optimizePackageImports` (abajo) Next carga solo los iconos usados, así que el barrel de la raíz o de `/ssr` es correcto (regla `bundle-barrel-imports` de la skill `vercel-react-best-practices`).
+- Importa **siempre** de `@phosphor-icons/react/ssr`, en Server y en Client Components (verificado en KAN-33: funciona dentro de `"use client"` y en Server Components). ESLint prohíbe el import raíz (`no-restricted-imports`, decidido en KAN-33); se pierde `IconContext`, que no usamos.
+- Forma del import: **con nombre desde `/ssr`** (`import { House } from "@phosphor-icons/react/ssr"`). Sin `import *` ni rutas profundas por archivo. Con `experimental.optimizePackageImports` (abajo) Next carga solo los iconos usados, así que el barrel de `/ssr` es correcto (regla `bundle-barrel-imports` de la skill `vercel-react-best-practices`).
 - Iconos decorativos con `aria-hidden`; un botón solo con icono lleva `aria-label` en español.
 
-**Verificar en KAN-33:** añadir `@phosphor-icons/react` a `experimental.optimizePackageImports` en `next.config.ts` (no está en la lista por defecto de Next 16; ver `node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/optimizePackageImports.md`).
+**Hecho en KAN-33:** `@phosphor-icons/react` y `@phosphor-icons/react/ssr` están en `experimental.optimizePackageImports` de `next.config.ts` (no están en la lista por defecto de Next 16). Medido con un build de prueba: una página que importa dos iconos de `/ssr` (una desde un Server Component y otra desde un Client Component) lleva un chunk de ~3 kB sin ningún otro icono, con o sin la entrada de `/ssr`; la entrada se deja por si el modo dev se beneficia.
 
 ### D6. Fuentes
 
@@ -222,7 +222,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Campos de 48 px, botón primario de 52 px, label visible en cada campo, texto del input ≥16 px. Montos con `inputmode="decimal"` y como máximo `exponent` decimales (D11).
 - Los tipos de las peticiones y respuestas siguen siendo los generados: un esquema zod valida el formulario, no sustituye al tipo del API.
 
-**Verificar en KAN-33:** compatibilidad de `@hookform/resolvers` con zod 4 (el proyecto ya usa `zod` ^4.6.5).
+**Verificado en KAN-33:** `@hookform/resolvers` 5.9.1 acepta `zod ^3.25 || ^4` y `react-hook-form ^7.55` como peers; con `zod` 4.6.5 y `react-hook-form` 7.89 un `zodResolver` valida y devuelve errores por campo (prueba desechable, no se versionó).
 
 ### D8. Toasts con "Deshacer"
 
@@ -292,7 +292,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 **Elección y reglas**
 - **Mapa fijo en core:** UYU → es-UY, COP → es-CO, USD → es-UY; **fallback es-UY**. Una moneda desconocida muestra su código. Nunca el locale del dispositivo.
-- **Decimales (opción A):** la fuente de verdad es el exponente ISO 4217. Se muestran **siempre exactamente `exponent` decimales** (`minimumFractionDigits` y `maximumFractionDigits` explícitos, iguales). Lo mostrado es lo guardado. El input acepta como máximo `exponent` decimales. El frontend no tiene tabla propia de monedas: el backend expone el exponente con la moneda del espacio (KAN-36 [BE-09]).
+- **Decimales (opción A):** la fuente de verdad es el exponente ISO 4217. Se muestran **siempre exactamente `exponent` decimales** (`minimumFractionDigits` y `maximumFractionDigits` explícitos, iguales). Lo mostrado es lo guardado. El input acepta como máximo `exponent` decimales. El frontend no tiene tabla propia de monedas: el backend expone el exponente con la moneda del espacio (`SpaceRead.currency.exponent`).
 - Los montos llegan como enteros en la unidad menor (10^exponent). Para mostrarlos se convierten a **texto decimal con operaciones sobre enteros o cadenas** (nunca `/ 100` ni floats) y esa cadena se pasa a `Intl.NumberFormat`, que formatea cadenas decimales de forma exacta.
 - **Signo:** el gasto va con el signo menos tipográfico **"−" (U+2212)**, generado con `formatToParts` (reemplazando la parte `minusSign`, que `Intl` emite como "-" ASCII). El ingreso va con "+". Entre símbolo y cifra `Intl` pone NBSP (U+00A0).
 - **Fechas** siempre con la **zona horaria del espacio** (`spaces.timezone`); el servidor corre en UTC. Los instantes (`timestamptz`) se convierten a esa zona. La fecha de una transacción es un `date` local sin hora: se formatea tal cual, sin aplicar zona horaria (así no se corre un día).
@@ -311,7 +311,9 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 
 **Motivo:** el formato depende del espacio y no del teléfono, lo mostrado coincide con lo guardado y se minimiza el riesgo de mismatch de hidratación entre servidor y cliente.
 
-**Pendiente de backend:** el API aún no expone `timezone`, `currency` ni `exponent` del espacio (KAN-36 [BE-09] los incluirá). Hasta entonces, el formateo con datos reales está bloqueado.
+**Contrato:** `SpaceRead` (`GET /spaces`, `GET /spaces/{id}`) ya expone `currency { code, exponent }` y `timezone`; `formatMoney` recibe exactamente ese `currency` y los formateadores de fecha reciben `timezone`. (Esta nota decía que faltaban hasta BE-09; se corrigió en KAN-33.)
+
+**Implementación (KAN-33):** `lib/core/locale.ts`, `lib/core/money.ts` (`formatMoney`, `minorToDecimalString`) y `lib/core/dates.ts` (`formatLocalDate`, `formatInstant`, `todayInTimezone`), con tests. `formatMoney` acepta `number` entero seguro, `bigint` o `string`; el signo "+" se pide con `{ sign: "exceptZero" }` y el cero nunca lleva signo. Con Node 24 (ICU de `.nvmrc`) la hora sale como `11:30 p. m.` con espacios normales; la comparación con WebKit y Chromium sigue pendiente (§4).
 
 ### D12. Modo oscuro
 
@@ -331,7 +333,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 - Dos paletas completas (D14); contraste AA verificado en ambas en el catálogo de KAN-34.
 - `theme-color` por esquema con el export `viewport` de Next: claro `#E9F4EE` y oscuro `#08110D` (el `--background` de cada paleta), más `colorScheme: "light dark"`.
 - La variante `dark:` de Tailwind v4 sigue `prefers-color-scheme` por defecto: no hay que configurar nada para usarla.
-- El CSS que genera `shadcn init` usa la clase `.dark`; KAN-33 lo adapta al enfoque `prefers-color-scheme`.
+- El CSS que genera `shadcn init` usa la clase `.dark` (`@custom-variant dark (&:is(.dark *))`); en KAN-33 `globals.css` se escribió a mano sin esa línea, con la paleta oscura dentro de `@media (prefers-color-scheme: dark)`.
 - Un toggle manual (next-themes) podrá añadirse después sin rehacer los tokens.
 
 ### D13. Dirección visual "Menta"
@@ -381,7 +383,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 - Qué token usa cada superficie: **tiles bento y grupos → `card`**; **nav, toast y header sticky → `glass`**; **sheet → `glass-strong`** (D14).
 - Nunca por fila de lista (un grupo glass por día); nunca en popovers, menús ni texto largo.
 - Fallback a `card-solid` con `@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))` y con `prefers-reduced-transparency: reduce`. La consulta lleva las dos formas porque Safari 16.4–17 solo soporta `backdrop-filter` con prefijo `-webkit-` y ese es el piso de navegadores de D3 (`@supports not (backdrop-filter)` no es una condición válida: le falta el valor). En Safari 16.4–17 se cumple la variante `-webkit-`, así que el `not` da falso: **el fallback no se activa y se ve el glass**. El fallback solo se activa en un navegador sin soporte de ninguna de las dos formas o con `prefers-reduced-transparency: reduce`. El soporte de `prefers-reduced-transparency` es desigual: no dependas solo de ella.
-- El CSS de glass declara `backdrop-filter` y `-webkit-backdrop-filter`. **Verificar en KAN-33** que el CSS generado trae ambas; que en un Safari 16.4–17 **se ve el glass** (el fallback no se activa); y que el fallback `card-solid` **sí se activa** con `prefers-reduced-transparency: reduce` o en un navegador sin soporte de `backdrop-filter`.
+- El CSS de glass declara `backdrop-filter` y `-webkit-backdrop-filter`. **Verificado en KAN-33 sobre el CSS del build** (`.next/static/chunks/*.css`): `.glass` y `.glass-strong` traen ambas declaraciones (primero la prefijada); existe `@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px)))` (Lightning CSS reordena las dos formas, equivalente) y `@media (prefers-reduced-transparency:reduce)`; ambos van **después** de la paleta oscura y reasignan `--card`, `--glass` y `--glass-strong` a `card-solid`. La reducción de transparencia además quita el blur. **Falta confirmar en hardware:** que un Safari 16.4–17 real **muestre el glass** y que el fallback se vea bien con `prefers-reduced-transparency: reduce` y en un Android de gama baja.
 - Máximo 2 blobs decorativos por pantalla, estáticos y con `aria-hidden`.
 - Probar en un Android de gama baja.
 
@@ -408,7 +410,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 **Elección:** variables CSS con nombres de shadcn (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, `--ring`, `--destructive`…) más las de finanzas (`--income`, `--expense`, `--debt`).
 **Motivo:** los componentes de shadcn funcionan sin renombrar; `income` / `expense` / `debt` expresan el dominio; una futura librería nativa (React Native Reusables o HeroUI Native) puede mapearlos; todos los pares de texto cumplen AA (tabla de abajo).
 
-Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@theme inline`; los nombres de las variables de radios y blobs los fija KAN-33.
+Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@theme inline`; los radios son `--radius-tile` (28), `--radius-icon` (16), `--radius-field` (16), `--radius-nav` (30) y `--radius-sheet` (30) (clases `rounded-tile`, `rounded-icon`…; `--radius: 1rem` alimenta la escala `sm`…`4xl` de shadcn) y los blobs `--blob-1` y `--blob-2` (`bg-blob-1`, `bg-blob-2`). Las superficies glass son utilidades: `card-surface` (blur 20 px, por confirmar en KAN-34), `glass` (24 px) y `glass-strong` (28 px).
 
 | Token | Claro | Oscuro | Uso |
 |---|---|---|---|
@@ -510,41 +512,30 @@ Están en `.claude/skills/`. Las convenciones del proyecto ganan sobre las skill
 
 ## 4. Pendientes
 
-Convenciones de `frontend/CLAUDE.md` que este documento cambia (**no se modificaron en FE-06**; las actualiza KAN-33 en la misma tarea):
+Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en `frontend/CLAUDE.md` (actualizado en esa tarea: stack, comandos, estructura, `lib/core`, TanStack Query, tests).
 
-| Dónde (`frontend/CLAUDE.md`) | Cambio |
+| Pendiente | Estado / lo resuelve |
 |---|---|
-| Cabecera (stack) | Añadir Tailwind v4, shadcn/ui + Base UI, TanStack Query, react-hook-form, vitest |
-| Comandos › Tests de lógica y E2E | `npm test` pasa a vitest + Testing Library; Playwright en dos proyectos (iPhone y Pixel a 360 px) |
-| Estructura | `lib/money.ts` e `lib/i18n.ts` pasan a `lib/core/`; `components/` se divide en `components/ui` y el resto; añadir `lib/core/`, el provider de TanStack Query y la regla ESLint de core |
-| Convenciones › API | "`browserApi.GET` desde handlers o efectos" pasa a `queryFn` / `mutationFn` de TanStack Query sobre funciones de core; el servidor hace prefetch con `getServerApi()` |
-| Convenciones › Server vs. client | Añadir el patrón prefetch + `HydrationBoundary` |
-| Convenciones › Dinero y Textos | Rutas en `lib/core`; locale por moneda del espacio; exactamente `exponent` decimales |
-| Convenciones › Estilo de código | Convenciones de Tailwind y de tokens |
-| Tests | Añadir tests de componentes (`*.test.tsx`) |
-
-Tabla de pendientes por tarea:
-
-| Pendiente | Lo resuelve |
-|---|---|
-| Actualizar `frontend/CLAUDE.md` (tabla anterior) | KAN-33 |
-| ESLint: `no-restricted-imports` para core (fusionándolo con la regla actual de `process`: en flat config un bloque posterior reemplaza las opciones de la regla) | KAN-33 |
-| ESLint o convención para importar Phosphor de `/ssr` en Server Components (ESLint no distingue Server de Client Component: ¿prohibir el import raíz y usar siempre `/ssr`?) | KAN-33 |
-| Verificaciones al correr `shadcn init`: Base UI por defecto, `iconLibrary: "phosphor"`, nombre del paquete de Base UI, compatibilidad `@hookform/resolvers` + zod 4 | KAN-33 |
-| `experimental.optimizePackageImports` para `@phosphor-icons/react` en `next.config.ts` | KAN-33 |
-| Glass: comprobar que el CSS generado declara `backdrop-filter` y `-webkit-backdrop-filter`; que en Safari 16.4–17 se ve el glass (el fallback `@supports not (...)` no se activa); y que el fallback `card-solid` sí se activa con `prefers-reduced-transparency: reduce` o en un navegador sin soporte de `backdrop-filter` (D13 › Glass) | KAN-33 |
-| Comparar la salida del formateador de dinero y fechas en el servidor (Node) con la de WebKit y Chromium, por ejemplo en el E2E de iPhone y Pixel, para detectar diferencias de ICU (NBSP o NNBSP, símbolos, separadores de grupo) | KAN-33 / KAN-34 |
-| Export `viewport`: `viewportFit: "cover"`, `interactiveWidget: "resizes-content"`, `themeColor` por esquema | KAN-33 |
-| Adaptar el CSS de shadcn (clase `.dark`) a `prefers-color-scheme` y definir las variables de tokens, radios y blobs | KAN-33 |
-| Playwright: proyecto "Pixel" con viewport de 360 px de ancho | KAN-33 |
-| Convención de errores tipados para el `queryFn` (openapi-fetch devuelve `{ data, error }`, TanStack Query espera que lance) y dónde viven las query keys / `queryOptions` (añadido en FE-06) | KAN-33 |
-| Comprobar en `typecheck` que lo que infiere un esquema zod de request es asignable al tipo generado del API (propuesta de FE-06) | KAN-33 |
+| Actualizar `frontend/CLAUDE.md` | Hecho (KAN-33) |
+| ESLint: `no-restricted-imports` para core (fusionado con la regla de `process`) y Phosphor siempre desde `/ssr` | Hecho (KAN-33) |
+| Verificaciones de `shadcn init`, de `@hookform/resolvers` con zod 4 y de `optimizePackageImports` | Hecho (KAN-33): ver D4, D5 y D7 |
+| Glass: CSS generado con ambas declaraciones y fallback | Hecho sobre el CSS del build (KAN-33). **Pendiente de hardware:** Safari 16.4–17 real, `prefers-reduced-transparency: reduce` y Android de gama baja (Juan David o qa) |
+| Export `viewport` (`viewportFit`, `interactiveWidget`, `themeColor` por esquema, `colorScheme`) | Hecho (KAN-33). Prueba en dispositivo real pendiente |
+| Adaptar el CSS de shadcn a `prefers-color-scheme` y definir tokens, radios y blobs | Hecho (KAN-33) |
+| Convención de errores tipados para el `queryFn` y dónde viven las query keys / `queryOptions` | Hecho (KAN-33): `unwrap` + `ApiError`, `lib/core/data/<recurso>.ts` |
+| Comprobar en `typecheck` que un esquema zod de request es asignable al tipo generado | Patrón documentado en `CLAUDE.md` (Formularios); se aplica con el primer esquema real (no existe ninguno aún) |
+| Playwright: instalar, proyectos "iPhone" (WebKit) y "Pixel" (Chromium, viewport de 360 px) | **No se instaló en KAN-33** (decisión de Juan David: no hay specs ni CI de frontend aún). Lo resuelve la primera sub-tarea de E2E (qa) |
+| Comparar la salida del formateador de dinero y fechas en Node con la de WebKit y Chromium (diferencias de ICU: NBSP o NNBSP, símbolos, separadores de grupo) | Con el E2E de iPhone y Pixel (misma sub-tarea que Playwright) |
+| `Toaster` de Sonner montado en `layout.tsx` (`sonner` ya está instalado) | KAN-34 |
+| `lib/core/i18n.ts` (mapa único de traducciones) y `lib/core/schemas/` | Con la primera pantalla que los use |
 | `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | KAN-34 |
-| Contraste AA en claro y oscuro en el catálogo, incluido `--input` sobre cada superficie (oscuro sobre `card` con blob: 2,61:1) | KAN-34 |
+| Contraste AA en claro y oscuro en el catálogo, incluido `--input` sobre cada superficie (oscuro sobre `card` con blob: 2,61:1) y los pares con alfa o blob. Los pares sólidos de la tabla de D14 ya los comprueba `src/app/tokens.test.ts` | KAN-34 |
 | `popover-foreground` asumido igual a `foreground` | KAN-34 |
 | Excepción del label de la nav de 11 px y su fuente | KAN-34 |
-| Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) (añadido en FE-06) | KAN-34 |
-| Backend expone `timezone`, `currency` y `exponent` del espacio; hasta entonces el formateo de dinero y fechas con datos reales está bloqueado | KAN-36 [BE-09] |
+| Safe areas: `viewportFit: "cover"` ya deja pintar bajo el notch, pero **nada aplica todavía `env(safe-area-inset-*)`**; cada elemento fijo (nav inferior, botón "+", toast, sheet) debe aplicarlo (con fallback `env(..., 0px)`) y probarse en hardware | KAN-34 |
+| Foco por defecto: la base usa `outline-ring` sólido (3:1 mínimo; con `/50` quedaba en ~2,15:1 en claro); un test lo comprueba. Los componentes que cambien el foco deben mantener 3:1 | KAN-34 |
+| Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | KAN-34 |
+| Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) | KAN-34 |
 | Revisar los motivos marcados con † (motivos redactados en FE-06) | Juan David, en el repaso |
 
-Dependencias previstas (las instala KAN-33; nombres a confirmar al instalar): `tailwindcss` y `@tailwindcss/postcss`, `class-variance-authority`, `clsx`, `tailwind-merge`, Base UI, `@phosphor-icons/react`, `sonner`, `@tanstack/react-query`, `react-hook-form`, `@hookform/resolvers`, `vitest`, Testing Library, `@playwright/test`. `recharts` solo con el primer gráfico real. Sin `next-themes` ni Zustand en v1.
+Dependencias instaladas en KAN-33 (`tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` y `shadcn` van en devDependencies: solo se usan en el build, `tw-animate-css` y `shadcn` como `@import` de CSS): `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css`, `shadcn`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@base-ui/react`, `@phosphor-icons/react`, `sonner`, `@tanstack/react-query`, `react-hook-form`, `@hookform/resolvers`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react` y `@testing-library/dom`. No se instalan: `@playwright/test` (ver arriba), `@testing-library/jest-dom` y `user-event` (cuando un test los necesite), `vite-tsconfig-paths` (Vite 8 resuelve los alias con `resolve.tsconfigPaths`), `recharts` (con el primer gráfico real), `next-themes` ni Zustand (v1).

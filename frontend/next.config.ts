@@ -11,6 +11,10 @@ assertValidEnv();
 const { BACKEND_URL } = serverSchema.parse(process.env);
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Loads only the icons that are used (Phosphor ships thousands). Not in Next's default list.
+    optimizePackageImports: ["@phosphor-icons/react", "@phosphor-icons/react/ssr"],
+  },
   async rewrites() {
     // The browser talks to this origin only: `/api/x` is proxied to `${BACKEND_URL}/x`
     // (the `/api` prefix is dropped). Server Components skip this and call BACKEND_URL directly.
