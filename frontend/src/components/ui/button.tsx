@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
 import { focusRing } from "./focus";
 
 // Sizes follow docs/diseno.md D13: the primary button is 52 px; every other control keeps a
-// touch target of at least 44 px (h-11 / size-11).
+// touch target of at least 44 px. `min-h-*` (not `h-*`) so that a long label wraps onto more
+// lines instead of overflowing at 360 px; the label is never truncated.
 export const buttonVariants = cva(
   [
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap",
+    "inline-flex max-w-full shrink-0 items-center justify-center gap-2 rounded-full text-center font-semibold",
     "transition-[transform,filter] duration-150 ease-out",
     "active:scale-[0.97] hover:brightness-95 active:brightness-90",
     "data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:bg-muted data-disabled:text-muted-foreground data-disabled:brightness-100",
@@ -28,8 +29,8 @@ export const buttonVariants = cva(
         link: "text-primary underline underline-offset-4",
       },
       size: {
-        default: "h-13 px-6 text-base [&_svg]:size-5",
-        sm: "h-11 px-4 text-sm [&_svg]:size-5",
+        default: "min-h-13 px-6 py-2 text-base [&_svg]:size-5",
+        sm: "min-h-11 px-4 py-1.5 text-sm [&_svg]:size-5",
         icon: "size-11 [&_svg]:size-5",
       },
     },
@@ -64,7 +65,8 @@ export function Button({
       // A disabled button stays focusable so the keyboard user does not lose their place.
       focusableWhenDisabled
       aria-busy={loading || undefined}
-      aria-disabled={loading || undefined}
+      // Never pass `undefined` here: Base UI's merge would overwrite its own aria-disabled.
+      aria-disabled={loading || disabled || undefined}
       data-loading={loading || undefined}
       onClick={(event) => {
         if (loading) {

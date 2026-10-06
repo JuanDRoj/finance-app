@@ -168,7 +168,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 | Componente | Archivo | API (props) | Estados |
 |---|---|---|---|
-| `Button` | `components/ui/button.tsx` | `variant` (`default`, `secondary`, `outline`, `ghost`, `destructive`, `link`), `size` (`default` 52 px, `sm` 44 px, `icon` 44×44: pide `aria-label`), `loading`, y las props de Base UI (`disabled`, `onClick`…) | Normal, presionado (`active:`), foco, deshabilitado y cargando. Cargando: spinner, ignora clics (y el envío del formulario), `aria-busy`, mantiene color, ancho y foco |
+| `Button` | `components/ui/button.tsx` | `variant` (`default`, `secondary`, `outline`, `ghost`, `destructive`, `link`), `size` (`default` 52 px y `sm` 44 px **como mínimo**: la etiqueta larga se parte en varias líneas y el botón crece, nunca se trunca ni desborda; `icon` 44×44: pide `aria-label`), `loading`, y las props de Base UI (`disabled`, `onClick`…) | Normal, presionado (`active:`), foco, deshabilitado y cargando. Cargando: spinner, ignora clics (y el envío del formulario), `aria-busy` y `aria-disabled`, mantiene color, ancho y foco. Deshabilitado expone `aria-disabled` (sigue enfocable) |
 | `Input` | `components/ui/input.tsx` | Props de `<input>` | 48 px, texto de 16 px, borde `--input`, fondo sólido `card-solid`. Foco, deshabilitado, `aria-invalid` |
 | `Field` | `components/ui/field.tsx` | `label` (obligatoria), `error`, `description`, `optional`, `id` y las props del input (acepta `ref`: sirve con `register` de react-hook-form) | Label ligada al input; `error` pone `aria-invalid`, borde `destructive` y un mensaje con icono (`role="alert"`) enlazado por `aria-describedby`. No traduce: recibe el texto en español |
 | `Card` | `components/ui/card.tsx` | `variant`: `glass` (tile bento, token `card`) o `solid`; partes `CardHeader`, `CardTitle` (`as`), `CardDescription`, `CardContent` | Los formularios van en `solid` |
@@ -263,7 +263,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 **Reglas de uso**
 - Un solo `<Toaster />`, montado en `layout.tsx`; `toast()` solo desde código cliente. Consulta la skill `ask-sonner` (`.claude/skills/ask-sonner/`).
 - El toast es cromo flotante: usa el token `glass` (D14), con el fallback sólido de D13 › Glass.
-- Posición por encima de la nav inferior y de la safe area (`offset` / `mobileOffset`: `16px + env(safe-area-inset-bottom)`; la nav, cuando exista, lo subirá). **Duración 6000 ms** (KAN-34; el valor por defecto de Sonner son 4000 ms), para poder llegar a "Deshacer". El botón "Deshacer" mide 44 px. Sonner inyecta CSS sin capa: sus variables (`--normal-bg`…) se fijan en `sonner.tsx` y las utilidades que lo pisan llevan `!`.
+- Posición por encima de la nav inferior y de la safe area (`offset` / `mobileOffset`: `16px + env(safe-area-inset-bottom)`; la nav, cuando exista, lo subirá). **Duración 6000 ms** (KAN-34; el valor por defecto de Sonner son 4000 ms), para poder llegar a "Deshacer". El botón "Deshacer" mide 44 px y lleva el anillo de foco del proyecto (`focus.ts`) con `!`, porque el foco propio de Sonner es casi invisible sobre glass. Sonner inyecta CSS sin capa: sus variables (`--normal-bg`…) se fijan en `sonner.tsx` y las utilidades que lo pisan llevan `!`.
 - Copy: la misma palabra en acción y confirmación: "Eliminaste «Café»" + **Deshacer**. El borrado es suave (`deleted_at`), así que deshacer restaura el registro y se invalidan las queries.
 
 ### D9. Gráficos

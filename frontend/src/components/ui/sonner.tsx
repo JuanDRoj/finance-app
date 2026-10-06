@@ -41,9 +41,10 @@ export function Toaster(props: ToasterProps) {
       toastOptions={{
         classNames: {
           toast: "glass font-sans",
-          // `!` (important) because Sonner's unlayered styles would otherwise override these.
+          // `!` (important) because Sonner's unlayered styles would otherwise override these (they also
+          // remove the outline and draw a faint box-shadow on focus: the project's ring, focus.ts, replaces it).
           actionButton:
-            "h-11! rounded-full! bg-primary! px-4! text-sm! font-semibold! text-primary-foreground!",
+            "h-11! rounded-full! bg-primary! px-4! text-sm! font-semibold! text-primary-foreground! focus-visible:outline-2! focus-visible:outline-offset-2! focus-visible:outline-ring!",
         },
       }}
       {...props}

@@ -125,9 +125,7 @@ export default function CatalogPage() {
                 <Plus aria-hidden weight="bold" />
               </Button>
               <LoadingDemo />
-              <Button className="max-w-full">
-                Etiqueta muy larga para un botón que debe caber en 360 px
-              </Button>
+              <Button>Etiqueta muy larga para un botón que debe caber en 360 px</Button>
             </CardContent>
           </Card>
         </Section>

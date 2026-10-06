@@ -58,15 +58,41 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled();
     expect(button.getAttribute("aria-busy")).toBeNull();
   });
+
+  it("exposes the disabled state to assistive technology (aria-disabled or disabled)", () => {
+    render(<Button disabled>Guardar</Button>);
+    const button = screen.getByRole("button", { name: "Guardar" });
+    expect(button.getAttribute("aria-disabled") === "true" || button.hasAttribute("disabled")).toBe(
+      true,
+    );
+  });
+
+  it("exposes aria-disabled while loading, and nothing when it is idle", () => {
+    const { rerender } = render(<Button loading>Guardar</Button>);
+    expect(screen.getByRole("button", { name: "Guardar" }).getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+    rerender(<Button>Guardar</Button>);
+    const idle = screen.getByRole("button", { name: "Guardar" });
+    expect(idle.getAttribute("aria-disabled")).toBeNull();
+    expect(idle.hasAttribute("disabled")).toBe(false);
+  });
 });
 
 describe("buttonVariants", () => {
   // jsdom computes no layout: this guards the size classes, the real 44 px check is the audit
   // panel of the component catalog.
   it("keeps the touch targets of docs/diseno.md D13 (52 px primary, 44 px otherwise)", () => {
-    expect(buttonVariants({ size: "default" })).toContain("h-13");
-    expect(buttonVariants({ size: "sm" })).toContain("h-11");
+    // min-h-*: a long label wraps and the button grows, never below 52 / 44 px.
+    expect(buttonVariants({ size: "default" })).toContain("min-h-13");
+    expect(buttonVariants({ size: "sm" })).toContain("min-h-11");
     expect(buttonVariants({ size: "icon" })).toContain("size-11");
+  });
+
+  it("lets a long label wrap instead of overflowing", () => {
+    const classes = buttonVariants();
+    expect(classes).not.toContain("whitespace-nowrap");
+    expect(classes).toContain("max-w-full");
   });
 
   it("uses the shared solid focus ring", () => {
