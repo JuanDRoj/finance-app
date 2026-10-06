@@ -23,7 +23,8 @@ ORDER: list[set[str]] = [
 ]
 LEVEL = {name: level for level, names in enumerate(ORDER) for name in names}
 
-# What another module may expose: its service and schemas, plus dependencies (routers only).
+# What another module may expose: its service and schemas, plus its dependencies (to routers, or
+# to the dependencies.py of a module of a higher level).
 PUBLIC_PARTS = {"service", "schemas", "dependencies"}
 MODULES_PREFIX = ("app", "modules")
 
@@ -135,7 +136,7 @@ def find_violations(app_dir: Path) -> list[str]:
             elif part not in PUBLIC_PARTS:
                 report(line, f"imports {other}.{part}; only service/schemas/dependencies allowed")
             elif part == "dependencies" and not is_router and not is_dependencies:
-                report(line, f"imports {other}.dependencies outside a router")
+                report(line, f"imports {other}.dependencies outside a router or a dependencies.py")
             # Routers and dependencies.py are the HTTP layer and may combine the service/schemas of
             # any module; a dependencies.py may only reuse `dependencies` of a lower level.
             level_rule_applies = (part == "dependencies" and is_dependencies) or not (
@@ -143,7 +144,9 @@ def find_violations(app_dir: Path) -> list[str]:
             )
             if level_rule_applies and LEVEL.get(other, -1) >= LEVEL.get(own, 99):
                 report(
-                    line, f"{own} must not import {other} (same or later level) outside a router"
+                    line,
+                    f"{own} must not import {other} (same or later level); only a router may "
+                    "(a dependencies.py only for `dependencies` of a lower level)",
                 )
 
         if is_layer:

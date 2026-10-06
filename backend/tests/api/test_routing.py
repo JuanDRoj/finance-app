@@ -82,8 +82,9 @@ async def _unguarded_space_routes(
 ) -> list[str]:
     """`METHOD path` of every `/spaces/{space_id}/...` operation that lacks a membership check.
 
-    Behavioural on purpose (FastAPI keeps its routing internals private). Two requests per
-    operation, both with random ids, answered before the body is validated:
+    Behavioural on purpose (FastAPI keeps its routing internals private). It walks
+    `app.openapi()`, so a route with `include_in_schema=False` is outside the check.
+    Two requests per operation, both with random ids, answered before the body is validated:
     - no cookie: 401 `not_authenticated` (the route is behind `current_user`);
     - a valid session of a user with no spaces: 404 `space_not_found`. A route that only uses
       `CurrentUser` passes the first check and fails this one, which is the IDOR to catch.
