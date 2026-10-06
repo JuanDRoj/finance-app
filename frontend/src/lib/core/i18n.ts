@@ -33,6 +33,14 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     title: "No pudimos verificar tu cuenta",
     message: "Vuelve a iniciar sesión. Si sigue pasando, inténtalo en unos minutos.",
   },
+  email_required: {
+    title: "Tu cuenta no tiene un correo",
+    message: "Necesitamos un correo para crear tu espacio. Entra con otra cuenta o con tu correo.",
+  },
+  recent_sign_in_required: {
+    title: "Vuelve a iniciar sesión",
+    message: `Por seguridad, necesitamos que inicies sesión de nuevo para continuar. ${SAFE}`,
+  },
   origin_not_allowed: {
     title: "No pudimos completar la acción",
     message: `Recarga la página e inténtalo de nuevo. ${SAFE}`,
@@ -78,12 +86,12 @@ function errorByStatus(status: number): ErrorDescription {
   return GENERIC_ERROR;
 }
 
-const GENERIC_ERROR: ErrorDescription = {
+export const GENERIC_ERROR: ErrorDescription = {
   title: "No pudimos completar la acción",
   message: `Inténtalo de nuevo. ${SAFE}`,
 };
 
-const NETWORK_ERROR: ErrorDescription = {
+export const NETWORK_ERROR: ErrorDescription = {
   title: "No pudimos conectar",
   message: `Revisa tu conexión e inténtalo de nuevo. ${SAFE}`,
 };
@@ -102,6 +110,19 @@ const FIELD_ERROR_BY_TYPE: Record<string, string> = {
 };
 
 const FIELD_ERROR_FALLBACK = "El valor no es válido.";
+
+/**
+ * `type` of a 422 whose cause the user cannot fix by editing a field (the client sends it, not
+ * a form field). It gets a complete description instead of "Corrígelo e inténtalo de nuevo".
+ */
+const VALIDATION_ERROR_BY_TYPE: Record<string, ErrorDescription> = {
+  // `POST /auth/session`: the device's IANA zone, read with Intl, is not one the backend knows.
+  timezone_invalid: {
+    title: "No pudimos detectar tu zona horaria",
+    message:
+      "Revisa la configuración de fecha y hora de tu dispositivo e inténtalo de nuevo. Tus datos están a salvo.",
+  },
+};
 
 /** Spanish message for the `type` of a 422 issue (to mark a form field). Never undefined. */
 export function fieldErrorMessage(type: string): string {
@@ -136,12 +157,18 @@ export function describeApiError(error: unknown): ErrorDescription {
     if (status === 422 && isValidationErrorBody(body)) {
       const [first, ...rest] = body.detail ?? [];
       const base = errorByStatus(422);
-      // A single known problem can be said precisely; several go to the fields.
-      if (first && rest.length === 0 && Object.hasOwn(FIELD_ERROR_BY_TYPE, first.type)) {
-        return {
-          ...base,
-          message: `${fieldErrorMessage(first.type)} Corrígelo e inténtalo de nuevo.`,
-        };
+      if (first && rest.length === 0) {
+        // A problem the user cannot fix in a field has its own full text.
+        if (Object.hasOwn(VALIDATION_ERROR_BY_TYPE, first.type)) {
+          return VALIDATION_ERROR_BY_TYPE[first.type] ?? base;
+        }
+        // A single known problem can be said precisely; several go to the fields.
+        if (Object.hasOwn(FIELD_ERROR_BY_TYPE, first.type)) {
+          return {
+            ...base,
+            message: `${fieldErrorMessage(first.type)} Corrígelo e inténtalo de nuevo.`,
+          };
+        }
       }
       return base;
     }
