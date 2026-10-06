@@ -15,3 +15,9 @@ async def upsert_user(
         session, firebase_uid=firebase_uid, email=email, display_name=display_name
     )
     return UserRead.model_validate(row)
+
+
+async def get_by_firebase_uid(session: AsyncSession, firebase_uid: str) -> UserRead | None:
+    """The user of a Firebase account, or None if they never logged in."""
+    row = await repository.get_by_firebase_uid(session, firebase_uid)
+    return None if row is None else UserRead.model_validate(row)

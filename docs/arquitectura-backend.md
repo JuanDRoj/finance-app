@@ -42,7 +42,7 @@ users/auth → currencies → spaces → accounts, categories → transactions �
 Reglas:
 1. **El service de un módulo solo llama a services de módulos anteriores** en el orden. Los del mismo nivel (ej. `accounts` y `categories`) no se llaman entre sí.
 2. **Los routers pueden combinar services de cualquier módulo.** Son la capa de composición.
-3. **De otro módulo solo se importan su `service`, sus `schemas` y (desde routers) sus `dependencies`.** Nunca su `repository` ni sus `models`. Las FK entre módulos van por nombre (`ForeignKey("spaces.id")`) y no hay `relationship()` entre módulos.
+3. **De otro módulo solo se importan su `service`, sus `schemas` y (desde la capa HTTP) sus `dependencies`.** Nunca su `repository` ni sus `models`. Los routers y los `dependencies.py` son capa HTTP: pueden combinar el `service` y los `schemas` de cualquier módulo, pero un `dependencies.py` solo puede importar `dependencies` de módulos de nivel inferior (p. ej. `spaces.dependencies` usa `auth.dependencies`). Las FK entre módulos van por nombre (`ForeignKey("spaces.id")`) y no hay `relationship()` entre módulos.
 4. **Entre módulos se intercambian schemas (`XRead`) o valores simples, nunca objetos ORM.** Así nadie modifica ni carga relaciones de un modelo ajeno.
 5. `tests/unit/test_module_boundaries.py` lo hace cumplir con `ast`, sin dependencias nuevas.
 

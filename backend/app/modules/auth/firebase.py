@@ -40,6 +40,14 @@ class FirebaseAuth(Protocol):
         """Verify the token; `UnauthenticatedError("invalid_id_token")` if it is not valid."""
         ...
 
+    async def verify_session_cookie(self, cookie: str) -> FirebaseIdentity:
+        """Verify the session cookie, revocation included (a call to Firebase every time).
+
+        `UnauthenticatedError("invalid_session")` if it is invalid, expired or revoked, or if the
+        account is disabled or deleted.
+        """
+        ...
+
     async def create_session_cookie(self, id_token: str, expires_in: timedelta) -> str:
         """Exchange a (verified) ID token for a session cookie that lasts `expires_in`."""
         ...
@@ -48,6 +56,10 @@ class FirebaseAuth(Protocol):
 def _invalid_id_token() -> UnauthenticatedError:
     # The message is fixed on purpose: Firebase's own text can quote claims of the token.
     return UnauthenticatedError("invalid_id_token", "Invalid ID token")
+
+
+def _invalid_session() -> UnauthenticatedError:
+    return UnauthenticatedError("invalid_session", "Invalid session")
 
 
 def _optional_text(value: object) -> str | None:
@@ -62,6 +74,15 @@ def _auth_time(value: object) -> datetime | None:
         return datetime.fromtimestamp(value, UTC)
     except OverflowError, OSError, ValueError:
         return None
+
+
+def _identity(claims: dict[str, Any]) -> FirebaseIdentity:
+    return FirebaseIdentity(
+        uid=str(claims["uid"]),
+        email=_optional_text(claims.get("email")),
+        name=_optional_text(claims.get("name")),
+        auth_time=_auth_time(claims.get("auth_time")),
+    )
 
 
 class FirebaseAdminAuth:
@@ -82,12 +103,30 @@ class FirebaseAdminAuth:
             # Only the class name is logged: Firebase's message can quote claims of the token.
             logger.info("id_token_rejected", extra={"firebase_error": type(error).__name__})
             raise _invalid_id_token() from None
-        return FirebaseIdentity(
-            uid=str(claims["uid"]),
-            email=_optional_text(claims.get("email")),
-            name=_optional_text(claims.get("name")),
-            auth_time=_auth_time(claims.get("auth_time")),
-        )
+        return _identity(claims)
+
+    async def verify_session_cookie(self, cookie: str) -> FirebaseIdentity:
+        from firebase_admin import auth
+
+        try:
+            claims = await asyncio.to_thread(
+                auth.verify_session_cookie,
+                cookie,
+                check_revoked=True,
+                app=self.app,
+                clock_skew_seconds=CLOCK_SKEW_SECONDS,
+            )
+        except (
+            ValueError,
+            auth.InvalidSessionCookieError,  # expired and revoked are subclasses
+            auth.UserDisabledError,
+            auth.UserNotFoundError,  # the revocation check looks the account up: deleted
+        ) as error:
+            logger.info("session_cookie_rejected", extra={"firebase_error": type(error).__name__})
+            raise _invalid_session() from None
+        # CertificateFetchError and other failures reaching Google are not the client's fault:
+        # they surface as the generic 500.
+        return _identity(claims)
 
     async def create_session_cookie(self, id_token: str, expires_in: timedelta) -> str:
         from firebase_admin import auth

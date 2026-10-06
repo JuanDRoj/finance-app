@@ -1,9 +1,11 @@
 import uuid
 from uuid import UUID
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import NotFoundError
 from app.modules.spaces import service
 from app.modules.spaces.models import Space, SpaceMember
 from app.modules.users import service as users_service
@@ -85,3 +87,41 @@ async def test_a_household_space_does_not_count_as_the_personal_one(session: Asy
 
     assert created is True
     assert sorted(s.type for s in await _spaces_of(session, user_id)) == ["household", "personal"]
+
+
+async def _personal_space_id(session: AsyncSession, user_id: UUID) -> UUID:
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    return (await _spaces_of(session, user_id))[0].id
+
+
+async def test_require_member_returns_the_membership_of_the_owner(session: AsyncSession) -> None:
+    user_id = await _make_user(session, "uid-member-1")
+    space_id = await _personal_space_id(session, user_id)
+
+    member = await service.require_member(session, space_id, user_id)
+
+    assert (member.space_id, member.user_id, member.role) == (space_id, user_id, "owner")
+
+
+async def test_require_member_gives_404_to_a_user_who_is_not_a_member(
+    session: AsyncSession,
+) -> None:
+    owner_id = await _make_user(session, "uid-member-a")
+    other_id = await _make_user(session, "uid-member-b")
+    space_id = await _personal_space_id(session, owner_id)
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.require_member(session, space_id, other_id)
+
+    assert exc.value.code == "space_not_found"
+
+
+async def test_require_member_gives_the_same_error_for_a_space_that_does_not_exist(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-member-c")
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.require_member(session, uuid.uuid7(), user_id)
+
+    assert (exc.value.code, exc.value.detail) == ("space_not_found", "Space not found")
