@@ -79,6 +79,40 @@ describe.each([
   );
 });
 
+// Default focus outline of every element: `@apply ... outline-ring` (or `outline-ring/50`) in the
+// base layer. The color that is really painted is the ring token blended with this opacity over
+// the surface behind it, so a translucent outline can fall under 3:1 even if the token passes.
+function baseOutlineOpacity(): number {
+  const used = [...css.matchAll(/@apply[^;]*\boutline-ring(?:\/(\d+))?(?=[\s;])/g)];
+  expect(used, "the base layer sets a default outline color from the ring token").toHaveLength(1);
+  return used[0]?.[1] === undefined ? 1 : Number(used[0][1]) / 100;
+}
+
+function blend(foreground: string, background: string, alpha: number): string {
+  const channels = [1, 3, 5].map((start) => {
+    const front = Number.parseInt(foreground.slice(start, start + 2), 16);
+    const back = Number.parseInt(background.slice(start, start + 2), 16);
+    return Math.round(front * alpha + back * (1 - alpha))
+      .toString(16)
+      .padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("default focus outline, %s palette", (_name, palette) => {
+  it.each(["background", "card-solid", "popover", "muted", "secondary"])(
+    "reaches 3:1 (WCAG non-text contrast) on %s",
+    (surface) => {
+      const surfaceHex = hexOf(palette, surface);
+      const painted = blend(hexOf(palette, "ring"), surfaceHex, baseOutlineOpacity());
+      expect(contrast(painted, surfaceHex)).toBeGreaterThanOrEqual(3);
+    },
+  );
+});
+
 describe("tokens", () => {
   it("defines the same tokens in the light and dark palettes", () => {
     for (const token of declarations(rootBlocks[1] ?? "").keys()) {

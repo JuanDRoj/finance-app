@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { formatInstant, formatLocalDate, todayInTimezone } from "./dates";
 
+describe("test environment", () => {
+  it("runs with a negative-offset time zone, so a device-zone regression fails everywhere", () => {
+    expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("America/Montevideo");
+    expect(new Date(2026, 9, 15).getTimezoneOffset()).toBe(180);
+  });
+});
+
 describe("formatLocalDate", () => {
   it("formats each style", () => {
     expect(formatLocalDate("2026-10-15", "short")).toBe("15 oct.");
@@ -64,6 +71,33 @@ describe("formatInstant", () => {
     const date = new Date(instant);
     expect(formatInstant(date, "America/Montevideo", "short")).toBe("14 oct.");
     expect(formatInstant(date, "America/Montevideo", "long")).toBe("14 de octubre de 2026");
+  });
+
+  it("accepts the offset forms the API can send", () => {
+    for (const text of [
+      "2026-10-15T02:30:00Z",
+      "2026-10-15T02:30:00.123Z",
+      "2026-10-15T02:30:00+00:00",
+      "2026-10-14T23:30:00-03:00",
+      "2026-10-15T02:30Z",
+    ]) {
+      expect(formatInstant(text, "America/Montevideo", "dateTime")).toBe(
+        "14 oct. 2026, 11:30 p. m.",
+      );
+    }
+  });
+
+  it("rejects text without a UTC offset, which would depend on the device zone", () => {
+    for (const text of [
+      "2026-10-15T02:30:00",
+      "2026-10-15T02:30:00.123",
+      "2026-10-15",
+      "2026-10-15 02:30:00Z",
+      "2026-10-15T02:30:00-0300",
+      "2026-10-15T02:30:00+03",
+    ]) {
+      expect(() => formatInstant(text, "UTC")).toThrow(RangeError);
+    }
   });
 
   it("rejects an invalid instant or time zone", () => {

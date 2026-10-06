@@ -40,9 +40,24 @@ describe("unwrap", () => {
     await expect(unwrap(api.GET("/healthz"))).resolves.toBeUndefined();
   });
 
+  it("throws on a non-OK response that has no body", async () => {
+    for (const status of [401, 404, 502]) {
+      const empty = new Response(null, { status, headers: { "Content-Length": "0" } });
+      const error = await unwrap(clientAnswering(empty).GET("/me")).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({ status, body: undefined });
+    }
+  });
+
   it("accepts an already resolved result", async () => {
-    const response = new Response(null, { status: 500 });
-    await expect(unwrap({ error: { detail: "boom" }, response })).rejects.toBeInstanceOf(ApiError);
-    await expect(unwrap({ data: 7, response })).resolves.toBe(7);
+    const failed = new Response(null, { status: 500 });
+    await expect(unwrap({ error: { detail: "boom" }, response: failed })).rejects.toBeInstanceOf(
+      ApiError,
+    );
+    await expect(unwrap({ data: 7, response: new Response(null, { status: 200 }) })).resolves.toBe(
+      7,
+    );
   });
 });

@@ -29,7 +29,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Lets the page paint under the notch; env(safe-area-inset-*) pads the content back.
+  // Lets the page paint under the notch. Nothing pads the content back yet: each fixed element
+  // (nav, "+" button, toast, sheet) must apply env(safe-area-inset-*) itself (KAN-34).
   viewportFit: "cover",
   // Android Chrome shrinks the layout viewport when the keyboard opens (iOS ignores it).
   interactiveWidget: "resizes-content",
@@ -44,7 +45,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="es" className={`${montserrat.variable} ${karla.variable}`}>
-      <body className="min-h-dvh antialiased">
+      <body className="antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

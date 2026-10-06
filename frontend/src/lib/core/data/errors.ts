@@ -24,6 +24,8 @@ type ApiResult<T> = { data?: T; error?: unknown; response: Response };
  */
 export async function unwrap<T>(result: Promise<ApiResult<T>> | ApiResult<T>): Promise<T> {
   const { data, error, response } = await result;
-  if (error !== undefined) throw new ApiError(response.status, error);
+  // openapi-fetch leaves `error` undefined when a non-OK response has no body (404, 401 or a
+  // 502 with Content-Length: 0), so the status decides, not the body.
+  if (!response.ok || error !== undefined) throw new ApiError(response.status, error);
   return data as T;
 }

@@ -14,6 +14,9 @@ export default defineConfig({
           // Node on purpose: money and date formatting must run with Node's ICU (docs/diseno.md D10).
           environment: "node",
           include: ["src/**/*.test.ts"],
+          // A non-UTC zone with a negative offset: code that wrongly uses the machine's zone
+          // (a date-only string shifting a day) fails here on every machine and in CI.
+          env: { TZ: "America/Montevideo" },
         },
       },
       {

@@ -19,7 +19,7 @@ export type FormatMoneyOptions = {
   locale?: string;
 };
 
-const MINUS_SIGN = "−";
+const MINUS_SIGN = "\u2212"; // typographic minus (U+2212); Intl emits an ASCII hyphen
 const MAX_EXPONENT = 20;
 
 function assertExponent(exponent: number): void {

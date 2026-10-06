@@ -20,6 +20,10 @@ const INSTANT_OPTIONS: Readonly<Record<InstantStyle, Intl.DateTimeFormatOptions>
 
 const LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+// ISO 8601 with a mandatory `Z` or `±hh:mm` offset. Without one, `new Date(text)` reads the text
+// in the device's time zone and the instant would silently change from phone to phone.
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 /**
  * Formats a transaction date (`YYYY-MM-DD`, a local date with no time). It is formatted as is,
  * with no time zone applied, so it can never move to the previous or next day.
@@ -45,7 +49,8 @@ export function formatLocalDate(
 
 /**
  * Formats an instant (`timestamptz`, UTC from the API) in the space's time zone
- * (`spaces.timezone`, an IANA name such as `America/Montevideo`).
+ * (`spaces.timezone`, an IANA name such as `America/Montevideo`). A string must carry its UTC
+ * offset (`Z` or `±hh:mm`); a `Date` is already an exact instant.
  */
 export function formatInstant(
   instant: string | Date,
@@ -53,6 +58,9 @@ export function formatInstant(
   style: InstantStyle = "dateTime",
   locale: string = DEFAULT_LOCALE,
 ): string {
+  if (typeof instant === "string" && !ISO_INSTANT.test(instant)) {
+    throw new RangeError(`Instant must be ISO 8601 with "Z" or a ±hh:mm offset: "${instant}"`);
+  }
   const date = typeof instant === "string" ? new Date(instant) : instant;
   if (Number.isNaN(date.getTime())) throw new RangeError(`Invalid instant: "${String(instant)}"`);
   return new Intl.DateTimeFormat(locale, { ...INSTANT_OPTIONS[style], timeZone }).format(date);

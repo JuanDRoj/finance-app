@@ -4,8 +4,8 @@ import { formatMoney, minorToDecimalString } from "./money";
 
 // Intl puts a no-break space (U+00A0) between symbol and digits, and we print expenses with the
 // typographic minus (U+2212). Escapes keep the expectations exact and visible.
-const NBSP = " ";
-const MINUS = "−";
+const NBSP = "\u00A0";
+const MINUS = "\u2212";
 
 const UYU = { code: "UYU", exponent: 2 };
 const COP = { code: "COP", exponent: 2 };
@@ -125,7 +125,7 @@ describe("formatMoney", () => {
   });
 
   it("accepts an explicit locale", () => {
-    expect(formatMoney(155050, UYU, { locale: "en-US" })).toBe("UYU 1,550.50");
+    expect(formatMoney(155050, UYU, { locale: "en-US" })).toBe("UYU\u00A01,550.50");
   });
 
   it("propagates errors for invalid input", () => {
