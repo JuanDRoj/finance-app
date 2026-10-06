@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -158,3 +159,29 @@ async def test_get_space_returns_the_currency_exponent(session: AsyncSession) ->
 
     assert space == listed
     assert space.currency.exponent == 2
+
+
+async def test_list_spaces_is_ordered_by_creation_time_not_by_insertion_order(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-order")
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    [personal] = await _spaces_of(session, user_id)
+    personal.created_at = datetime(2026, 1, 2, tzinfo=UTC)
+    # Inserted later (larger uuid7) but created earlier: only `created_at` puts it first.
+    older = Space(
+        name="Casa",
+        type="household",
+        currency="UYU",
+        timezone="America/Montevideo",
+        created_by=user_id,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    session.add(older)
+    await session.flush()
+    session.add(SpaceMember(space_id=older.id, user_id=user_id, role="owner"))
+    await session.flush()
+
+    spaces = await service.list_spaces(session, user_id)
+
+    assert [s.name for s in spaces] == ["Casa", "Mi espacio"]

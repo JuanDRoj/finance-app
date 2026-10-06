@@ -3,6 +3,7 @@ import uuid
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import UnauthenticatedError
 from app.modules.spaces import service as spaces_service
 from app.modules.spaces.models import Space
 from app.modules.users import service as users_service
@@ -134,3 +135,15 @@ async def test_trailing_slash_is_a_404(
     response = await api_client.get("/spaces/", headers=COOKIE)
 
     assert response.status_code == 404
+
+
+async def test_a_cookie_rejected_by_firebase_is_401_on_both_routes(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    _, space_id = await _user_with_space(session, "uid-a")
+    fake_firebase.session_error = UnauthenticatedError("invalid_session", "Invalid session")
+
+    for path in ("/spaces", f"/spaces/{space_id}"):
+        response = await api_client.get(path, headers=COOKIE)
+        assert response.status_code == 401, path
+        assert response.json() == {"detail": "Invalid session", "code": "invalid_session"}

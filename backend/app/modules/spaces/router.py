@@ -18,12 +18,18 @@ async def list_spaces(user: CurrentUser, session: DbSession) -> list[SpaceRead]:
     return await service.list_spaces(session, user.id)
 
 
-@router.get(
-    "/{space_id}",
-    status_code=status.HTTP_200_OK,
+# Every route of a single space goes here: the sub-router carries the membership guard.
+space_router = APIRouter(
+    prefix="/{space_id}",
     dependencies=[Depends(require_space_member)],
     responses={404: {"model": ErrorResponse}},
 )
+
+
+@space_router.get("", status_code=status.HTTP_200_OK)
 async def read_space(space_id: uuid.UUID, session: DbSession) -> SpaceRead:
     """A space the user belongs to, with its currency and ISO 4217 exponent."""
     return await service.get_space(session, space_id)
+
+
+router.include_router(space_router)
