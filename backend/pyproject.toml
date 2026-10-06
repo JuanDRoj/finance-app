@@ -8,8 +8,10 @@ dependencies = [
     "asyncpg>=0.31.0",
     "cloud-sql-python-connector[asyncpg]>=1.22.0",
     "fastapi[standard]>=0.115",
+    "firebase-admin>=7.7",
     "pydantic-settings>=2",
     "sqlalchemy[asyncio]>=2.0",
+    "tzdata>=2026.5",
 ]
 
 [dependency-groups]
@@ -42,6 +44,11 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 # asyncpg ships no type information; tests use it directly to fake the Cloud SQL Connector.
 module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# firebase-admin ships no type information (no py.typed).
+module = ["firebase_admin", "firebase_admin.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

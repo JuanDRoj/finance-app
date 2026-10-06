@@ -73,6 +73,8 @@ async def test_lifespan_refuses_to_start_if_docs_are_on_but_settings_say_not_loc
     app = create_app()
     monkeypatch.setenv("ENV", "staging")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost:5432/x")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "finance-staging")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     get_settings.cache_clear()
 
     with pytest.raises(RuntimeError, match="docs"):
@@ -86,6 +88,8 @@ async def test_lifespan_starts_when_docs_are_off_outside_local(
 ) -> None:
     monkeypatch.setenv("ENV", "staging")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost:5432/x")
+    monkeypatch.setenv("FIREBASE_PROJECT_ID", "finance-staging")
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://app.example.com")
     get_settings.cache_clear()
     app = create_app()
 
