@@ -13,6 +13,8 @@ const KNOWN_CODES = [
   "not_authenticated",
   "invalid_session",
   "invalid_id_token",
+  "email_required",
+  "recent_sign_in_required",
   "origin_not_allowed",
   "space_not_found",
   "internal_error",
@@ -68,6 +70,21 @@ describe("describeApiError", () => {
     const result = describeApiError(apiError(422, body));
     expect(result.title).toBe("Revisa los datos");
     expect(result.message).toContain("Este campo es obligatorio.");
+  });
+
+  it("describes timezone_invalid (POST /auth/session) with a text the user can act on", () => {
+    const body = {
+      detail: [
+        { type: "timezone_invalid", loc: ["body", "timezone"], msg: "Invalid IANA timezone" },
+      ],
+    };
+    const { title, message } = describeApiError(apiError(422, body));
+    expect(title).toBe("No pudimos detectar tu zona horaria");
+    expect(message).toContain("fecha y hora");
+    // Not the generic "fix the data" text: the user cannot edit this value.
+    expect(message).not.toContain("Corrígelo");
+    expect(`${title} ${message}`).not.toContain("timezone");
+    expect(`${title} ${message}`).not.toContain("Invalid IANA timezone");
   });
 
   it("describes a 422 with several problems in general terms", () => {

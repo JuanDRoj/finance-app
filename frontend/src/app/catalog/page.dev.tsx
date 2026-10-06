@@ -21,6 +21,7 @@ import { describeApiError } from "@/lib/core/i18n";
 import { formatMoney } from "@/lib/core/money";
 import { AuditPanel } from "./_components/audit-panel";
 import { LoadingDemo } from "./_components/loading-demo";
+import { SessionDemo } from "./_components/session-demo";
 import { ToastDemo } from "./_components/toast-demo";
 
 // Component catalog: only a route in `next dev` (this file is `page.dev.tsx`; see
@@ -285,6 +286,10 @@ export default async function CatalogPage({
 
         <Section title="Avisos con Deshacer">
           <ToastDemo />
+        </Section>
+
+        <Section title="Sesión (cookie en el navegador)">
+          <SessionDemo />
         </Section>
 
         <Section title="Cifras (tnum)">
