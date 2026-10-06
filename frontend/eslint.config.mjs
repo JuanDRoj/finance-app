@@ -22,6 +22,24 @@ const PROCESS_ENV_SELECTORS = [
   `${PROCESS_DESTRUCTURING}[key.value='env']`,
 ];
 
+// `import { env } from "process"` is a read of process.env through the module API. Shared by
+// every block below that sets `no-restricted-imports`: in flat config a later block replaces
+// the options of the rule instead of merging them, so each one must repeat these.
+const PROCESS_ENV_IMPORT_PATHS = ["process", "node:process"].map((name) => ({
+  name,
+  importNames: ["env"],
+  message: PROCESS_ENV_MESSAGE,
+}));
+
+const PHOSPHOR_MESSAGE =
+  'Import icons from "@phosphor-icons/react/ssr": it works in Server and Client Components (the root entry is client-only).';
+
+// Core is plain TypeScript shared with the future native app (docs/diseno.md D1): no Next, no
+// DOM React, no server-only code, no API adapters and no env. `import type` from
+// "@/lib/api/schema" stays allowed.
+const CORE_FORBIDDEN_MESSAGE =
+  "src/lib/core must stay free of Next.js, react-dom, server-only code, API adapters and env: receive what you need as arguments.";
+
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -38,11 +56,43 @@ export default defineConfig([
       "no-restricted-imports": [
         "error",
         {
-          paths: ["process", "node:process"].map((name) => ({
-            name,
-            importNames: ["env"],
-            message: PROCESS_ENV_MESSAGE,
-          })),
+          paths: [
+            ...PROCESS_ENV_IMPORT_PATHS,
+            // Only the root entry: "/ssr" is the allowed one.
+            { name: "@phosphor-icons/react", message: PHOSPHOR_MESSAGE },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Replaces the options of the block above for core (same rule, so `paths` is repeated).
+    files: ["src/lib/core/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            ...PROCESS_ENV_IMPORT_PATHS,
+            { name: "@phosphor-icons/react", message: PHOSPHOR_MESSAGE },
+            { name: "server-only", message: CORE_FORBIDDEN_MESSAGE },
+            { name: "react-dom", message: CORE_FORBIDDEN_MESSAGE },
+            { name: "next", message: CORE_FORBIDDEN_MESSAGE },
+          ],
+          patterns: [
+            { group: ["next/*", "react-dom/*"], message: CORE_FORBIDDEN_MESSAGE },
+            {
+              group: [
+                "@/lib/api/server",
+                "@/lib/api/browser",
+                "@/lib/env/*",
+                "**/api/server",
+                "**/api/browser",
+                "**/env/*",
+              ],
+              message: CORE_FORBIDDEN_MESSAGE,
+            },
+          ],
         },
       ],
     },

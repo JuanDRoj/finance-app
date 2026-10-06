@@ -1,0 +1,219 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * Design tokens ("Menta", docs/diseno.md D13 and D14).
+ * Light palette in :root; the dark one overrides it with prefers-color-scheme (no JS, no flash).
+ * Tailwind's `dark:` variant follows prefers-color-scheme too, so there is no `.dark` class.
+ * Components use token classes only (bg-background, text-income, ...): no loose hex values.
+ */
+:root {
+  --background: #e9f4ee;
+  --foreground: #0e1a14;
+  --card: rgba(255, 255, 255, 0.62);
+  --card-solid: #f7fbf9;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --primary: #146e4d;
+  --primary-foreground: #ffffff;
+  --secondary: #cbebdc;
+  --secondary-foreground: #0d4a33;
+  --muted: #dcebe3;
+  --muted-foreground: #4f6158;
+  --accent: #d7eee2;
+  --accent-foreground: var(--foreground);
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --border: rgba(14, 26, 20, 0.1);
+  --input: rgba(14, 26, 20, 0.48);
+  --ring: #146e4d;
+  --income: var(--primary);
+  --expense: var(--foreground);
+  --debt: #96560a;
+  --glass: rgba(255, 255, 255, 0.58);
+  --glass-strong: rgba(255, 255, 255, 0.74);
+  --glass-border: rgba(255, 255, 255, 0.9);
+  --blob-1: #9fe0bf;
+  --blob-2: #cdefd9;
+  --radius: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #08110d;
+    --foreground: #eaf5ef;
+    --card: rgba(28, 44, 36, 0.55);
+    --card-solid: #142019;
+    --popover: #12201a;
+    --primary: #6eddaa;
+    --primary-foreground: #062016;
+    --secondary: #173b2c;
+    --secondary-foreground: #a9efcf;
+    --muted: #15221c;
+    --muted-foreground: #a0b6aa;
+    --accent: #1a2c24;
+    --destructive: #ff9b8a;
+    --destructive-foreground: #2b0a06;
+    --border: rgba(255, 255, 255, 0.1);
+    --input: rgba(255, 255, 255, 0.34);
+    --ring: #6eddaa;
+    --debt: #f0b45a;
+    --glass: rgba(20, 32, 26, 0.6);
+    --glass-strong: rgba(16, 28, 22, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --blob-1: #1e6b4c;
+    --blob-2: #12432f;
+  }
+}
+
+/*
+ * Glass falls back to the solid surface when the browser cannot blur (neither the standard
+ * nor the -webkit- form; Safari 16.4-17 only has the prefixed one, so it keeps the glass) or
+ * when the user asks for less transparency. Must stay after the dark palette: same specificity.
+ */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --card: var(--card-solid);
+    --glass: var(--card-solid);
+    --glass-strong: var(--card-solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --card: var(--card-solid);
+    --glass: var(--card-solid);
+    --glass-strong: var(--card-solid);
+  }
+
+  .glass,
+  .glass-strong,
+  .card-surface {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Shape tokens that do not change with the theme: rounded-tile, rounded-nav, ... */
+@theme {
+  --radius-tile: 1.75rem;
+  --radius-icon: 1rem;
+  --radius-field: 1rem;
+  --radius-nav: 1.875rem;
+  --radius-sheet: 1.875rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-solid: var(--card-solid);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-debt: var(--debt);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  --color-blob-1: var(--blob-1);
+  --color-blob-2: var(--blob-2);
+
+  /* The scale shadcn components expect, derived from --radius (field radius, 16px). */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* --font-karla / --font-montserrat are set by next/font in layout.tsx. */
+  --font-sans: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
+ * Glass surfaces. Where each one goes (docs/diseno.md D13):
+ *   card-surface  bento tiles and list groups   glass         nav, toast, sticky header
+ *   glass-strong  sheets
+ * Never per list row, popovers, menus or long text. The blur needs both declarations: Safari
+ * 16.4-17 only knows -webkit-backdrop-filter.
+ */
+@utility card-surface {
+  background-color: var(--card);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+@utility glass {
+  background-color: var(--glass);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+@utility glass-strong {
+  background-color: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+}
+
+/* Mobile baseline (skill mobile-native, docs/diseno.md D15). */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  /* 16px minimum: below that iOS Safari zooms the page on focus. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  /* Controls only; the text of links and body copy stays selectable. */
+  button,
+  [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}

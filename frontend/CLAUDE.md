@@ -1,14 +1,14 @@
 # Frontend — Next.js
 
-Next.js (App Router) · TypeScript **strict** · React Server Components · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · Playwright (E2E).
+Next.js (App Router) · TypeScript **strict** · React Server Components · Tailwind CSS v4 · shadcn/ui con Base UI · Phosphor · TanStack Query · react-hook-form + zod · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · vitest + Testing Library · Playwright (E2E, _pendiente_).
 Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en **español**.
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
-> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijan **KAN-24 [FE-01]** (setup, ya hecho) y **KAN-25 [FE-02]** (cliente API): si esas tareas (o posteriores) los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API) y **KAN-33 [FE-07]** (tokens, tema y base): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
-Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos.
+Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos. Vitest 5 usa Vite 8: el alias `@/` se resuelve con `resolve.tsconfigPaths` (no hace falta `vite-tsconfig-paths`).
 
 ## Comandos (siempre desde `/frontend`)
 | Para | Comando |
@@ -21,10 +21,10 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Formato (verificar / aplicar) | `npm run format:check` / `npm run format` (Prettier; no toca los `*.md`) |
 | Build | `npm run build` |
 | Regenerar tipos de la API | `npm run gen:api` (lee `../backend/openapi.json` y escribe `src/lib/api/schema.d.ts`; idempotente) |
-| Tests de lógica | `npm test` _(pendiente: se añade con la primera lógica testeable)_ |
-| E2E | `npx playwright test` _(pendiente)_ |
+| Tests (lógica y componentes) | `npm test` (vitest, una pasada) · `npm run test:watch` |
+| E2E | `npx playwright test` _(pendiente: se instala con la primera sub-tarea de E2E; proyectos "iPhone" WebKit y "Pixel" Chromium a 360 px, y comparar la salida de `Intl` de Node con la de WebKit y Chromium; ver `docs/diseno.md` §4)_ |
 
-`lint`, `typecheck` y `format:check` no necesitan variables de entorno; `dev`, `build` y `start` sí.
+`lint`, `typecheck`, `format:check` y `test` no necesitan variables de entorno; `dev`, `build` y `start` sí. `build` descarga las fuentes de Google (`next/font`): necesita red.
 
 En local, el backend corre en `http://localhost:8000` y el emulador de Firebase Auth en `localhost:9099` (`docker compose up -d` desde la raíz).
 
@@ -33,12 +33,23 @@ En local, el backend corre en `http://localhost:8000` y el emulador de Firebase 
 frontend/
 ├── src/
 │   ├── app/                    # rutas (App Router)
-│   │   ├── login/page.tsx      # login email + Google (popup)
-│   │   ├── (private)/          # rutas que requieren sesión
-│   │   └── layout.tsx
+│   │   ├── layout.tsx          # raíz: fuentes (next/font), `viewport`, <Providers>
+│   │   ├── globals.css         # tokens (claro + oscuro), glass, base móvil
+│   │   ├── login/page.tsx      # (pendiente) login email + Google (popup)
+│   │   └── (private)/          # (pendiente) rutas que requieren sesión
 │   ├── proxy.ts                # (pendiente) redirige a /login si no hay cookie de sesión. Next 16 renombró `middleware.ts` a `proxy.ts`
+│   ├── components/
+│   │   ├── providers.tsx       # QueryClientProvider (un QueryClient por request en servidor)
+│   │   └── ui/                 # (pendiente, KAN-34) componentes shadcn/Base UI
 │   ├── lib/
-│   │   ├── api/                # cliente tipado de la API (openapi-fetch)
+│   │   ├── core/               # núcleo puro, compartible con la app nativa (ver "Core" abajo)
+│   │   │   ├── locale.ts       # locale por moneda del espacio (mapa fijo, fallback es-UY)
+│   │   │   ├── money.ts        # `formatMoney(minor, currency, opts)`: unidades menores → texto
+│   │   │   ├── dates.ts        # `formatLocalDate`, `formatInstant`, `todayInTimezone`
+│   │   │   ├── i18n.ts         # (pendiente) mapa único de traducciones de valores del backend
+│   │   │   ├── schemas/        # (pendiente) esquemas zod de formularios
+│   │   │   └── data/           # `ApiClient`, `ApiError` + `unwrap`, y las funciones de datos (`queryOptions`)
+│   │   ├── api/                # adaptadores del cliente tipado de la API (openapi-fetch)
 │   │   │   ├── schema.d.ts     # GENERADO por gen:api (versionado) — nunca editar a mano
 │   │   │   ├── server.ts       # `getServerApi()` (import "server-only"): BACKEND_URL + reenvía la cabecera Cookie
 │   │   │   ├── browser.ts      # `browserApi`: baseUrl `/api` (rewrite) + `credentials: "include"`
@@ -50,23 +61,26 @@ frontend/
 │   │   │   ├── client.ts       # `clientEnv`: úsalo desde cualquier sitio, también componentes cliente
 │   │   │   └── validate.ts     # `assertValidEnv()`: la llama next.config.ts al arrancar y en el build
 │   │   ├── firebase.ts         # (pendiente) init de Firebase Auth (emulador en local)
-│   │   ├── i18n.ts             # (pendiente) mapa único de traducciones de valores del backend
-│   │   └── money.ts            # (pendiente) formateo de unidades menores → texto
-│   └── components/             # (pendiente)
+│   │   └── utils.ts            # `cn()` (clsx + tailwind-merge)
 ├── docs/diseno.md              # decisiones de diseño y librerías (FE-06); léelo antes de una pantalla nueva
 ├── e2e/                        # (pendiente) Playwright (qa)
+├── components.json             # shadcn: estilo base-nova (Base UI), iconLibrary phosphor
+├── postcss.config.mjs          # Tailwind v4 (`@tailwindcss/postcss`)
+├── vitest.config.mts           # proyectos "unit" (`*.test.ts`, Node) y "ui" (`*.test.tsx`, jsdom)
 ├── .env.example                # lista comentada de variables; se copia a .env.local
 ├── .nvmrc                      # versión de Node
-├── eslint.config.mjs           # ESLint (flat config) + regla que prohíbe `process.env` fuera de lib/env/
+├── eslint.config.mjs           # ESLint (flat config): prohíbe `process.env` fuera de lib/env/, el import raíz de Phosphor y lo que core no puede importar
 ├── .prettierrc.json            # Prettier (printWidth 100; el resto sale de ../.editorconfig)
-└── next.config.ts              # valida el entorno; rewrite /api/* → backend
+└── next.config.ts              # valida el entorno; rewrite /api/* → backend; optimizePackageImports de Phosphor
 ```
 
 ## Convenciones
 - **API:** solo vía `lib/api/server.ts` o `lib/api/browser.ts`, tipados con `schema.d.ts`. Nunca `fetch` suelto al backend ni tipos de respuesta escritos a mano.
   - Servidor: `const api = await getServerApi();` (una vez por render) y `await api.GET("/ruta")`. Lee los headers de la petición, así que la ruta pasa a ser dinámica. No usa caché (`cache: "no-store"`).
-  - Navegador: `browserApi.GET("/ruta")` desde handlers o efectos de componentes cliente. Su `baseUrl` es relativa, así que en Node falla con `Failed to parse URL`: en Server Components usa `getServerApi()`.
+  - Navegador: `browserApi` solo dentro del `queryFn` / `mutationFn` de TanStack Query (nunca en efectos sueltos). Su `baseUrl` es relativa, así que en Node falla con `Failed to parse URL`: en Server Components usa `getServerApi()`.
   - Las llamadas devuelven `{ data, error, response }`, ya tipados con `schema.d.ts`: no los redeclares a mano.
+  - **Datos con TanStack Query** (D2): las funciones de datos viven en `lib/core/data/<recurso>.ts` y **reciben un `ApiClient`** (`lib/core/data/api-client.ts`), no importan un cliente. Exportan `xxxQueryOptions(api)` con la query key (`["spaces"]`, `["spaces", id]`…) y un `queryFn` que envuelve la llamada con `unwrap`: `queryFn: () => unwrap(api.GET("/spaces"))`. `unwrap` devuelve `data` o lanza `ApiError { status, body }` (en un 422, `body` es el detalle de FastAPI para mapear a campos). El servidor y el cliente usan la misma función: el servidor con `getServerApi()`, el cliente con `browserApi`.
+  - Tras una mutación, invalida las queries afectadas (`queryClient.invalidateQueries`).
 - **Contrato:** si `openapi.json` cambió, corre `npm run gen:api`. El CI fallará si los tipos generados no coinciden _(pendiente: KAN-15)_. En tareas de backend que cambian la API, lo hace backend-dev en el mismo PR.
   - Un cambio del contrato que rompa lo que usa el frontend se ve en `npm run typecheck`. `lib/api/contract.check.ts` lo garantiza para `/healthz` y el cableado de los clientes (sus `@ts-expect-error` fallan si el cliente deja de rechazar llamadas erróneas).
   - Los endpoints reales se tipan al usarlos en la app; no hay que registrarlos en ningún sitio.
@@ -76,12 +90,19 @@ frontend/
   - Define las rutas del backend sin barra final: una redirección 307 de FastAPI apuntaría al backend y sacaría al navegador del origen.
 - **Next.js 16:** la protección de rutas va en `proxy.ts` (antes `middleware.ts`, ya deprecado). Ante dudas de APIs, la documentación de la versión instalada está en `node_modules/next/dist/docs/`.
 - **Server vs. client:** Server Components por defecto; `"use client"` solo donde haga falta interactividad o Firebase.
+  - **Prefetch + hidratación:** en el Server Component, `const queryClient = new QueryClient()` (uno por request, nunca a nivel de módulo: son datos de usuario), `await queryClient.prefetchQuery(xxxQueryOptions(await getServerApi()))` y `<HydrationBoundary state={dehydrate(queryClient)}>` alrededor del componente cliente que hace `useQuery(xxxQueryOptions(browserApi))`. El `QueryClientProvider` ya está en `components/providers.tsx` (montado en `layout.tsx`).
+  - **Core** (`lib/core/`): TypeScript puro compartible con la futura app nativa. ESLint le prohíbe importar `next/*`, `react-dom`, `server-only`, `lib/api/server`, `lib/api/browser` y `lib/env/*`; solo `import type` de `@/lib/api/schema`. Sin puertos "por si acaso".
 - **Sesión:** el login con Firebase entrega un ID token → `POST /api/auth/session` → el backend responde con la cookie HttpOnly. El frontend **no guarda tokens**. Logout = `DELETE /api/auth/session`.
 - **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante: `getServerApi()` copia tal cual la cabecera `Cookie` (`(await headers()).get("cookie")`), no la reconstruye con `cookies()` porque eso re-codifica los valores. Un `Set-Cookie` del backend no se propaga desde un Server Component (no puede escribir cookies).
-- **Dinero:** llega como entero en la **unidad menor de la moneda** (ISO 4217): valor × 10^exponente, con el `exponent` que el API envía junto a `currency` (UYU 15,50 = `1550`; CLP 1.500 = `1500`). Nunca asumas ×100. Se formatea solo para mostrar, con `lib/money.ts` (`Intl.NumberFormat`, la moneda y su exponente). Sin aritmética con floats.
-- **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → `lib/i18n.ts`.
+- **Dinero:** llega como entero en la **unidad menor de la moneda** (ISO 4217): valor × 10^exponente, con el `exponent` que el API envía junto a `currency` (UYU 15,50 = `1550`; CLP 1.500 = `1500`). Nunca asumas ×100. Se formatea solo para mostrar, con `formatMoney(minor, { code, exponent }, { sign })` de `lib/core/money.ts`: locale fijo por moneda del espacio (`lib/core/locale.ts`: UYU → es-UY, COP → es-CO, USD → es-UY, fallback es-UY; nunca el del dispositivo), **exactamente `exponent` decimales** y "−" tipográfico (U+2212) en negativos. Acepta `number` entero seguro, `bigint` o `string`; convierte con enteros y cadenas, nunca con `/ 100` ni floats. Sin aritmética con floats.
+- **Fechas:** `lib/core/dates.ts`. La fecha de una transacción (`date`, `YYYY-MM-DD`) se formatea tal cual con `formatLocalDate` (sin zona horaria: no se corre un día); un instante (`timestamptz`) con `formatInstant(instante, space.timezone)`; "hoy" con `todayInTimezone(space.timezone)`. Siempre la zona del espacio, nunca la del dispositivo.
+- **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → mapa único en `lib/core/i18n.ts` _(pendiente: se crea con la primera pantalla que lo necesite)_.
 - **Estados de pantalla:** carga, vacío y error en cada vista que pide datos.
 - **Estilo de código:** componentes en PascalCase, hooks `useXxx`, archivos de rutas según App Router.
+- **Estilos y tokens** (detalle en `docs/diseno.md`): Tailwind v4 con tokens como variables CSS en `src/app/globals.css` (`:root` claro y `@media (prefers-color-scheme: dark)`; no hay clase `.dark`, y `dark:` sigue el sistema). Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`, `rounded-tile`…): nada de hex ni `rgb()` sueltos. Superficies: `card-surface` (tiles bento y grupos), `glass` (nav, toast, header sticky), `glass-strong` (sheets); `card-solid` y `popover` son sólidos. `hover:` ya compila a `@media (hover: hover)`; el feedback táctil va con `active:`. `cn()` de `lib/utils.ts` para combinar clases. Hay un test de contraste AA sobre `globals.css`: si cambias un color, corre `npm test`.
+- **Iconos:** Phosphor siempre desde `@phosphor-icons/react/ssr` (funciona en Server y Client Components; ESLint prohíbe el import raíz). Decorativos con `aria-hidden`; botones solo con icono, `aria-label` en español.
+- **Componentes:** se añaden con `npx shadcn@latest add <componente>` (estilo `base-nova`, Base UI) a `components/ui` y se ajustan a Menta; no se escriben desde cero. Revisa lo que genera: la CLI puede traer `lucide-react` o reescribir `globals.css`.
+- **Formularios:** react-hook-form + `zodResolver` (`@hookform/resolvers` 5, compatible con zod 4) con esquemas de `lib/core/schemas/`. Para que un esquema de request no se desvíe del contrato, comprueba que lo que infiere es asignable al tipo generado: `const _check: components["schemas"]["X"] = {} as z.input<typeof schema>`.
 
 ## Variables de entorno
 - **Validación:** `next.config.ts` llama `assertValidEnv()` (`lib/env/validate.ts`), así que `npm run dev` y `npm run build` fallan con un mensaje claro que lista **todas** las variables que faltan o están mal (servidor y cliente juntas). En local: `cp .env.example .env.local`.
@@ -93,8 +114,10 @@ frontend/
 - Lista comentada en `frontend/.env.example` (nunca leas `.env.local`). Cualquier variable nueva se añade a su schema **y** al `.env.example` en el mismo cambio.
 
 ## Tests
-- Tests de lógica solo para código no trivial (formateo de dinero, traducciones, utilidades): `*.test.ts` junto al archivo.
-- E2E en `e2e/`, pocos y de flujos reales (los escribe qa).
+- **vitest** (`npm test`) con dos proyectos: `*.test.ts` corre en Node (la lógica y el formateo, que dependen del ICU de Node 24) y `*.test.tsx` en jsdom con Testing Library (solo componentes con lógica no trivial). El test va junto al archivo. Importa `describe`, `it`, `expect` de `vitest` (sin globales).
+- Los tests de dinero y fecha comparan texto exacto: NBSP (U+00A0) entre símbolo y cifra y "−" (U+2212), escritos con escapes. Una subida de Node puede cambiar el ICU y romperlos: revisa la salida antes de tocar la expectativa.
+- Pasa el `env` como argumento en vez de tocar `process.env` (`assertValidEnv(env)` lo admite).
+- E2E con Playwright en `e2e/`, pocos y de flujos reales (los escribe qa). _(pendiente: todavía no está instalado.)_
 
 <!-- BEGIN:nextjs-agent-rules -->
 
