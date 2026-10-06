@@ -46,6 +46,15 @@ async def _login(
     )
 
 
+async def _login_ok(
+    client: AsyncClient, id_token: str, timezone: str = TIMEZONE, origin: str = ORIGIN
+) -> Response:
+    """A login that is only the setup of a test: if it fails, the failure shows up here."""
+    response = await _login(client, id_token, timezone, origin)
+    assert response.status_code == 204, response.text
+    return response
+
+
 def _cookie_header(login: Response) -> dict[str, str]:
     name, morsel = parse_set_cookie(login.headers["set-cookie"])
     return {"Cookie": f"{name}={morsel.value}"}
@@ -73,7 +82,7 @@ async def test_first_login_creates_one_personal_space_visible_through_the_api(
 
     login = await _login(api_client, account.id_token)
 
-    assert login.status_code == 204
+    assert login.status_code == 204, login.text
     spaces = await api_client.get("/spaces")
     assert spaces.status_code == 200
     [space] = spaces.json()
@@ -101,7 +110,7 @@ async def test_me_and_spaces_feed_the_home_greeting(
     # The home shows "Hola, {name}, tu espacio es Mi espacio": the UI is a frontend task, the API
     # has to hand over both pieces right after the first login.
     account = await emulator_user("Eva E2E")
-    await _login(api_client, account.id_token)
+    await _login_ok(api_client, account.id_token)
 
     me = await api_client.get("/me")
     spaces = await api_client.get("/spaces")
@@ -114,18 +123,18 @@ async def test_me_and_spaces_feed_the_home_greeting(
 # --- Criterion 2: a later login does not create another space --------------------------------
 
 
-async def test_second_login_with_a_new_real_token_keeps_one_space_and_its_timezone(
+async def test_a_second_real_sign_in_keeps_one_space_and_its_timezone(
     api_client: AsyncClient, session: AsyncSession, emulator_user: NewUser, emulator_host: str
 ) -> None:
     account = await emulator_user()
-    await _login(api_client, account.id_token)
+    await _login_ok(api_client, account.id_token)
     [first] = (await api_client.get("/spaces")).json()
     # A second sign-in of the same account (the emulator may repeat the token within a second).
     second_token = (await sign_in(emulator_host, account)).id_token
 
     login = await _login(api_client, second_token, timezone="Asia/Tokyo")
 
-    assert login.status_code == 204
+    assert login.status_code == 204, login.text
     [after] = (await api_client.get("/spaces")).json()
     assert after["id"] == first["id"]
     assert after["timezone"] == TIMEZONE
@@ -167,7 +176,7 @@ async def test_a_cookie_of_a_deleted_firebase_account_is_401_invalid_session(
     api_client: AsyncClient, emulator_user: NewUser, emulator_host: str
 ) -> None:
     account = await emulator_user()
-    await _login(api_client, account.id_token)
+    await _login_ok(api_client, account.id_token)
     assert (await api_client.get("/me")).status_code == 200
 
     await delete_account(emulator_host, account)
@@ -196,7 +205,7 @@ async def test_an_old_sign_in_token_is_rejected_and_an_existing_user_keeps_their
     api_client: AsyncClient, session: AsyncSession, emulator_user: NewUser, age: timedelta
 ) -> None:
     account = await emulator_user()
-    await _login(api_client, account.id_token)
+    await _login_ok(api_client, account.id_token)
     api_client.cookies.clear()  # the old token must not be rescued by the earlier session
 
     login = await _login(api_client, old_id_token(age, account))
@@ -215,8 +224,8 @@ async def test_user_b_gets_404_on_the_space_of_user_a_with_real_sessions(
 ) -> None:
     ana = await emulator_user("Ana")
     bea = await emulator_user("Bea")
-    cookie_a = _cookie_header(await _login(api_client, ana.id_token))
-    cookie_b = _cookie_header(await _login(api_client, bea.id_token))
+    cookie_a = _cookie_header(await _login_ok(api_client, ana.id_token))
+    cookie_b = _cookie_header(await _login_ok(api_client, bea.id_token))
     api_client.cookies.clear()  # every request below carries its own Cookie header
     [space_a] = (await api_client.get("/spaces", headers=cookie_a)).json()
     [space_b] = (await api_client.get("/spaces", headers=cookie_b)).json()
@@ -241,7 +250,7 @@ async def test_logout_clears_the_cookie_and_the_client_is_logged_out(
     api_client: AsyncClient, emulator_user: NewUser
 ) -> None:
     account = await emulator_user()
-    await _login(api_client, account.id_token)
+    await _login_ok(api_client, account.id_token)
     assert (await api_client.get("/me")).status_code == 200
 
     logout = await api_client.delete("/auth/session", headers={"Origin": ORIGIN})

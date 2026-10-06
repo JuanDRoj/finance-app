@@ -75,15 +75,20 @@ async def sign_in(emulator_host: str, account: EmulatorAccount) -> EmulatorAccou
 
 
 async def delete_account(emulator_host: str, account: EmulatorAccount) -> None:
-    """Delete one account. A 400 means it is already gone (a test deleted it itself)."""
+    """Delete one account.
+
+    Only "the account is already gone" is tolerated (a test deleted it itself): the emulator
+    answers it with a 400 whose `error.message` is `USER_NOT_FOUND`. Any other failure raises.
+    """
     async with AsyncClient() as http:
         response = await http.post(
             _url(emulator_host, "accounts:delete"),
             params={"key": FAKE_API_KEY},
             json={"idToken": account.id_token},
         )
-    if response.status_code != 400:
-        response.raise_for_status()
+    if response.status_code == 400 and response.json()["error"]["message"] == "USER_NOT_FOUND":
+        return
+    response.raise_for_status()
 
 
 def old_id_token(age: timedelta, account: EmulatorAccount) -> str:
