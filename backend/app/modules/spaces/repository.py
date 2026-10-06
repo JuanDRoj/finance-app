@@ -43,3 +43,18 @@ async def get_member(
         SpaceMember.space_id == space_id, SpaceMember.user_id == user_id
     )
     return await session.scalar(stmt)
+
+
+async def list_for_user(session: AsyncSession, *, user_id: uuid.UUID) -> list[Space]:
+    """The spaces where the user is a member, oldest first."""
+    stmt = (
+        select(Space)
+        .join(SpaceMember, SpaceMember.space_id == Space.id)
+        .where(SpaceMember.user_id == user_id)
+        .order_by(Space.created_at, Space.id)
+    )
+    return list(await session.scalars(stmt))
+
+
+async def get(session: AsyncSession, *, space_id: uuid.UUID) -> Space | None:
+    return await session.get(Space, space_id)
