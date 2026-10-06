@@ -241,6 +241,33 @@ def test_an_empty_emulator_host_is_accepted_outside_local(monkeypatch: pytest.Mo
     assert _staging().FIREBASE_AUTH_EMULATOR_HOST is None
 
 
+@pytest.mark.parametrize("env", ["staging", "prod"])
+@pytest.mark.parametrize("value", [" ", "   ", "\t", " localhost:9099"])
+def test_a_blank_but_not_empty_emulator_host_is_rejected_outside_local(
+    env: str, value: str
+) -> None:
+    # firebase-admin treats anything but "" as "use the emulator" (no signature check), so
+    # "  " must not slip through as "unset".
+    with pytest.raises(ValidationError, match="FIREBASE_AUTH_EMULATOR_HOST"):
+        _staging(ENV=env, FIREBASE_AUTH_EMULATOR_HOST=value)
+
+
+@pytest.mark.parametrize("env", ["staging", "prod"])
+def test_a_blank_emulator_host_in_the_environment_is_rejected_outside_local(
+    monkeypatch: pytest.MonkeyPatch, env: str
+) -> None:
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", " ")
+    with pytest.raises(ValidationError, match="FIREBASE_AUTH_EMULATOR_HOST"):
+        _staging(ENV=env)
+
+
+def test_a_blank_emulator_host_turns_the_emulator_off_in_local(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", " ")
+    assert _settings().FIREBASE_AUTH_EMULATOR_HOST is None
+
+
 def test_firebase_project_id_defaults_to_the_emulator_project_in_local() -> None:
     assert _settings().FIREBASE_PROJECT_ID == "demo-finance-local"
 
@@ -286,6 +313,32 @@ def test_allowed_origins_are_normalised_to_lowercase() -> None:
 def test_allowed_origins_are_required_outside_local(env: str, value: str | None) -> None:
     with pytest.raises(ValidationError, match="ALLOWED_ORIGINS"):
         _staging(ENV=env, ALLOWED_ORIGINS=value)
+
+
+@pytest.mark.parametrize(
+    ("origin", "expected"),
+    [
+        ("https://app.example.com:443", "https://app.example.com"),
+        ("http://localhost:80", "http://localhost"),
+        ("HTTPS://App.Example.com:0443", "https://app.example.com"),
+        ("https://app.example.com:", "https://app.example.com"),
+        # Not the default port of that scheme: the browser sends it, so it stays.
+        ("https://app.example.com:80", "https://app.example.com:80"),
+        ("http://localhost:443", "http://localhost:443"),
+        ("http://localhost:3000", "http://localhost:3000"),
+        ("http://[::1]:80", "http://[::1]"),
+        ("http://[::1]:3000", "http://[::1]:3000"),
+    ],
+)
+def test_allowed_origins_drop_the_default_port_like_browsers_do(origin: str, expected: str) -> None:
+    origins = _staging(ALLOWED_ORIGINS=origin).ALLOWED_ORIGINS
+    assert origins == [expected]
+
+
+@pytest.mark.parametrize("origin", ["https://app.example.com:abc", "https://app.example.com:99999"])
+def test_allowed_origins_reject_an_invalid_port(origin: str) -> None:
+    with pytest.raises(ValidationError, match="ALLOWED_ORIGINS"):
+        _staging(ALLOWED_ORIGINS=origin)
 
 
 @pytest.mark.parametrize(

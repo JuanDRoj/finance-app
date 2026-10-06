@@ -30,12 +30,24 @@ def docs_enabled() -> bool:
     return os.environ.get("ENV", "local") == "local"
 
 
+def running_on_cloud_run() -> bool:
+    """Cloud Run defines `K_SERVICE` in every service container; nothing else here does.
+
+    Read from the process environment, never from `Settings` (which may come from a `.env`).
+    """
+    return bool(os.environ.get("K_SERVICE"))
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
 def _normalise_origin(origin: str) -> str:
-    """`https://App.Example.com:8443` -> lowercase, or ValueError if it is not a bare origin.
+    """`https://App.Example.com:443` -> `https://app.example.com`, or ValueError if not an origin.
 
     A browser sends `Origin: scheme://host[:port]`: no path (not even a trailing slash), query,
     fragment or credentials, and never `*`. Anything else in the allowlist would never match, so
-    it is rejected at startup instead of silently locking everybody out.
+    it is rejected at startup instead of silently locking everybody out. The default port of the
+    scheme (`:443` for https, `:80` for http) is dropped because browsers never send it.
     """
     parts = urlsplit(origin)
     if (
@@ -49,7 +61,14 @@ def _normalise_origin(origin: str) -> str:
         or origin.endswith(("?", "#"))
     ):
         raise ValueError(f"{origin!r} is not an origin like 'https://app.example.com'")
-    return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
+    scheme = parts.scheme.lower()
+    host = parts.hostname
+    if ":" in host:  # IPv6 literal: urlsplit strips the brackets
+        host = f"[{host}]"
+    port = parts.port  # ValueError if it is not a number between 0 and 65535
+    if port is None or port == _DEFAULT_PORTS[scheme]:
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
 
 
 def _is_blank(value: str | SecretStr | None) -> bool:
@@ -93,10 +112,18 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = Field(default=3, ge=0)
     DB_POOL_TIMEOUT: int = Field(default=30, ge=1)
 
-    @field_validator("FIREBASE_AUTH_EMULATOR_HOST", "FIREBASE_PROJECT_ID")
+    @field_validator("FIREBASE_PROJECT_ID")
     @classmethod
     def _blank_is_unset(cls, value: str | None) -> str | None:
         return value if value is not None and value.strip() else None
+
+    @field_validator("FIREBASE_AUTH_EMULATOR_HOST")
+    @classmethod
+    def _empty_is_unset(cls, value: str | None) -> str | None:
+        # Only "" means unset, like for firebase-admin, which reads os.environ and treats any
+        # other value (even "  ") as an emulator. A whitespace-only value is kept so that
+        # `_emulator_only_in_local` can refuse it outside local.
+        return value or None
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
@@ -109,10 +136,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _emulator_only_in_local(self) -> Self:
-        if self.ENV != "local" and self.FIREBASE_AUTH_EMULATOR_HOST:
-            raise ValueError("FIREBASE_AUTH_EMULATOR_HOST must not be set when ENV is not 'local'")
-        if self.ENV == "local" and "FIREBASE_AUTH_EMULATOR_HOST" not in self.model_fields_set:
+        host = self.FIREBASE_AUTH_EMULATOR_HOST
+        if self.ENV != "local":
+            if host is not None:  # any non-empty value, whitespace included
+                raise ValueError(
+                    "FIREBASE_AUTH_EMULATOR_HOST must not be set when ENV is not 'local'"
+                )
+            return self
+        if "FIREBASE_AUTH_EMULATOR_HOST" not in self.model_fields_set:
             self.FIREBASE_AUTH_EMULATOR_HOST = LOCAL_FIREBASE_EMULATOR_HOST
+        elif host is not None and not host.strip():
+            self.FIREBASE_AUTH_EMULATOR_HOST = None  # whitespace only: off, like an empty value
         return self
 
     @model_validator(mode="after")

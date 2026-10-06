@@ -112,8 +112,10 @@ def create_firebase_auth(settings: Settings) -> FirebaseAdminAuth:
     """Initialise firebase-admin for the configured project. It opens no connection yet.
 
     firebase-admin finds the emulator by reading os.environ, not our settings (which may come
-    from `backend/.env`), so the host is copied there first. The rule that the emulator never
-    runs outside local is the `Settings` validator: by now the host can only be set in local.
+    from `backend/.env`), so the host is copied there first, or removed when the settings have
+    none: os.environ must always agree with `Settings`, because firebase-admin treats any
+    non-empty value as an emulator and then skips the signature check. The rule that the emulator
+    never runs outside local is the `Settings` validator: by now the host can only be set in local.
     """
     import firebase_admin
 
@@ -121,9 +123,11 @@ def create_firebase_auth(settings: Settings) -> FirebaseAdminAuth:
     if host:
         os.environ[EMULATOR_HOST_ENV_VAR] = host
         logger.info("firebase_auth_emulator_enabled", extra={"emulator_host": host})
-    elif settings.FIREBASE_PROJECT_ID and settings.FIREBASE_PROJECT_ID.startswith("demo-"):
-        # A `demo-` project only exists inside the emulator: real Google would reject its tokens.
-        logger.warning("firebase_demo_project_without_emulator")
+    else:
+        os.environ.pop(EMULATOR_HOST_ENV_VAR, None)
+        if settings.FIREBASE_PROJECT_ID and settings.FIREBASE_PROJECT_ID.startswith("demo-"):
+            # A `demo-` project only exists inside the emulator: real Google rejects its tokens.
+            logger.warning("firebase_demo_project_without_emulator")
 
     # A named app (not the global default): several can coexist and each one can be deleted.
     app = firebase_admin.initialize_app(

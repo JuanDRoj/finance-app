@@ -170,6 +170,35 @@ def test_the_emulator_host_of_the_settings_reaches_firebase_admin(
         instance.close()
 
 
+@pytest.mark.parametrize("host", ["", " "])
+def test_the_variable_is_removed_when_the_settings_have_no_emulator(
+    monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    # os.environ must always agree with Settings: a stale value would turn the emulator on
+    # (firebase-admin trusts any non-empty value and then skips the signature check).
+    monkeypatch.setenv(ENV_VAR, "localhost:9099")
+    settings = Settings(_env_file=None, FIREBASE_AUTH_EMULATOR_HOST=host)
+    assert settings.FIREBASE_AUTH_EMULATOR_HOST is None
+
+    instance = create_firebase_auth(settings)
+    try:
+        assert ENV_VAR not in os.environ
+    finally:
+        instance.close()
+
+
+def test_removing_the_variable_is_fine_when_it_was_never_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(ENV_VAR, "placeholder")  # so monkeypatch restores the absent state
+    monkeypatch.delenv(ENV_VAR)
+    instance = create_firebase_auth(Settings(_env_file=None, FIREBASE_AUTH_EMULATOR_HOST=""))
+    try:
+        assert ENV_VAR not in os.environ
+    finally:
+        instance.close()
+
+
 def test_the_app_uses_the_configured_project_and_close_releases_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
