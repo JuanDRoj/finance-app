@@ -14,4 +14,16 @@ Copias fijadas a un commit del repositorio de origen y revisadas antes de entrar
 Reglas:
 - Las convenciones del proyecto (`CLAUDE.md` de cada carpeta y `frontend/docs/diseno.md`) ganan sobre cualquier skill.
 - Ninguna de estas skills declara `allowed-tools` ni ejecuta scripts.
+- Excepción: `logo-design` (ver abajo) ejecuta scripts y vive fuera del repo.
 - Skills evaluadas y descartadas (2026-10-05): Impeccable, Taste Skill, `find-skills`, `pick-ui-library`. Diferidas: `improve-codebase-architecture` (Matt Pocock), `emil-design-eng`, `animate-expo`.
+
+## Skills a nivel de usuario (fuera del repo)
+
+| Skill (`~/.claude/skills/`) | Origen | Commit / versión | Licencia | Quién la usa |
+|---|---|---|---|---|
+| `logo-design` | [kaankiziltug/logo-design-skill](https://github.com/kaankiziltug/logo-design-skill) `skills/logo-design` | `0ecf52e9a4b3ac92b714f7cc6e3148ab8c774134` | MIT (código); los SVG de `assets/library/svg/` son marcas de sus dueños | sesión principal (logo de Kanza) |
+
+Aprobada por Juan David el 2026-10-06 con estas condiciones:
+- No se copia al repo: incluye unos 1.400 logos de marcas reales que no tienen licencia MIT. Solo entran al repo los SVG finales del logo de Kanza.
+- Ejecuta scripts en Python (`scripts/`). Se revisaron en ese commit: solo usan la biblioteca estándar, no se conectan a la red y solo invocan renderizadores locales (`rsvg-convert`, Inkscape, Chrome) para pasar SVG a PNG. No declara `allowed-tools`.
+- Para subir de versión: revisar de nuevo `SKILL.md` y `scripts/` completos y cambiar el commit aquí.
