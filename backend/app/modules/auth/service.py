@@ -37,15 +37,18 @@ def _reject(code: str, detail: str) -> UnauthenticatedError:
 async def create_session(firebase: FirebaseAuth, id_token: str, *, now: datetime) -> NewSession:
     """Verify `id_token` (valid, with a sign-in under five minutes old) and create the cookie.
 
-    Raises `UnauthenticatedError`: `invalid_id_token` or `recent_sign_in_required`.
+    Raises `UnauthenticatedError`: `invalid_id_token`, `email_required` (the account has no
+    email: the app needs it) or `recent_sign_in_required`.
     """
     try:
         identity = await firebase.verify_id_token(id_token)
     except UnauthenticatedError as error:
         logger.warning("session_rejected", extra={"reason": error.code})
         raise
-    if identity.auth_time is None or not identity.email:
+    if identity.auth_time is None:
         raise _reject("invalid_id_token", "Invalid ID token")
+    if not identity.email:
+        raise _reject("email_required", "The account has no email")
     if now - identity.auth_time >= MAX_SIGN_IN_AGE:
         raise _reject("recent_sign_in_required", "Sign in again to start a session")
     cookie = await firebase.create_session_cookie(id_token, SESSION_DURATION)

@@ -273,6 +273,24 @@ async def test_an_old_sign_in_is_a_401_without_cookie_or_rows(
     assert await _snapshot(session) == (0, 0, 0)
 
 
+@pytest.mark.parametrize("email", [None, ""])
+async def test_an_account_without_email_is_a_401_email_required(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    email: str | None,
+) -> None:
+    fake_firebase.identity = make_identity(email=email)
+
+    response = await api_client.post(URL, json=BODY, headers={"Origin": LOCAL_ORIGIN})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "The account has no email", "code": "email_required"}
+    assert "set-cookie" not in response.headers
+    assert fake_firebase.cookie_requests == []
+    assert await _snapshot(session) == (0, 0, 0)
+
+
 async def test_a_token_that_expires_while_creating_the_cookie_is_a_401(
     api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
 ) -> None:
@@ -445,3 +463,14 @@ def test_the_routes_are_in_the_openapi_without_a_trailing_slash(app: FastAPI) ->
     for status in ("401", "403", "422"):
         assert status in paths[URL]["post"]["responses"]
     assert "403" in paths[URL]["delete"]["responses"]
+
+
+def test_logout_documents_no_validation_error_and_no_origin_parameter(app: FastAPI) -> None:
+    # The Origin check is a plain dependency on the request: it must not add a header parameter
+    # (which makes FastAPI document a 422 that can never happen) to either operation.
+    operations = app.openapi()["paths"][URL]
+
+    assert "422" not in operations["delete"]["responses"]
+    assert "parameters" not in operations["delete"]
+    assert "parameters" not in operations["post"]
+    assert "422" in operations["post"]["responses"]  # the body can still be invalid

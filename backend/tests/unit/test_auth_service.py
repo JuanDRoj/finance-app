@@ -70,14 +70,38 @@ async def test_a_token_without_auth_time_is_invalid() -> None:
 
 
 @pytest.mark.parametrize("email", [None, ""])
-async def test_a_token_without_email_is_invalid(email: str | None) -> None:
+async def test_a_token_without_email_has_its_own_error_code(email: str | None) -> None:
     firebase = _firebase_signed_in(timedelta(seconds=1), email=email)
 
     with pytest.raises(UnauthenticatedError) as exc:
         await service.create_session(firebase, "tok", now=NOW)
 
-    assert exc.value.code == "invalid_id_token"
+    assert exc.value.code == "email_required"
+    assert exc.value.detail == "The account has no email"
     assert firebase.cookie_requests == []
+
+
+async def test_a_token_without_auth_time_and_email_is_still_invalid_id_token() -> None:
+    firebase = _firebase_signed_in(None, email=None)
+
+    with pytest.raises(UnauthenticatedError) as exc:
+        await service.create_session(firebase, "tok", now=NOW)
+
+    assert exc.value.code == "invalid_id_token"
+
+
+async def test_a_missing_email_is_logged_with_its_reason_and_no_personal_data(
+    log_stream: io.StringIO,
+) -> None:
+    firebase = _firebase_signed_in(timedelta(seconds=1), email=None)
+
+    with pytest.raises(UnauthenticatedError):
+        await service.create_session(firebase, "secret-token-value", now=NOW)
+
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    rejected = [line for line in lines if line["message"] == "session_rejected"]
+    assert [line["reason"] for line in rejected] == ["email_required"]
+    assert "secret-token-value" not in log_stream.getvalue()
 
 
 async def test_an_invalid_token_never_reaches_the_cookie_step() -> None:
