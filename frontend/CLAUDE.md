@@ -20,7 +20,7 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Lint | `npm run lint` (`eslint .`; Next 16 ya no trae `next lint` ni lintea en el build) |
 | Tipos | `npm run typecheck` (`tsc --noEmit`) |
 | Formato (verificar / aplicar) | `npm run format:check` / `npm run format` (Prettier; no toca los `*.md`) |
-| Build | `npm run build`. Si antes corriste `npm run dev` y falla con un error de tipos en `.next/dev/types/validator.ts` (menciona `/catalog`), borra `.next/dev` y repite: son tipos de rutas del modo dev, que incluye el catálogo |
+| Build | `npm run build` (su `prebuild` borra `.next/dev` para que los tipos de rutas del modo dev, que incluyen `/catalog`, no rompan el build) |
 | Regenerar tipos de la API | `npm run gen:api` (lee `../backend/openapi.json` y escribe `src/lib/api/schema.d.ts`; idempotente) |
 | Tests (lógica y componentes) | `npm test` (vitest, una pasada) · `npm run test:watch` |
 | E2E | `npx playwright test` _(pendiente: se instala con la primera sub-tarea de E2E; proyectos "iPhone" WebKit y "Pixel" Chromium a 360 px, y comparar la salida de `Intl` de Node con la de WebKit y Chromium; ver `docs/diseno.md` §4)_ |
@@ -43,7 +43,7 @@ frontend/
 │   ├── components/
 │   │   ├── providers.tsx       # QueryClientProvider (un QueryClient por request en servidor)
 │   │   ├── app-shell.tsx       # marco de una pantalla con sesión: header glass con ranura `actions` ("Cerrar sesión"), safe areas, fondo
-│   │   └── ui/                 # shadcn/Base UI ajustados a Menta: button, input, field, card, alert, skeleton, empty-state, sonner (Toaster) y focus.ts (foco compartido)
+│   │   └── ui/                 # shadcn/Base UI ajustados a Menta: button, input, field, card, alert, skeleton, empty, label y separator (de field), sonner (Toaster) y focus.ts (foco compartido)
 │   ├── lib/
 │   │   ├── core/               # núcleo puro, compartible con la app nativa (ver "Core" abajo)
 │   │   │   ├── locale.ts       # locale por moneda del espacio (mapa fijo, fallback es-UY)
@@ -104,7 +104,7 @@ frontend/
 - **Estilo de código:** componentes en PascalCase, hooks `useXxx`, archivos de rutas según App Router.
 - **Estilos y tokens** (detalle en `docs/diseno.md`): Tailwind v4 con tokens como variables CSS en `src/app/globals.css` (`:root` claro y `@media (prefers-color-scheme: dark)`; no hay clase `.dark`, y `dark:` sigue el sistema). Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`, `rounded-tile`…): nada de hex ni `rgb()` sueltos. Superficies: `card-surface` (tiles bento y grupos), `glass` (nav, toast, header sticky), `glass-strong` (sheets); `card-solid` y `popover` son sólidos. `hover:` ya compila a `@media (hover: hover)`; el feedback táctil va con `active:`. `cn()` de `lib/utils.ts` para combinar clases. Hay un test de contraste AA sobre `globals.css`: si cambias un color, corre `npm test`.
 - **Iconos:** Phosphor siempre desde `@phosphor-icons/react/ssr` (funciona en Server y Client Components; ESLint prohíbe el import raíz). Decorativos con `aria-hidden`; botones solo con icono, `aria-label` en español.
-- **Componentes:** se añaden con `npx shadcn@latest add <componente>` (estilo `base-nova`, Base UI) a `components/ui` y se ajustan a Menta; no se escriben desde cero. Revisa lo que genera: la CLI puede traer `lucide-react` o reescribir `globals.css`, y (visto en KAN-34) añade `cn` y `next-themes` a `package.json`: reviértelo (usamos `cn()` de `lib/utils.ts`) y revisa `git diff package.json package-lock.json`. Los componentes y sus props están en `docs/diseno.md` D4; el catálogo, en `/catalog`.
+- **Componentes:** se añaden con `npx shadcn@latest add <componente>` (estilo `base-nova`, Base UI) a `components/ui` y se ajustan a Menta; no se escriben desde cero. Revisa lo que genera: la CLI puede traer `lucide-react` o reescribir `globals.css`, y (visto en KAN-34) añade `cn` y `next-themes` a `package.json`: reviértelo (usamos `cn()` de `lib/utils.ts`) y revisa `git diff package.json package-lock.json`. `shadcn add` importa `cn` del paquete `cn`: cámbialo a `@/lib/utils`. Los componentes y sus props están en `docs/diseno.md` D4; el catálogo, en `/catalog`.
 - **Errores del API en pantalla:** `describeApiError(error)` (`lib/core/i18n.ts`) + `<Alert>`; nunca muestres el `detail` en inglés ni el `code`. Un código nuevo del backend necesita su traducción ahí.
 - **Formularios:** react-hook-form + `zodResolver` (`@hookform/resolvers` 5, compatible con zod 4) con esquemas de `lib/core/schemas/`. Para que un esquema de request no se desvíe del contrato, comprueba que lo que infiere es asignable al tipo generado: `const _check: components["schemas"]["X"] = {} as z.input<typeof schema>`.
 

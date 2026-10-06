@@ -44,7 +44,7 @@ export function Toaster(props: ToasterProps) {
           // `!` (important) because Sonner's unlayered styles would otherwise override these (they also
           // remove the outline and draw a faint box-shadow on focus: the project's ring, focus.ts, replaces it).
           actionButton:
-            "h-11! rounded-full! bg-primary! px-4! text-sm! font-semibold! text-primary-foreground! focus-visible:outline-2! focus-visible:outline-offset-2! focus-visible:outline-ring!",
+            "h-11! rounded-full! bg-primary! px-4! text-sm! font-semibold! text-primary-foreground! focus-visible:outline-solid! focus-visible:outline-2! focus-visible:outline-offset-2! focus-visible:outline-ring!",
         },
       }}
       {...props}

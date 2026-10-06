@@ -4,8 +4,16 @@ import { AppShell } from "@/components/app-shell";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Field } from "@/components/ui/field";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { focusRingForced } from "@/components/ui/focus";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/core/data/errors";
@@ -132,27 +140,68 @@ export default function CatalogPage() {
 
         <Section title="Campos">
           <Card variant="solid">
-            <Field
-              label="Correo electrónico"
-              type="email"
-              autoComplete="email"
-              placeholder="tu@correo.com"
-            />
-            <Field label="Foco" className={focusRingForced} defaultValue="Con anillo de foco" />
-            <Field label="Deshabilitado" disabled defaultValue="No editable" />
-            <Field
-              label="Monto"
-              inputMode="decimal"
-              description="Hasta 2 decimales."
-              defaultValue="1550,50"
-            />
-            <Field label="Contraseña" type="password" error="La contraseña es demasiado corta." />
-            <Field
-              label="Un nombre de cuenta con una etiqueta larguísima que tiene que partirse en varias líneas sin romper nada"
-              optional
-              defaultValue="Ahorros"
-              error="Este es un mensaje de error muy largo para comprobar que se parte en varias líneas y que el icono no se deforma a 360 px de ancho."
-            />
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="demo-email">Correo electrónico</FieldLabel>
+                <Input
+                  id="demo-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="tu@correo.com"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="demo-focus">Foco</FieldLabel>
+                <Input
+                  id="demo-focus"
+                  className={focusRingForced}
+                  defaultValue="Con anillo de foco"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="demo-disabled">Deshabilitado</FieldLabel>
+                <Input id="demo-disabled" disabled defaultValue="No editable" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="demo-amount">Monto</FieldLabel>
+                <Input
+                  id="demo-amount"
+                  inputMode="decimal"
+                  aria-describedby="demo-amount-description"
+                  defaultValue="1550,50"
+                />
+                <FieldDescription id="demo-amount-description">Hasta 2 decimales.</FieldDescription>
+              </Field>
+              <Field data-invalid>
+                <FieldLabel htmlFor="demo-password">Contraseña</FieldLabel>
+                <Input
+                  id="demo-password"
+                  type="password"
+                  aria-invalid
+                  aria-describedby="demo-password-error"
+                />
+                <FieldError id="demo-password-error">La contraseña es demasiado corta.</FieldError>
+              </Field>
+              <Field data-invalid>
+                <FieldLabel htmlFor="demo-long">
+                  <span>
+                    Un nombre de cuenta con una etiqueta larguísima que tiene que partirse en varias
+                    líneas sin romper nada
+                    <span className="font-normal text-muted-foreground"> (opcional)</span>
+                  </span>
+                </FieldLabel>
+                <Input
+                  id="demo-long"
+                  aria-invalid
+                  aria-describedby="demo-long-error"
+                  defaultValue="Ahorros"
+                />
+                <FieldError id="demo-long-error">
+                  Este es un mensaje de error muy largo para comprobar que se parte en varias líneas
+                  y que el icono no se deforma a 360 px de ancho.
+                </FieldError>
+              </Field>
+            </FieldGroup>
           </Card>
         </Section>
 
@@ -212,12 +261,20 @@ export default function CatalogPage() {
             </div>
           </Card>
           <Card variant="solid">
-            <EmptyState
-              icon={<Tray aria-hidden weight="duotone" className="size-[22px]" />}
-              title="Aún no tienes gastos"
-              description="Registra el primero y verás aquí tus movimientos del mes."
-              action={<Button size="sm">Agregar gasto</Button>}
-            />
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Tray aria-hidden weight="duotone" />
+                </EmptyMedia>
+                <EmptyTitle>Aún no tienes gastos</EmptyTitle>
+                <EmptyDescription>
+                  Registra el primero y verás aquí tus movimientos del mes.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button size="sm">Agregar gasto</Button>
+              </EmptyContent>
+            </Empty>
           </Card>
         </Section>
 
