@@ -34,19 +34,28 @@ class FakeFirebaseAuth:
         self.identity = make_identity()
         self.verify_error: Exception | None = None
         self.cookie_error: Exception | None = None
+        self.session_error: Exception | None = None
+        self.session_identity = make_identity()
+        self.verified_cookies: list[str] = []
         self.cookie_value = "fake-session-cookie"
         self.verified_tokens: list[str] = []
         self.cookie_requests: list[tuple[str, timedelta]] = []
 
     @property
     def called(self) -> bool:
-        return bool(self.verified_tokens or self.cookie_requests)
+        return bool(self.verified_tokens or self.cookie_requests or self.verified_cookies)
 
     async def verify_id_token(self, id_token: str) -> FirebaseIdentity:
         self.verified_tokens.append(id_token)
         if self.verify_error is not None:
             raise self.verify_error
         return self.identity
+
+    async def verify_session_cookie(self, cookie: str) -> FirebaseIdentity:
+        self.verified_cookies.append(cookie)
+        if self.session_error is not None:
+            raise self.session_error
+        return self.session_identity
 
     async def create_session_cookie(self, id_token: str, expires_in: timedelta) -> str:
         self.cookie_requests.append((id_token, expires_in))

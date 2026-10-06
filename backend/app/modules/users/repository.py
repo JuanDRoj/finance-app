@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Row, func
+from sqlalchemy import Row, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,3 +23,10 @@ async def upsert_by_firebase_uid(
         set_={"email": new_row.excluded.email, "updated_at": func.now()},
     ).returning(User.id, User.email, User.display_name)
     return (await session.execute(stmt)).one()
+
+
+async def get_by_firebase_uid(
+    session: AsyncSession, firebase_uid: str
+) -> Row[uuid.UUID, str, str | None] | None:
+    stmt = select(User.id, User.email, User.display_name).where(User.firebase_uid == firebase_uid)
+    return (await session.execute(stmt)).one_or_none()

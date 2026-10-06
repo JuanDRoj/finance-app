@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,3 +33,13 @@ async def add_member(
 ) -> None:
     session.add(SpaceMember(space_id=space_id, user_id=user_id, role=role))
     await session.flush()
+
+
+async def get_member(
+    session: AsyncSession, *, space_id: uuid.UUID, user_id: uuid.UUID
+) -> SpaceMember | None:
+    """The membership of the user in the space; None if there is none (or no such space)."""
+    stmt = select(SpaceMember).where(
+        SpaceMember.space_id == space_id, SpaceMember.user_id == user_id
+    )
+    return await session.scalar(stmt)

@@ -104,6 +104,7 @@ def find_violations(app_dir: Path) -> list[str]:
             continue
         tree = ast.parse(file.read_text(), filename=str(file))
         is_router = file.name == "router.py"
+        is_dependencies = file.name == "dependencies.py"
         is_layer = own is not None and file.name in {"service.py", "repository.py"}
         seen: set[tuple[int, str]] = set()
 
@@ -133,9 +134,14 @@ def find_violations(app_dir: Path) -> list[str]:
                 report(line, f"imports the {other} package; import its service or schemas")
             elif part not in PUBLIC_PARTS:
                 report(line, f"imports {other}.{part}; only service/schemas/dependencies allowed")
-            elif part == "dependencies" and not is_router:
+            elif part == "dependencies" and not is_router and not is_dependencies:
                 report(line, f"imports {other}.dependencies outside a router")
-            if not is_router and LEVEL.get(other, -1) >= LEVEL.get(own, 99):
+            # Routers and dependencies.py are the HTTP layer and may combine the service/schemas of
+            # any module; a dependencies.py may only reuse `dependencies` of a lower level.
+            level_rule_applies = (part == "dependencies" and is_dependencies) or not (
+                is_router or is_dependencies
+            )
+            if level_rule_applies and LEVEL.get(other, -1) >= LEVEL.get(own, 99):
                 report(
                     line, f"{own} must not import {other} (same or later level) outside a router"
                 )
@@ -304,6 +310,75 @@ def test_dependencies_of_another_module_are_only_for_routers(tmp_path: Path) -> 
         },
     )
     assert len(find_violations(app)) == 1
+
+
+def test_dependencies_file_may_import_dependencies_of_a_lower_level_module(
+    tmp_path: Path,
+) -> None:
+    app = _tree(
+        tmp_path,
+        {
+            "modules/auth/dependencies.py": "",
+            "modules/spaces/dependencies.py": "from app.modules.auth.dependencies import dep\n",
+        },
+    )
+    assert find_violations(app) == []
+
+
+@pytest.mark.parametrize(
+    ("own", "other"),
+    [("auth", "spaces"), ("accounts", "categories"), ("users", "auth")],
+)
+def test_dependencies_file_cannot_import_dependencies_of_same_or_later_level(
+    tmp_path: Path, own: str, other: str
+) -> None:
+    files = {
+        f"modules/{other}/dependencies.py": "",
+        f"modules/{own}/dependencies.py": f"from app.modules.{other}.dependencies import dep\n",
+    }
+    assert len(find_violations(_tree(tmp_path, files))) == 1
+
+
+def test_dependencies_file_may_combine_services_and_schemas_like_a_router(
+    tmp_path: Path,
+) -> None:
+    app = _tree(
+        tmp_path,
+        {
+            "modules/users/service.py": "",
+            "modules/users/schemas.py": "",
+            "modules/auth/dependencies.py": (
+                "from app.modules.users import service\n"
+                "from app.modules.users.schemas import UserRead\n"
+            ),
+        },
+    )
+    assert find_violations(app) == []
+
+
+def test_dependencies_file_still_cannot_import_another_modules_repository(tmp_path: Path) -> None:
+    app = _tree(
+        tmp_path,
+        {
+            "modules/auth/repository.py": "",
+            "modules/spaces/dependencies.py": "from app.modules.auth import repository\n",
+        },
+    )
+    assert len(find_violations(app)) == 1
+
+
+def test_other_files_still_cannot_import_dependencies_of_a_lower_level_module(
+    tmp_path: Path,
+) -> None:
+    for name in ("service.py", "repository.py", "schemas.py"):
+        app = _tree(
+            tmp_path / name,
+            {
+                "modules/auth/dependencies.py": "",
+                f"modules/spaces/{name}": "from app.modules.auth.dependencies import dep\n",
+            },
+        )
+        assert len(find_violations(app)) == 1, name
 
 
 def test_router_still_cannot_import_another_modules_repository(tmp_path: Path) -> None:

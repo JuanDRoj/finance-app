@@ -88,3 +88,17 @@ async def test_different_firebase_uids_are_different_users(session: AsyncSession
     )
 
     assert one.id != two.id
+
+
+async def test_get_by_firebase_uid_returns_the_user(session: AsyncSession) -> None:
+    created = await service.upsert_user(
+        session, firebase_uid="uid-get", email="g@example.com", display_name="G"
+    )
+
+    found = await service.get_by_firebase_uid(session, "uid-get")
+
+    assert found == created
+
+
+async def test_get_by_firebase_uid_returns_none_for_an_unknown_uid(session: AsyncSession) -> None:
+    assert await service.get_by_firebase_uid(session, "uid-nobody") is None

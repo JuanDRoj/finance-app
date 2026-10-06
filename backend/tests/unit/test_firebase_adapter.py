@@ -220,3 +220,75 @@ def test_two_adapters_can_coexist_without_the_default_app(monkeypatch: pytest.Mo
     finally:
         first.close()
         second.close()
+
+
+async def test_the_session_cookie_is_verified_with_revocation_check_for_this_app(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def verify(
+        cookie: str, check_revoked: bool = False, app: Any = None, **_kw: Any
+    ) -> dict[str, Any]:
+        seen.update(cookie=cookie, check_revoked=check_revoked, app=app)
+        return {
+            "uid": "uid-7",
+            "email": "ana@example.com",
+            "name": "Ana",
+            "auth_time": 1_700_000_000,
+        }
+
+    monkeypatch.setattr(auth, "verify_session_cookie", verify)
+
+    identity = await adapter.verify_session_cookie("the-cookie")
+
+    assert seen == {"cookie": "the-cookie", "check_revoked": True, "app": adapter.app}
+    assert (identity.uid, identity.email) == ("uid-7", "ana@example.com")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ValueError("empty"),
+        auth.InvalidSessionCookieError("invalid"),
+        auth.ExpiredSessionCookieError("expired", cause=None),
+        auth.RevokedSessionCookieError("revoked"),
+        auth.UserDisabledError("disabled"),
+        auth.UserNotFoundError("gone"),
+    ],
+    ids=["value-error", "invalid", "expired", "revoked", "disabled", "user-deleted"],
+)
+async def test_firebase_session_cookie_errors_are_a_401(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise error
+
+    monkeypatch.setattr(auth, "verify_session_cookie", fail)
+
+    with pytest.raises(UnauthenticatedError) as exc:
+        await adapter.verify_session_cookie("cookie-secret")
+
+    assert exc.value.code == "invalid_session"
+    assert "cookie-secret" not in exc.value.detail
+
+
+async def test_a_malformed_session_cookie_is_a_401_without_network(
+    adapter: FirebaseAdminAuth,
+) -> None:
+    for cookie in ("", "not-a-jwt"):
+        with pytest.raises(UnauthenticatedError) as exc:
+            await adapter.verify_session_cookie(cookie)
+        assert exc.value.code == "invalid_session"
+
+
+async def test_a_failure_to_reach_firebase_when_verifying_a_cookie_is_not_a_401(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise auth.CertificateFetchError("network down", cause=None)
+
+    monkeypatch.setattr(auth, "verify_session_cookie", fail)
+
+    with pytest.raises(auth.CertificateFetchError):
+        await adapter.verify_session_cookie("cookie")
