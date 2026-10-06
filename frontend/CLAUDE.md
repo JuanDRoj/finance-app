@@ -62,6 +62,7 @@ frontend/
 │   │   │   ├── client.schema.ts  # schema de las NEXT_PUBLIC_* (puro)
 │   │   │   ├── server.ts       # `serverEnv` (import "server-only"): úsalo desde código de servidor
 │   │   │   ├── client.ts       # `clientEnv`: úsalo desde cualquier sitio, también componentes cliente
+│   │   │   ├── page-extensions.ts # `pageExtensionsFor(phase)`: next.config.ts acepta la extensión `dev.tsx` (el catálogo `*.dev.tsx`) solo en `next dev`; así no existe en build ni en producción
 │   │   │   └── validate.ts     # `assertValidEnv()`: la llama next.config.ts al arrancar y en el build
 │   │   ├── firebase.ts         # (pendiente) init de Firebase Auth (emulador en local)
 │   │   └── utils.ts            # `cn()` (clsx + tailwind-merge)

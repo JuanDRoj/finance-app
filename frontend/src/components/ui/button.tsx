@@ -38,11 +38,17 @@ export const buttonVariants = cva(
   },
 );
 
+// An icon-only button has no text, so its accessible name is mandatory: `size="icon"` requires
+// `aria-label` (checked by button.check.tsx).
+type ButtonSizeProps = { size: "icon"; "aria-label": string } | { size?: "default" | "sm" | null };
+
 export type ButtonProps = ButtonPrimitive.Props &
-  VariantProps<typeof buttonVariants> & {
+  Omit<VariantProps<typeof buttonVariants>, "size"> &
+  ButtonSizeProps & {
     /**
      * Shows a spinner and ignores clicks (so a form is not submitted twice) while it is true.
-     * The button keeps its colors, its width and its focus; screen readers get `aria-busy`.
+     * The button keeps its colors and its focus, and grows a little to make room for the spinner
+     * (the label is not replaced); screen readers get `aria-busy` and `aria-disabled`.
      */
     loading?: boolean;
   };
@@ -65,7 +71,9 @@ export function Button({
       // A disabled button stays focusable so the keyboard user does not lose their place.
       focusableWhenDisabled
       aria-busy={loading || undefined}
-      // Never pass `undefined` here: Base UI's merge would overwrite its own aria-disabled.
+      // Must be `true` whenever the button is disabled or loading: Base UI's prop merge copies an
+      // `undefined` here over the `aria-disabled` it computes itself, which would leave a
+      // disabled button without `aria-disabled` (and without `disabled`: it stays focusable).
       aria-disabled={loading || disabled || undefined}
       data-loading={loading || undefined}
       onClick={(event) => {

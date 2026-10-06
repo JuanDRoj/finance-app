@@ -69,10 +69,15 @@ const SERVER = describeApiError(
 );
 const NETWORK = describeApiError(new TypeError("Failed to fetch"));
 
-export default function CatalogPage() {
+export default async function CatalogPage({
+  searchParams,
+}: Readonly<{ searchParams: Promise<{ title?: string | string[] }> }>) {
+  // `/catalog?title=...` tries a long header title (it wraps to two lines, then is cut).
+  const { title } = await searchParams;
+  const headerTitle = (Array.isArray(title) ? title[0] : title)?.slice(0, 200) || "Catálogo";
   return (
     <AppShell
-      title="Catálogo"
+      title={headerTitle}
       actions={
         <Button variant="ghost" size="sm">
           Cerrar sesión

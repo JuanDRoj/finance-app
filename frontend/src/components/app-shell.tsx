@@ -30,8 +30,10 @@ export function AppShell({ title, actions, children }: AppShellProps) {
         className="pointer-events-none absolute top-96 -left-24 -z-10 size-72 rounded-full bg-blob-2 blur-3xl"
       />
       <header className="glass sticky top-0 z-10 rounded-none border-x-0! border-t-0! pt-[env(safe-area-inset-top,0px)] pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
-        <div className="mx-auto flex min-h-14 max-w-md items-center justify-between gap-3 px-4">
-          <h1 className="min-w-0 truncate font-heading text-xl font-bold">{title}</h1>
+        <div className="mx-auto flex min-h-14 max-w-md items-center justify-between gap-3 px-4 py-2">
+          <h1 className="line-clamp-2 min-w-0 font-heading text-xl leading-tight font-bold break-words">
+            {title}
+          </h1>
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </div>
       </header>
