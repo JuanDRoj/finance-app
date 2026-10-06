@@ -6,75 +6,21 @@ cover what the fake cannot: the emulator's own tokens and its `createSessionCook
 """
 
 import asyncio
-import os
-import socket
 import uuid
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
-import pytest
-from fastapi import FastAPI
 from firebase_admin import auth
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import LOCAL_FIREBASE_EMULATOR_HOST, Settings
-from app.modules.auth.dependencies import get_firebase_auth
-from app.modules.auth.firebase import FirebaseAdminAuth, create_firebase_auth
+from app.modules.auth.firebase import FirebaseAdminAuth
 from app.modules.spaces.models import Space
 from app.modules.users.models import User
+from tests.emulator.helpers import sign_up
 from tests.fakes import parse_set_cookie, unsigned_id_token
 
 ORIGIN = "http://localhost:3000"
-FAKE_API_KEY = "fake-api-key"  # the emulator ignores it
-
-
-@pytest.fixture(scope="session")
-def emulator_host() -> str:
-    host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST") or LOCAL_FIREBASE_EMULATOR_HOST
-    name, _, port = host.partition(":")
-    try:
-        socket.create_connection((name, int(port)), timeout=2).close()
-    except OSError:
-        pytest.fail(
-            f"The Firebase Auth emulator is not reachable at {host}. "
-            "Start it with `docker compose up -d` from the repo root (see README).",
-            pytrace=False,
-        )
-    return host
-
-
-@pytest.fixture
-def real_firebase(
-    app: FastAPI, emulator_host: str, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[FirebaseAdminAuth]:
-    # Set through monkeypatch so that the variable `create_firebase_auth` writes is undone.
-    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", emulator_host)
-    adapter = create_firebase_auth(Settings(_env_file=None))
-    app.dependency_overrides[get_firebase_auth] = lambda: adapter
-    try:
-        yield adapter
-    finally:
-        adapter.close()
-
-
-async def _sign_up(emulator_host: str, email: str, display_name: str) -> str:
-    """Create an account in the emulator and return its ID token."""
-    url = f"http://{emulator_host}/identitytoolkit.googleapis.com/v1/accounts:signUp"
-    async with AsyncClient() as http:
-        response = await http.post(
-            url,
-            params={"key": FAKE_API_KEY},
-            json={
-                "email": email,
-                "password": "correct-horse-battery",
-                "displayName": display_name,
-                "returnSecureToken": True,
-            },
-        )
-    response.raise_for_status()
-    return str(response.json()["idToken"])
 
 
 async def test_a_real_sign_up_gets_a_session_cookie_that_firebase_accepts(
@@ -84,7 +30,8 @@ async def test_a_real_sign_up_gets_a_session_cookie_that_firebase_accepts(
     session: AsyncSession,
 ) -> None:
     email = f"e2e-{uuid.uuid4().hex[:10]}@example.com"
-    id_token = await _sign_up(emulator_host, email, "Eva E2E")
+    account = await sign_up(emulator_host, email, "Eva E2E")
+    id_token = account.id_token
 
     response = await api_client.post(
         "/auth/session",
