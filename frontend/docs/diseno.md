@@ -1,6 +1,6 @@
 # Diseño y librerías (frontend)
 
-Estado: **aprobado por Juan David el 2026-10-05** · Tarea KAN-32 [FE-06] (historia KAN-31, HU-6 Sistema de diseño base) · Lo implementan KAN-33 (setup) y KAN-34 (catálogo de componentes).
+Estado: **aprobado por Juan David el 2026-10-05** · Tarea KAN-32 [FE-06] (historia KAN-31, HU-6 Sistema de diseño base) · Lo implementaron KAN-33 (setup) y KAN-34 (componentes base y catálogo).
 Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/WdpLUxb8M6VgXupjqezr5M (nombre de la app: sin definir).
 
 ## Cómo usar este documento
@@ -39,7 +39,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 2. **Datos.** Prefetch en el Server Component con `getServerApi()` + `HydrationBoundary`; en el cliente `useQuery` / `useInfiniteQuery` sobre funciones de `lib/core`. Tras mutar, invalida las queries afectadas. (D1, D2)
 3. **Estados de pantalla.** Carga, vacío (invita a actuar) y error (qué pasó + qué hacer + datos a salvo). (D13 › Tono)
 4. **Layout.** Diseña a 360 px y revisa 375, ~393 y ~430 antes de ampliar. Safe areas, `dvh`/`svh` (nunca `100vh`), inputs ≥16 px. (D15)
-5. **Componentes.** Busca en `components/ui` y en el catálogo (KAN-34). Si falta, añádelo con la CLI de shadcn (Base UI); no lo escribas desde cero. (D4)
+5. **Componentes.** Busca en `components/ui`, en `components/app-shell.tsx` y en el catálogo (`npm run dev` → http://localhost:3000/catalog; tabla de abajo y D4). Si falta, añádelo con la CLI de shadcn (Base UI), revisa lo que genera y ajústalo a Menta; no lo escribas desde cero. (D4)
 6. **Tokens.** Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`…). Nada de hex ni `rgb()` sueltos. Dinero: `income` / `expense` / `debt`. Glass solo en cromo flotante y tiles: tiles bento → `card`; nav, toast y header sticky → `glass`; sheet → `glass-strong`. (D14, D13 › Glass)
 7. **Tipografía.** Montserrat para números y títulos, Karla para texto; montos con `tabular-nums`. Usa la escala de D13. (D6, D13)
 8. **Iconos.** Phosphor: regular 20–22 px, fill solo en el tab activo, duotone en iconos de categoría. En Server Components importa de `@phosphor-icons/react/ssr`. (D5)
@@ -64,7 +64,10 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Mostrar un valor del backend | Mapa único de `lib/core/i18n.ts` | `CLAUDE.md` |
 | Un icono | Phosphor | D5 |
 | Avisar de algo o "Deshacer" | Sonner | D8 |
-| Botón, campo, selector, tarjeta, hoja inferior, nav, lista, skeleton, estado vacío | Componente de `components/ui` (se añaden en KAN-34) | D4 |
+| Botón (también con "cargando"), campo con label y error, tarjeta, aviso de error, skeleton, estado vacío | `Button`, `Field`, `Card`, `Alert`, `Skeleton`, `EmptyState` de `components/ui` (props en D4) | D4 |
+| Marco de una pantalla con sesión (header, "Cerrar sesión", safe areas, fondo) | `AppShell` de `components/app-shell.tsx` | D4 |
+| Texto de un error del API | `describeApiError(error)` de `lib/core/i18n.ts` + `Alert` | D4, `CLAUDE.md` |
+| Selector, hoja inferior, nav, lista | Aún no existen: se añaden con la CLI de shadcn en la tarea que los necesite | D4 |
 | Tile bento o grupo de lista sobre el fondo decorativo | Token `card` (glass) | D13, D14 |
 | Nav flotante, toast, header sticky | Token `glass` | D13, D14 |
 | Hoja inferior (sheet) | Token `glass-strong` | D13, D14 |
@@ -161,6 +164,26 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Cada componente del catálogo (KAN-34) se prueba a 360 px en sus estados: normal, foco, presionado, deshabilitado, error y carga, en claro y oscuro.
 - Iconos de shadcn: `iconLibrary: "phosphor"` en `components.json` (ver D5).
 
+**Hecho en KAN-34: componentes base y catálogo**
+
+| Componente | Archivo | API (props) | Estados |
+|---|---|---|---|
+| `Button` | `components/ui/button.tsx` | `variant` (`default`, `secondary`, `outline`, `ghost`, `destructive`, `link`), `size` (`default` 52 px, `sm` 44 px, `icon` 44×44: pide `aria-label`), `loading`, y las props de Base UI (`disabled`, `onClick`…) | Normal, presionado (`active:`), foco, deshabilitado y cargando. Cargando: spinner, ignora clics (y el envío del formulario), `aria-busy`, mantiene color, ancho y foco |
+| `Input` | `components/ui/input.tsx` | Props de `<input>` | 48 px, texto de 16 px, borde `--input`, fondo sólido `card-solid`. Foco, deshabilitado, `aria-invalid` |
+| `Field` | `components/ui/field.tsx` | `label` (obligatoria), `error`, `description`, `optional`, `id` y las props del input (acepta `ref`: sirve con `register` de react-hook-form) | Label ligada al input; `error` pone `aria-invalid`, borde `destructive` y un mensaje con icono (`role="alert"`) enlazado por `aria-describedby`. No traduce: recibe el texto en español |
+| `Card` | `components/ui/card.tsx` | `variant`: `glass` (tile bento, token `card`) o `solid`; partes `CardHeader`, `CardTitle` (`as`), `CardDescription`, `CardContent` | Los formularios van en `solid` |
+| `Alert` | `components/ui/alert.tsx` | `variant` (`error` con `role="alert"`, `info` con `role="status"`), `title`, `action`, hijos | Icono y texto, nunca solo color |
+| `Skeleton` | `components/ui/skeleton.tsx` | Props de `<div>` | Decorativo (`aria-hidden`); el contenedor lleva `aria-busy`. Sin animación con `prefers-reduced-motion` |
+| `EmptyState` | `components/ui/empty-state.tsx` | `icon`, `title`, `description`, `action` | Invita a actuar |
+| `Toaster` | `components/ui/sonner.tsx` | Props de Sonner | Montado en `layout.tsx`; ver D8 |
+| `AppShell` | `components/app-shell.tsx` | `title`, `actions` (aquí va "Cerrar sesión", KAN-27), `children` | Header `glass` sticky, columna de 448 px, dos blobs, safe areas en los cuatro lados |
+
+- **Foco** de todos los controles: `components/ui/focus.ts` (`outline` sólido de 2 px con offset y color `ring`). Un test comprueba que sea sólido; si lo cambias, mantén 3:1.
+- **Errores del backend:** `describeApiError(error)` (`lib/core/i18n.ts`) devuelve `{ title, message }` en español para un `ApiError` (por `code`; en un 422 por `type`; si no, por status), un fallo de red o cualquier otra cosa, y nunca muestra el `detail` en inglés ni un código crudo. Un código nuevo del backend necesita su traducción en ese archivo. `fieldErrorMessage(type)` traduce el `type` de un 422 para marcar un campo.
+- **CLI de shadcn:** `shadcn add` añadió `cn` y `next-themes` a `package.json` y generó componentes de 32 px con el estilo por defecto. Se revirtió `package.json` (el repo usa su `cn()` de `lib/utils.ts` y `Toaster` usa `theme="system"`) y se rehicieron los estilos a Menta. Tras cada `shadcn add`, revisa `git diff package.json package-lock.json`.
+- **Catálogo** (`/catalog`): `src/app/catalog/page.dev.tsx` muestra cada componente en sus estados (normal, foco, deshabilitado, cargando, error), en claro y oscuro (según el sistema), con datos extremos (etiquetas y errores largos, monto enorme) y un panel "Auditoría" que mide los controles menores de 44 px y el desbordamiento horizontal al ancho actual (prueba con 360, 375, 393 y 430 px). El estado "Foco" aplica el mismo anillo sin esperar a Tab.
+- **Solo en local:** los archivos se llaman `page.dev.tsx` y `layout.dev.tsx`, y `next.config.ts` solo acepta la extensión `dev.tsx` en `next dev` (`lib/env/page-extensions.ts`, con test). En `next build` y `next start` la ruta no se registra ni se compila. Comprobado: `/catalog` no aparece en la salida del build ni en `.next/server/app-paths-manifest.json`. Una ruta de catálogo nueva debe llamarse `*.dev.tsx` (los componentes que no son rutas pueden ser `.tsx`). `proxy.ts` (KAN-27) debe dejar pasar `/catalog` sin sesión. Efecto secundario local: tras `npm run dev`, `.next/dev/types` conoce `/catalog` y un `npm run build` local falla en el chequeo de tipos hasta que borres `.next/dev` (en CI y en Vercel el checkout es limpio y no pasa).
+
 **Verificado en KAN-33** (con `shadcn` 4.21.2, en una copia desechable): `shadcn init` ofrece **Base UI como primitiva recomendada** (`--base base`; el preset por defecto es `base-nova`); el paquete es **`@base-ui/react`** (1.8.0); `iconLibrary` por defecto es `lucide` y `phosphor` es un valor válido (lo usa el preset `lyra`), así que `components.json` se escribió a mano con `"iconLibrary": "phosphor"`. Además `init` añade `tw-animate-css` y el paquete `shadcn` (`@import "shadcn/tailwind.css"` trae las variantes `data-open`/`data-closed` que usan los componentes), ambos ya instalados, y un `utils.ts` que importa un paquete `cn` de npm: el repo usa su propio `cn()` con `clsx` + `tailwind-merge`. `init` no se corrió en el repo para no sobrescribir `globals.css`/`layout.tsx` ni generar `button.tsx` (es de KAN-34); al hacer `shadcn add`, revisa que no traiga `lucide-react` ni reescriba los tokens.
 
 ### D5. Iconos
@@ -201,7 +224,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Montos y cifras comparables con `tabular-nums` (`font-variant-numeric`).
 - Escala tipográfica en D13.
 
-**Verificar en KAN-34:** que el archivo de fuente que sirve `next/font` conserva `tnum` en Montserrat y en Karla (una columna de montos en el catálogo lo demuestra).
+**Verificar en KAN-34:** que el archivo de fuente que sirve `next/font` conserva `tnum` en Montserrat y en Karla. El catálogo (sección "Cifras") trae una columna de montos y una fila `1111 / 8888` en cada fuente. **Pendiente de ojo humano:** no se pudo comprobar sin navegador; si las cifras no son tabulares, anótalo aquí.
 
 ### D7. Formularios
 
@@ -240,7 +263,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 **Reglas de uso**
 - Un solo `<Toaster />`, montado en `layout.tsx`; `toast()` solo desde código cliente. Consulta la skill `ask-sonner` (`.claude/skills/ask-sonner/`).
 - El toast es cromo flotante: usa el token `glass` (D14), con el fallback sólido de D13 › Glass.
-- Posición por encima de la nav inferior y de la safe area (`offset` / `mobileOffset`).
+- Posición por encima de la nav inferior y de la safe area (`offset` / `mobileOffset`: `16px + env(safe-area-inset-bottom)`; la nav, cuando exista, lo subirá). **Duración 6000 ms** (KAN-34; el valor por defecto de Sonner son 4000 ms), para poder llegar a "Deshacer". El botón "Deshacer" mide 44 px. Sonner inyecta CSS sin capa: sus variables (`--normal-bg`…) se fijan en `sonner.tsx` y las utilidades que lo pisan llevan `!`.
 - Copy: la misma palabra en acción y confirmación: "Eliminaste «Café»" + **Deshacer**. El borrado es suave (`deleted_at`), así que deshacer restaura el registro y se invalidan las queries.
 
 ### D9. Gráficos
@@ -362,7 +385,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 | Título de ítem | Karla | 15 · 700 |
 | Cuerpo | Karla | 16 |
 | Secundario | Karla | 13–14 (mínimo 13) |
-| Label de la nav | fuente por fijar en KAN-34 contra el mockup | 11 · 600/700 (excepción al mínimo de 13) |
+| Label de la nav | fuente por fijar en la tarea que cree la nav (no en KAN-34) | 11 · 600/700 (excepción al mínimo de 13) |
 | Texto de inputs | Karla | ≥16 (evita el zoom de iOS) |
 
 **Espaciado:** base de 4 px (escala de Tailwind). Gutter 16. Gap del bento 10. Padding de tile 14–16. Área táctil ≥44. Botón primario 52. Campos 48.
@@ -410,7 +433,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 **Elección:** variables CSS con nombres de shadcn (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, `--ring`, `--destructive`…) más las de finanzas (`--income`, `--expense`, `--debt`).
 **Motivo:** los componentes de shadcn funcionan sin renombrar; `income` / `expense` / `debt` expresan el dominio; una futura librería nativa (React Native Reusables o HeroUI Native) puede mapearlos; todos los pares de texto cumplen AA (tabla de abajo).
 
-Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@theme inline`; los radios son `--radius-tile` (28), `--radius-icon` (16), `--radius-field` (16), `--radius-nav` (30) y `--radius-sheet` (30) (clases `rounded-tile`, `rounded-icon`…; `--radius: 1rem` alimenta la escala `sm`…`4xl` de shadcn) y los blobs `--blob-1` y `--blob-2` (`bg-blob-1`, `bg-blob-2`). Las superficies glass son utilidades: `card-surface` (blur 20 px, por confirmar en KAN-34), `glass` (24 px) y `glass-strong` (28 px).
+Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@theme inline`; los radios son `--radius-tile` (28), `--radius-icon` (16), `--radius-field` (16), `--radius-nav` (30) y `--radius-sheet` (30) (clases `rounded-tile`, `rounded-icon`…; `--radius: 1rem` alimenta la escala `sm`…`4xl` de shadcn) y los blobs `--blob-1` y `--blob-2` (`bg-blob-1`, `bg-blob-2`). Las superficies glass son utilidades: `card-surface` (blur 20 px; se mantiene, falta verlo en dispositivo), `glass` (24 px) y `glass-strong` (28 px).
 
 | Token | Claro | Oscuro | Uso |
 |---|---|---|---|
@@ -432,7 +455,7 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 | `destructive` | `#B3261E` | `#FF9B8A` | **Solo** errores y acciones destructivas; nunca gastos |
 | `destructive-foreground` | `#FFFFFF` | `#2B0A06` | Texto sobre `destructive` |
 | `border` | `rgba(14,26,20,0.10)` | `rgba(255,255,255,0.10)` | **Decorativo**: separadores y tarjetas |
-| `input` | `rgba(14,26,20,0.48)` | `rgba(255,255,255,0.34)` | **Borde de los controles** (campos, selectores) |
+| `input` | `rgba(14,26,20,0.48)` | `rgba(255,255,255,0.40)` | **Borde de los controles** (campos, selectores). El alfa oscuro subió de 0,34 a 0,40 en KAN-34 para llegar a 3:1 sobre cualquier superficie |
 | `ring` | `#146E4D` | `#6EDDAA` | Foco visible |
 | `income` | = `primary` | = `primary` | Ingresos, con "+" (token separado) |
 | `expense` | = `foreground` | = `foreground` | Gastos, con "−" |
@@ -447,7 +470,7 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 - **Controles:** el borde de campos y selectores usa `--input` (≥3:1), no `--border`. `--border` queda para separadores y tarjetas y nunca es el único indicador de un estado o de un control.
 - **Dinero:** `income` con "+", `expense` con "−" y color `foreground`, `debt` en ámbar. El signo informa, no solo el color. `destructive` nunca marca un gasto.
 - **Superficies:** tiles bento y grupos de lista → `card` (glass); nav, toast y header sticky → `glass`; sheet → `glass-strong`; popovers y menús → `popover` (sólido). Fuera de esos casos y como fallback de glass, `card-solid`. Glass solo donde D13 › Glass lo permite.
-- **Campos sobre glass:** pon los campos sobre `card-solid`, `popover` o la hoja (`glass-strong`). En oscuro, `--input` sobre `card` con un blob detrás queda en 2,61:1 (ver abajo): evita ese caso.
+- **Campos sobre glass:** `Input` pinta su propio fondo `card-solid`, así que se ve igual en cualquier superficie; aun así, los formularios van en `Card variant="solid"`. Desde KAN-34 (`--input` oscuro con alfa 0,40) el borde también llega a 3:1 sobre `card` con un blob detrás.
 - **Foco:** `ring` visible; en un botón `primary` separa el anillo con un offset del color del fondo para que se distinga del relleno.
 - Radios y tamaños: tablas de D13.
 
@@ -465,15 +488,19 @@ Se definen como variables CSS (`:root` y su versión oscura) y se exponen con `@
 | `destructive-foreground` / `destructive` | 6,54 | 8,97 |
 | `primary` / `background` (texto, iconos) | 5,54 | 11,48 |
 | `debt` / `background` | 5,13 | 10,38 |
-| Peor caso de texto sobre glass con blob | 4,88 (`debt`) | 4,81 (`muted-foreground`) |
+| Peor caso de texto sobre glass con blob (`foreground`, `muted-foreground`, `primary`, `debt`; `card`, `glass`, `glass-strong`) | 4,88 (`debt` sobre `glass`) | 4,81 (`muted-foreground` sobre `card`) |
+| `destructive` sobre `card-solid` / `popover` (error de `Field` y de `Alert`) | 6,26 / 6,54 | 8,24 / 8,26 |
+| `muted-foreground` sobre `card-solid` (placeholder) | 6,32 | 7,81 |
+| `primary` sobre `secondary` (icono de estado vacío, no texto, ≥3) | 4,89 | 7,41 |
 | `ring` / `background` (no texto, ≥3) | 5,54 | 11,48 |
-| `input` sobre `background` (no texto, ≥3) | 3,13 | 3,07 |
-| `input` sobre `card-solid` / `popover` | 3,18 / 3,21 | 3,11 / 3,11 |
-| `input` sobre `glass-strong` con blob | 3,13 | 3,01 |
-| `input` sobre `card` con blob | 3,09 | **2,61** |
+| `input` sobre `background` (no texto, ≥3) | 3,13 | 3,80 |
+| `input` sobre `card-solid` / `popover` | 3,18 / 3,21 | 3,76 / 3,77 |
+| `input` sobre `glass-strong` con blob (peor caso) | 3,13 | 3,63 |
+| `input` sobre `card` con blob (peor caso) | 3,09 | 3,04 |
+| `input` sobre `glass` con blob (peor caso) | 3,09 | 3,26 |
 | `border` sobre `background` (decorativo) | 1,23 | 1,28 |
 
-Todos los pares de texto superan 4,5:1. El único no-texto que no llega a 3:1 es `input` sobre `card` con un blob detrás en oscuro (2,61:1); con alfa 0,40 llegaría a 3:1. Se resuelve con la regla "Campos sobre glass" o subiendo ese alfa; KAN-34 lo confirma en el catálogo.
+Todos los pares de texto superan 4,5:1 y todos los no-texto 3:1. Antes de KAN-34, `input` sobre `card` con un blob detrás en oscuro quedaba en 2,61:1; se subió el alfa de `--input` a 0,40 (3,04:1). `src/app/tokens.test.ts` comprueba estos pares, incluidos los translúcidos compuestos sobre el fondo y cada blob (con el alfa antiguo ese test falla). Los pares de `muted-foreground` y `primary` de la tabla de arriba usan hex sólidos; los de glass, los calcula el test.
 
 ### D15. Viewport y móvil
 
@@ -489,7 +516,7 @@ Todos los pares de texto superan 4,5:1. El único no-texto que no llega a 3:1 es
 **Motivo:** el mínimo garantizado manda; lo que cabe a 360 px cabe en los demás.
 
 **Reglas de uso** (detalle y porqués en la skill `mobile-native`)
-- **Safe areas:** `viewport-fit=cover` y `env(safe-area-inset-*)` para el botón "+" fijo, la nav inferior, los toasts y las hojas.
+- **Safe areas:** `viewport-fit=cover` y `env(safe-area-inset-*)` para el botón "+" fijo, la nav inferior, los toasts y las hojas. Ya los aplican `AppShell` (arriba, abajo y a los lados) y el `Toaster` (abajo); cada elemento fijo nuevo debe aplicarlos con fallback `env(..., 0px)` y probarse en hardware.
 - **Alto:** `dvh` o `svh`, nunca `100vh`.
 - **Teclado:** `interactive-widget=resizes-content` (en Next, `viewport.interactiveWidget`). iOS ignora esa propiedad y superpone el teclado; Chrome Android ≥108 también lo superpone por defecto. Prueba el formulario en la hoja inferior (bottom sheet) en un dispositivo real, en iOS y en Android.
 - **Inputs ≥16 px** (evita el zoom de iOS). Nunca `user-scalable=no` ni `maximum-scale=1`.
@@ -526,16 +553,18 @@ Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en 
 | Comprobar en `typecheck` que un esquema zod de request es asignable al tipo generado | Patrón documentado en `CLAUDE.md` (Formularios); se aplica con el primer esquema real (no existe ninguno aún) |
 | Playwright: instalar, proyectos "iPhone" (WebKit) y "Pixel" (Chromium, viewport de 360 px) | **No se instaló en KAN-33** (decisión de Juan David: no hay specs ni CI de frontend aún). Lo resuelve la primera sub-tarea de E2E (qa) |
 | Comparar la salida del formateador de dinero y fechas en Node con la de WebKit y Chromium (diferencias de ICU: NBSP o NNBSP, símbolos, separadores de grupo) | Con el E2E de iPhone y Pixel (misma sub-tarea que Playwright) |
-| `Toaster` de Sonner montado en `layout.tsx` (`sonner` ya está instalado) | KAN-34 |
-| `lib/core/i18n.ts` (mapa único de traducciones) y `lib/core/schemas/` | Con la primera pantalla que los use |
-| `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | KAN-34 |
-| Contraste AA en claro y oscuro en el catálogo, incluido `--input` sobre cada superficie (oscuro sobre `card` con blob: 2,61:1) y los pares con alfa o blob. Los pares sólidos de la tabla de D14 ya los comprueba `src/app/tokens.test.ts` | KAN-34 |
-| `popover-foreground` asumido igual a `foreground` | KAN-34 |
-| Excepción del label de la nav de 11 px y su fuente | KAN-34 |
-| Safe areas: `viewportFit: "cover"` ya deja pintar bajo el notch, pero **nada aplica todavía `env(safe-area-inset-*)`**; cada elemento fijo (nav inferior, botón "+", toast, sheet) debe aplicarlo (con fallback `env(..., 0px)`) y probarse en hardware | KAN-34 |
-| Foco por defecto: la base usa `outline-ring` sólido (3:1 mínimo; con `/50` quedaba en ~2,15:1 en claro); un test lo comprueba. Los componentes que cambien el foco deben mantener 3:1 | KAN-34 |
-| Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | KAN-34 |
-| Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) | KAN-34 |
+| `Toaster` de Sonner montado en `layout.tsx` | Hecho (KAN-34) |
+| `lib/core/i18n.ts` (mapa único de traducciones) | Hecho (KAN-34): errores del backend (`describeApiError`, `fieldErrorMessage`). Los valores de dominio (`expense`, `pending`, `credit_card`…) se añaden con la primera pantalla que los muestre |
+| `lib/core/schemas/` | Con la primera pantalla que lo use |
+| `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | Catálogo hecho (KAN-34). **Pendiente de ojo humano** en el catálogo (sección "Cifras") |
+| Contraste AA en claro y oscuro, incluido `--input` sobre cada superficie y los pares con alfa o blob | Hecho (KAN-34): `--input` oscuro subió a alfa 0,40 y `tokens.test.ts` compone los pares translúcidos sobre fondo y blobs. Falta verlo en pantalla (catálogo, claro y oscuro) |
+| `popover-foreground` asumido igual a `foreground` | Hecho (KAN-34): `popover-foreground` sobre `popover` tiene su par en `tokens.test.ts` y `Toaster` y los popovers usan `foreground` |
+| Excepción del label de la nav de 11 px y su fuente | Se decide en la tarea que cree la nav inferior (no hay nav en KAN-34) |
+| Safe areas: `AppShell` y `Toaster` ya aplican `env(safe-area-inset-*)` (KAN-34); cada elemento fijo nuevo (nav inferior, botón "+", sheet) debe aplicarlo y **todo se prueba en hardware** (un iPhone con notch y uno con home indicator) | Juan David o qa; la nav, el botón "+" y el sheet, en sus tareas |
+| Foco por defecto: la base usa `outline-ring` sólido (3:1 mínimo; con `/50` quedaba en ~2,15:1 en claro); un test lo comprueba. Los componentes que cambien el foco deben mantener 3:1 | Hecho (KAN-34): todos los controles usan `components/ui/focus.ts` (outline sólido, con test) |
+| Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | Se mantiene en 20 px; Juan David lo confirma viendo el catálogo en un dispositivo real |
+| Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) | Hecho (KAN-34): 6000 ms (D8) |
+| Revisión humana del catálogo: dirección visual, 360/375/393/430 px, claro y oscuro, panel "Auditoría", foco con Tab, en un iPhone y un Android reales | Juan David o qa (KAN-34) |
 | Revisar los motivos marcados con † (motivos redactados en FE-06) | Juan David, en el repaso |
 
 Dependencias instaladas en KAN-33 (`tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` y `shadcn` van en devDependencies: solo se usan en el build, `tw-animate-css` y `shadcn` como `@import` de CSS): `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css`, `shadcn`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@base-ui/react`, `@phosphor-icons/react`, `sonner`, `@tanstack/react-query`, `react-hook-form`, `@hookform/resolvers`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react` y `@testing-library/dom`. No se instalan: `@playwright/test` (ver arriba), `@testing-library/jest-dom` y `user-event` (cuando un test los necesite), `vite-tsconfig-paths` (Vite 8 resuelve los alias con `resolve.tsconfigPaths`), `recharts` (con el primer gráfico real), `next-themes` ni Zustand (v1).
