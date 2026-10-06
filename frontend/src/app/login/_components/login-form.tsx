@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { GoogleLogo } from "@phosphor-icons/react/ssr";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { TextField } from "@/components/text-field";
 import { Alert } from "@/components/ui/alert";
@@ -19,7 +19,12 @@ import {
   signUpSchema,
   type LoginFormValues,
 } from "@/lib/core/schemas/auth";
-import { signInForIdToken, signOutQuietly, type SignInMethod } from "@/lib/firebase";
+import {
+  prepareFirebaseAuth,
+  signInForIdToken,
+  signOutQuietly,
+  type SignInMethod,
+} from "@/lib/firebase";
 
 type Mode = "signin" | "signup";
 
@@ -42,6 +47,12 @@ export function LoginForm() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
   const isSignUp = mode === "signup";
+
+  // Start Firebase Auth now, not on the first tap: on Safari and mobile browsers it loads the
+  // popup's iframe in the background, and a popup opened after that wait gets blocked.
+  useEffect(() => {
+    prepareFirebaseAuth();
+  }, []);
 
   const { register, handleSubmit, getValues, reset, formState } = useForm<
     LoginFormValues,

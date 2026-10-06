@@ -42,7 +42,17 @@ function getFirebaseAuth(): Auth {
     });
   // In memory, never IndexedDB or localStorage: the frontend does not store tokens. (The default
   // `getAuth()` would keep the user in IndexedDB until `signOut`.)
-  auth = initializeAuth(app, { persistence: inMemoryPersistence });
+  //
+  // The popup resolver goes here, not only in the `signInWithPopup` call: Firebase starts loading
+  // the iframe of `authDomain` while the auth is being created, but only on mobile browsers and
+  // Safari and only if the auth already has a resolver. If the first thing it did was to load that
+  // iframe inside the click, Safari would block the popup (`window.open` after a network wait).
+  // The resolver only reads the browser's sessionStorage for a pending redirect; the popup flow
+  // never writes a user or a token there, so the session still lives in memory only.
+  auth = initializeAuth(app, {
+    persistence: inMemoryPersistence,
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
   const emulatorHost = clientEnv.NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST;
   // Local only (the schema in lib/env refuses it in a Vercel build). It has to run right after
   // `initializeAuth`, before the first request.
@@ -53,12 +63,28 @@ function getFirebaseAuth(): Auth {
 }
 
 /**
+ * Starts Firebase Auth ahead of the first tap. Call it when the login screen mounts: on mobile
+ * browsers and Safari the SDK then loads the popup's iframe in the background, so `signInWithPopup`
+ * can open the window straight away. Safe to call more than once; it opens no popup and signs
+ * nobody in. A failure here is not reported: the same call inside `signInForIdToken` fails again
+ * with the real error, which the screen does show.
+ */
+export function prepareFirebaseAuth(): void {
+  try {
+    getFirebaseAuth();
+  } catch {
+    // Reported by the next call, when the person actually signs in.
+  }
+}
+
+/**
  * Signs in with the chosen method and returns a fresh ID token for `POST /auth/session` (the
  * backend only accepts a sign-in under five minutes old). Rejects with a `FirebaseError` (see
  * lib/core/firebase-errors.ts for its Spanish text).
  *
  * The Google popup is opened by `signInWithPopup`, never a redirect (it fails on mobile). Call
- * this from a click handler without a slow `await` in front, or Safari blocks the popup.
+ * this from the click handler, with `prepareFirebaseAuth()` already done when the screen mounted
+ * and no slow `await` in front, or Safari blocks the popup.
  */
 export async function signInForIdToken(method: SignInMethod): Promise<string> {
   const firebaseAuth = getFirebaseAuth();
@@ -75,11 +101,8 @@ export async function signInForIdToken(method: SignInMethod): Promise<string> {
       );
       break;
     case "google":
-      credential = await signInWithPopup(
-        firebaseAuth,
-        new GoogleAuthProvider(),
-        browserPopupRedirectResolver,
-      );
+      // The resolver is the one given to `initializeAuth` above.
+      credential = await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
       break;
   }
   return credential.user.getIdToken();

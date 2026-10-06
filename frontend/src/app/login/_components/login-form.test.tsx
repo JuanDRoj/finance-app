@@ -9,6 +9,7 @@ import { LoginForm } from "./login-form";
 // busy states, the Spanish errors and the accessibility wiring of the fields.
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
+  prepareFirebaseAuth: vi.fn(),
   signInForIdToken: vi.fn(),
   signOutQuietly: vi.fn(),
   post: vi.fn(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: mocks.replace }) }));
 vi.mock("@/lib/firebase", () => ({
+  prepareFirebaseAuth: mocks.prepareFirebaseAuth,
   signInForIdToken: mocks.signInForIdToken,
   signOutQuietly: mocks.signOutQuietly,
 }));
@@ -26,6 +28,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.replace.mockReset();
+  mocks.prepareFirebaseAuth.mockReset();
   mocks.signInForIdToken.mockReset().mockResolvedValue("fake-id-token");
   mocks.signOutQuietly.mockReset().mockResolvedValue(undefined);
   mocks.post.mockReset().mockResolvedValue({ response: new Response(null, { status: 204 }) });
@@ -70,6 +73,23 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+describe("LoginForm: Firebase warm-up", () => {
+  // Safari blocks a popup opened after a network wait, so Firebase has to be ready before the
+  // first tap on "Continuar con Google": it is started when the screen mounts.
+  it("starts Firebase Auth when it mounts, before anyone taps anything", () => {
+    renderForm();
+    expect(mocks.prepareFirebaseAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.signInForIdToken).not.toHaveBeenCalled();
+  });
+
+  it("does not start it again on later renders (typing, switching mode)", () => {
+    renderForm();
+    type("Correo electrónico", "ana@correo.com");
+    fireEvent.click(button("Crea una"));
+    expect(mocks.prepareFirebaseAuth).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("LoginForm: validation and field wiring", () => {
   it("shows both fields invalid and wired to their errors when it is sent empty", async () => {
