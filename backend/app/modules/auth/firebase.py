@@ -52,6 +52,17 @@ class FirebaseAuth(Protocol):
         """Exchange a (verified) ID token for a session cookie that lasts `expires_in`."""
         ...
 
+    async def revoke_refresh_tokens(self, uid: str) -> bool:
+        """Revoke every session cookie and refresh token of the account, on all its devices.
+
+        True if the sessions were revoked; False if the account no longer exists (it is not an
+        error: there was nothing to revoke). Any other failure is raised as is.
+
+        Firebase compares a cookie's `iat` with the revocation time in whole seconds: a cookie
+        issued in the same second as the revocation is not revoked.
+        """
+        ...
+
 
 def _invalid_id_token() -> UnauthenticatedError:
     # The message is fixed on purpose: Firebase's own text can quote claims of the token.
@@ -139,6 +150,17 @@ class FirebaseAdminAuth:
             logger.info("id_token_rejected", extra={"firebase_error": type(error).__name__})
             raise _invalid_id_token() from None
         return cookie.decode() if isinstance(cookie, bytes) else str(cookie)
+
+    async def revoke_refresh_tokens(self, uid: str) -> bool:
+        from firebase_admin import auth
+
+        try:
+            await asyncio.to_thread(auth.revoke_refresh_tokens, uid, app=self.app)
+        except auth.UserNotFoundError:
+            # Deleted between the verification and now: its sessions are gone with it.
+            logger.info("revocation_skipped_account_gone")
+            return False
+        return True
 
     def close(self) -> None:
         """Release the Firebase app (shutdown)."""

@@ -292,3 +292,43 @@ async def test_a_failure_to_reach_firebase_when_verifying_a_cookie_is_not_a_401(
 
     with pytest.raises(auth.CertificateFetchError):
         await adapter.verify_session_cookie("cookie")
+
+
+async def test_refresh_tokens_are_revoked_for_this_app_and_uid(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def revoke(uid: str, app: Any = None) -> None:
+        seen.update(uid=uid, app=app)
+
+    monkeypatch.setattr(auth, "revoke_refresh_tokens", revoke)
+
+    revoked = await adapter.revoke_refresh_tokens("uid-7")
+
+    assert revoked is True
+    assert seen == {"uid": "uid-7", "app": adapter.app}
+
+
+async def test_revoking_an_account_that_is_already_gone_is_not_an_error_and_says_so(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise auth.UserNotFoundError("gone")
+
+    monkeypatch.setattr(auth, "revoke_refresh_tokens", fail)
+
+    # Nothing to revoke: it must not raise, and it must not claim it revoked anything.
+    assert await adapter.revoke_refresh_tokens("uid-gone") is False
+
+
+async def test_any_other_failure_revoking_refresh_tokens_is_not_swallowed(
+    adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise InternalError("Firebase is down")
+
+    monkeypatch.setattr(auth, "revoke_refresh_tokens", fail)
+
+    with pytest.raises(InternalError):
+        await adapter.revoke_refresh_tokens("uid-7")

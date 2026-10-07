@@ -5,6 +5,7 @@ from fastapi import Depends, Request
 from app.core.config import SettingsDep
 from app.core.db import DbSession
 from app.core.errors import ForbiddenError, UnauthenticatedError
+from app.modules.auth.cookies import read_session_cookie
 from app.modules.auth.firebase import FirebaseAuth
 from app.modules.users import service as users_service
 from app.modules.users.schemas import UserRead
@@ -46,7 +47,7 @@ async def get_current_user(
     user has no row here is also `invalid_session`. If Firebase itself cannot be reached the error
     is not handled here: it is the generic 500.
     """
-    cookie = request.cookies.get(settings.session_cookie_name)
+    cookie = read_session_cookie(request, settings)
     if not cookie:
         raise UnauthenticatedError("not_authenticated", "Not authenticated")
     identity = await firebase.verify_session_cookie(cookie)
