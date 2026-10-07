@@ -4,10 +4,16 @@
 and a header that clears it must repeat those attributes or the browser ignores it.
 """
 
+from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.config import Settings
 from app.modules.auth.service import SESSION_DURATION
+
+
+def read_session_cookie(request: Request, settings: Settings) -> str | None:
+    """The session cookie of the request (None if there is none): the one place of its name."""
+    return request.cookies.get(settings.session_cookie_name) or None
 
 
 def set_session_cookie(response: Response, settings: Settings, value: str) -> None:

@@ -23,7 +23,11 @@ export interface paths {
         post: operations["create_session_auth_session_post"];
         /**
          * Delete Session
-         * @description Log out: clear the cookie. Always 204, even if there was no session.
+         * @description Log out everywhere: revoke the user's sessions in Firebase and clear the cookie.
+         *
+         *     Every device of the user is logged out, not only this one. Always 204, even if there was no
+         *     session, the cookie was not valid or Firebase could not be reached (that failure is logged as
+         *     an error): the cookie is cleared in every case, so logging out never leaves the user stuck.
          */
         delete: operations["delete_session_auth_session_delete"];
         options?: never;

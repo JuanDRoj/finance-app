@@ -1,13 +1,17 @@
 import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.config import SettingsDep
 from app.core.db import DbSession
 from app.core.errors import ErrorResponse
 from app.modules.auth import service
-from app.modules.auth.cookies import clear_session_cookie, set_session_cookie
+from app.modules.auth.cookies import (
+    clear_session_cookie,
+    read_session_cookie,
+    set_session_cookie,
+)
 from app.modules.auth.dependencies import FirebaseDep, require_allowed_origin
 from app.modules.auth.schemas import SessionCreate
 from app.modules.spaces import service as spaces_service
@@ -56,6 +60,15 @@ async def create_session(
 
 
 @router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_session(response: Response, settings: SettingsDep) -> None:
-    """Log out: clear the cookie. Always 204, even if there was no session."""
+async def delete_session(
+    request: Request, response: Response, settings: SettingsDep, firebase: FirebaseDep
+) -> None:
+    """Log out everywhere: revoke the user's sessions in Firebase and clear the cookie.
+
+    Every device of the user is logged out, not only this one. Always 204, even if there was no
+    session, the cookie was not valid or Firebase could not be reached (that failure is logged as
+    an error): the cookie is cleared in every case, so logging out never leaves the user stuck.
+    """
+    # No database session on purpose: logging out holds no connection of the small pool.
+    await service.end_session(firebase, read_session_cookie(request, settings))
     clear_session_cookie(response, settings)

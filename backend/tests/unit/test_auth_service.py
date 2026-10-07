@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 from datetime import UTC, datetime, timedelta
@@ -129,3 +130,106 @@ async def test_a_rejected_sign_in_is_logged_without_the_token_or_the_email(
     assert rejected[0]["reason"] == "recent_sign_in_required"
     assert "secret-token-value" not in log_stream.getvalue()
     assert "ana@example.com" not in log_stream.getvalue()
+
+
+# --- end_session (logout) --------------------------------------------------------------------
+
+
+def _events(log_stream: io.StringIO, message: str) -> list[dict[str, object]]:
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    return [line for line in lines if line["message"] == message]
+
+
+async def test_ending_a_valid_session_revokes_the_uid_of_the_verified_cookie() -> None:
+    firebase = FakeFirebaseAuth()
+    firebase.session_identity = make_identity(uid="uid-42")
+
+    outcome = await service.end_session(firebase, "the-cookie")
+
+    assert outcome == "revoked"
+    assert firebase.verified_cookies == ["the-cookie"]
+    assert firebase.revoked_uids == ["uid-42"]
+
+
+@pytest.mark.parametrize("cookie", [None, ""])
+async def test_ending_without_a_cookie_does_not_call_firebase(cookie: str | None) -> None:
+    firebase = FakeFirebaseAuth()
+
+    outcome = await service.end_session(firebase, cookie)
+
+    assert outcome == "no_session"
+    assert not firebase.called
+
+
+async def test_ending_an_invalid_session_revokes_nothing_and_does_not_raise() -> None:
+    firebase = FakeFirebaseAuth()
+    firebase.session_error = UnauthenticatedError("invalid_session", "Invalid session")
+
+    outcome = await service.end_session(firebase, "stale-cookie")
+
+    assert outcome == "no_session"
+    assert firebase.verified_cookies == ["stale-cookie"]
+    assert firebase.revoked_uids == []
+
+
+async def test_a_failure_verifying_the_cookie_is_logged_as_error_and_not_raised(
+    log_stream: io.StringIO,
+) -> None:
+    firebase = FakeFirebaseAuth()
+    firebase.session_error = ConnectionError("certificates unreachable")
+
+    outcome = await service.end_session(firebase, "the-cookie")
+
+    assert outcome == "revocation_failed"
+    assert firebase.revoked_uids == []
+    [event] = _events(log_stream, "session_revocation_failed")
+    assert event["severity"] == "ERROR"
+    assert event["firebase_error"] == "ConnectionError"
+    assert "firebase_uid" not in event  # the account is not known yet
+
+
+async def test_a_failure_revoking_is_logged_as_error_with_the_uid_and_not_raised(
+    log_stream: io.StringIO,
+) -> None:
+    firebase = FakeFirebaseAuth()
+    firebase.session_identity = make_identity(uid="uid-42")
+    firebase.revoke_error = PermissionError("caller lacks permission")
+
+    outcome = await service.end_session(firebase, "the-cookie")
+
+    assert outcome == "revocation_failed"
+    [event] = _events(log_stream, "session_revocation_failed")
+    assert event["severity"] == "ERROR"
+    assert event["firebase_error"] == "PermissionError"
+    assert event["firebase_uid"] == "uid-42"
+
+
+async def test_a_cancelled_logout_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    firebase = FakeFirebaseAuth()
+
+    async def cancelled(_cookie: str) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(firebase, "verify_session_cookie", cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await service.end_session(firebase, "the-cookie")
+
+
+async def test_logs_of_ending_a_session_never_carry_the_cookie_or_the_error_text(
+    log_stream: io.StringIO,
+) -> None:
+    ok = FakeFirebaseAuth()
+    await service.end_session(ok, "secret-cookie-value")
+    failing = FakeFirebaseAuth()
+    failing.revoke_error = RuntimeError("secret-cookie-value quoted by Firebase")
+    await service.end_session(failing, "secret-cookie-value")
+    rejected = FakeFirebaseAuth()
+    rejected.session_error = UnauthenticatedError("invalid_session", "Invalid session")
+    await service.end_session(rejected, "secret-cookie-value")
+
+    output = log_stream.getvalue()
+    messages = [json.loads(line)["message"] for line in output.splitlines()]
+    assert messages == ["session_revoked", "session_revocation_failed"]
+    assert "secret-cookie-value" not in output
+    assert "ana@example.com" not in output

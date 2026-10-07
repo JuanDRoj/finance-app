@@ -415,7 +415,10 @@ async def test_logout_clears_the_cookie_with_204(
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
 async def test_logout_clears_the_host_prefixed_cookie_with_the_secure_flag(
-    api_client: AsyncClient, staging: Callable[..., Settings], env: str
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    staging: Callable[..., Settings],
+    env: str,
 ) -> None:
     staging(env)
 
@@ -430,12 +433,124 @@ async def test_logout_clears_the_host_prefixed_cookie_with_the_secure_flag(
     assert morsel["domain"] == ""
 
 
-async def test_logout_works_with_a_session_cookie_present(api_client: AsyncClient) -> None:
+async def test_logout_works_with_a_session_cookie_present(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth
+) -> None:
     api_client.cookies.set("session", "whatever", domain="test")
 
     response = await api_client.delete(URL, headers={"Origin": LOCAL_ORIGIN})
 
     assert response.status_code == 204
+
+
+async def test_logout_with_a_valid_cookie_revokes_the_users_sessions_and_clears_the_cookie(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth
+) -> None:
+    fake_firebase.session_identity = make_identity(uid="uid-42")
+
+    response = await api_client.delete(
+        URL, headers={"Origin": LOCAL_ORIGIN, "Cookie": "session=the-cookie"}
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert fake_firebase.verified_cookies == ["the-cookie"]
+    assert fake_firebase.revoked_uids == ["uid-42"]  # the uid of the verified cookie, nothing else
+    name, morsel = parse_set_cookie(response.headers["set-cookie"])
+    assert (name, morsel.value, morsel["max-age"]) == ("session", "", "0")
+
+
+@pytest.mark.parametrize("env", ["staging", "prod"])
+async def test_logout_reads_the_host_prefixed_cookie_outside_local(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    staging: Callable[..., Settings],
+    env: str,
+) -> None:
+    staging(env)
+
+    response = await api_client.delete(
+        URL, headers={"Origin": STAGING_ORIGIN, "Cookie": "__Host-session=the-cookie"}
+    )
+
+    assert response.status_code == 204
+    assert fake_firebase.verified_cookies == ["the-cookie"]
+    assert fake_firebase.revoked_uids == ["uid-1"]
+    assert parse_set_cookie(response.headers["set-cookie"])[0] == "__Host-session"
+
+
+async def test_logout_ignores_the_cookie_of_another_environment(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, staging: Callable[..., Settings]
+) -> None:
+    staging()
+
+    response = await api_client.delete(
+        URL, headers={"Origin": STAGING_ORIGIN, "Cookie": "session=not-ours"}
+    )
+
+    assert response.status_code == 204
+    assert not fake_firebase.called
+
+
+async def test_logout_with_an_invalid_cookie_is_204_clears_the_cookie_and_revokes_nothing(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth
+) -> None:
+    fake_firebase.session_error = UnauthenticatedError("invalid_session", "Invalid session")
+
+    response = await api_client.delete(
+        URL, headers={"Origin": LOCAL_ORIGIN, "Cookie": "session=expired-or-revoked"}
+    )
+
+    assert response.status_code == 204
+    assert fake_firebase.verified_cookies == ["expired-or-revoked"]
+    assert fake_firebase.revoked_uids == []
+    name, morsel = parse_set_cookie(response.headers["set-cookie"])
+    assert (name, morsel.value, morsel["max-age"]) == ("session", "", "0")
+
+
+@pytest.mark.parametrize("failing_step", ["verify", "revoke"])
+async def test_logout_when_firebase_fails_is_204_clears_the_cookie_and_logs_an_error(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    log_stream: io.StringIO,
+    failing_step: str,
+) -> None:
+    failure = RuntimeError("identitytoolkit said: PERMISSION_DENIED secret-detail")
+    if failing_step == "verify":
+        fake_firebase.session_error = failure
+    else:
+        fake_firebase.revoke_error = failure
+
+    response = await api_client.delete(
+        URL, headers={"Origin": LOCAL_ORIGIN, "Cookie": "session=secret-cookie"}
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    name, morsel = parse_set_cookie(response.headers["set-cookie"])
+    assert (name, morsel.value, morsel["max-age"]) == ("session", "", "0")
+    lines = [json.loads(line) for line in log_stream.getvalue().splitlines()]
+    [event] = [line for line in lines if line["message"] == "session_revocation_failed"]
+    assert event["severity"] == "ERROR"
+    assert event["firebase_error"] == "RuntimeError"
+    assert "secret-detail" not in log_stream.getvalue()
+    assert "secret-cookie" not in log_stream.getvalue()
+
+
+@pytest.mark.parametrize("origin", [None, "https://evil.example.com", "null"])
+async def test_a_cross_origin_logout_with_a_valid_cookie_is_403_and_revokes_nothing(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, origin: str | None
+) -> None:
+    headers = {"Cookie": "session=the-cookie"}
+    if origin is not None:
+        headers["Origin"] = origin
+
+    response = await api_client.delete(URL, headers=headers)
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "origin_not_allowed"
+    assert "set-cookie" not in response.headers
+    assert not fake_firebase.called
 
 
 @pytest.mark.parametrize("origin", [None, "https://evil.example.com", "null"])

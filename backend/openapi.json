@@ -205,7 +205,7 @@
   "paths": {
     "/auth/session": {
       "delete": {
-        "description": "Log out: clear the cookie. Always 204, even if there was no session.",
+        "description": "Log out everywhere: revoke the user's sessions in Firebase and clear the cookie.\n\nEvery device of the user is logged out, not only this one. Always 204, even if there was no\nsession, the cookie was not valid or Firebase could not be reached (that failure is logged as\nan error): the cookie is cleared in every case, so logging out never leaves the user stuck.",
         "operationId": "delete_session_auth_session_delete",
         "responses": {
           "204": {

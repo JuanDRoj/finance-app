@@ -4,7 +4,9 @@ Accounts are created and deleted one by one (`accounts:signUp` / `accounts:delet
 clears the whole emulator: other people's accounts (the dev UI, the frontend) live in it too.
 """
 
+import asyncio
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -79,16 +81,26 @@ async def delete_account(emulator_host: str, account: EmulatorAccount) -> None:
 
     Only "the account is already gone" is tolerated (a test deleted it itself): the emulator
     answers it with a 400 whose `error.message` is `USER_NOT_FOUND`. Any other failure raises.
+    If a test revoked the account's sessions, its ID token is refused (`TOKEN_EXPIRED`): the
+    account then signs in again (a token issued after the revocation) and is deleted with that.
     """
+    id_token = account.id_token
     async with AsyncClient() as http:
-        response = await http.post(
-            _url(emulator_host, "accounts:delete"),
-            params={"key": FAKE_API_KEY},
-            json={"idToken": account.id_token},
-        )
+        response = await _post_delete(http, emulator_host, id_token)
+        if response.status_code == 400 and response.json()["error"]["message"] == "TOKEN_EXPIRED":
+            id_token = (await sign_in(emulator_host, account)).id_token
+            response = await _post_delete(http, emulator_host, id_token)
     if response.status_code == 400 and response.json()["error"]["message"] == "USER_NOT_FOUND":
         return
     response.raise_for_status()
+
+
+async def _post_delete(http: AsyncClient, emulator_host: str, id_token: str) -> Response:
+    return await http.post(
+        _url(emulator_host, "accounts:delete"),
+        params={"key": FAKE_API_KEY},
+        json={"idToken": id_token},
+    )
 
 
 def old_id_token(age: timedelta, account: EmulatorAccount) -> str:
@@ -103,6 +115,23 @@ def old_id_token(age: timedelta, account: EmulatorAccount) -> str:
     return unsigned_id_token(
         sub=account.uid, email=account.email, name=account.display_name, auth_time=auth_time
     )
+
+
+async def wait_for_next_second() -> None:
+    """Wait until the wall clock is in the next whole second (about a second at most).
+
+    Firebase compares a cookie's `iat` with the revocation time at one-second granularity: a
+    cookie issued in the same second as `revoke_refresh_tokens` is NOT revoked. A test that logs
+    in and then logs out must call this in between, or it passes or fails by the clock. In
+    production the case does not matter (nobody logs in and out within one second).
+
+    It polls the wall clock (the one `iat` and the revocation time come from) instead of sleeping
+    once for the computed time: a single sleep runs on the monotonic clock, which can wake it up
+    before the wall clock has reached the next second if the latter is stepped (a VM time sync).
+    """
+    second = int(time.time())
+    while int(time.time()) == second:  # noqa: ASYNC110  # the wall clock has no Event to await
+        await asyncio.sleep(0.02)
 
 
 def assert_error_response(response: Response, status: int, code: str) -> None:
