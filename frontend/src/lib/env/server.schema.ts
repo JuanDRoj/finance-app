@@ -18,6 +18,19 @@ export const serverSchema = z.object({
       }),
     )
     .transform((url) => url.replace(/\/+$/, "")),
+  // Name of the session cookie the backend sets (`Settings.session_cookie_name`): `session` when
+  // the backend runs with ENV=local, `__Host-session` everywhere else. Required on purpose: a
+  // silent default would drop the cookie in staging and bounce every user back to /login.
+  SESSION_COOKIE_NAME: z
+    .string({ error: "SESSION_COOKIE_NAME is required" })
+    .trim()
+    .min(1, "SESSION_COOKIE_NAME is required")
+    .pipe(
+      z.enum(["session", "__Host-session"], {
+        error:
+          'SESSION_COOKIE_NAME must be "session" (local backend) or "__Host-session" (staging and production), the name the backend uses',
+      }),
+    ),
 });
 
 export type ServerEnv = z.output<typeof serverSchema>;
