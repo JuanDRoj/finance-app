@@ -57,23 +57,57 @@ describe("PasswordField", () => {
     expect(input.autocomplete).toBe("current-password");
   });
 
-  it("keeps the focus in the input after the toggle, so the phone keyboard stays open", () => {
+  it("leaves the focus in the input when the eye is tapped, so the phone keyboard stays open", () => {
     render(<PasswordField label="Contraseña" />);
     const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
-    expect(document.activeElement).not.toBe(input);
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    input.focus();
+    // A tap: `mousedown` is cancelled (the focus does not move to the button), then the click.
+    const tap = (name: string) => {
+      const eye = screen.getByRole("button", { name });
+      fireEvent.mouseDown(eye);
+      fireEvent.click(eye, { detail: 1 });
+    };
+    tap("Mostrar contraseña");
+    expect(input.type).toBe("text");
     expect(document.activeElement).toBe(input);
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+    tap("Ocultar contraseña");
     expect(document.activeElement).toBe(input);
   });
 
-  it("keeps the cursor where it was after the toggle", () => {
+  it("keeps the cursor where it was after a tap", () => {
     render(<PasswordField label="Contraseña" />);
     const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "secreta123" } });
+    input.focus();
     input.setSelectionRange(3, 3);
-    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    const eye = screen.getByRole("button", { name: "Mostrar contraseña" });
+    fireEvent.mouseDown(eye);
+    fireEvent.click(eye, { detail: 1 });
     expect([input.selectionStart, input.selectionEnd]).toEqual([3, 3]);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("keeps the focus on the button when it is activated without a pointer (keyboard, screen reader)", () => {
+    render(<PasswordField label="Contraseña" />);
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    const eye = screen.getByRole("button", { name: "Mostrar contraseña" });
+    eye.focus();
+    // Enter or Space (or a screen reader's double tap): a click with no `mousedown` before it.
+    fireEvent.click(eye, { detail: 0 });
+    expect(input.type).toBe("text");
+    // Same button, still focused, and now with the new name for the reader to announce.
+    expect(document.activeElement).toBe(eye);
+    expect(eye.getAttribute("aria-label")).toBe("Ocultar contraseña");
+    fireEvent.click(eye, { detail: 1 });
+    expect(document.activeElement).toBe(eye);
+    expect(eye.getAttribute("aria-label")).toBe("Mostrar contraseña");
+  });
+
+  it("does not steal the focus when the input did not have it", () => {
+    render(<PasswordField label="Contraseña" />);
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(document.activeElement).not.toBe(input);
   });
 
   it("does not take the focus from the input when the eye is pressed with a mouse or finger", () => {
@@ -128,5 +162,44 @@ describe("PasswordField", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
     await waitFor(() => expect(onValid).toHaveBeenCalledWith("una-clave"));
+  });
+});
+
+describe("PasswordField refs", () => {
+  it("hands the input to a callback ref and runs the cleanup the ref returns", () => {
+    const cleanup = vi.fn();
+    const ref = vi.fn<(node: HTMLInputElement | null) => () => void>(() => cleanup);
+    const { unmount } = render(<PasswordField label="Contraseña" ref={ref} />);
+    expect(ref).toHaveBeenCalledWith(screen.getByLabelText("Contraseña"));
+    unmount();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls a callback ref with null on unmount when it returns no cleanup", () => {
+    const ref = vi.fn();
+    const { unmount } = render(<PasswordField label="Contraseña" ref={ref} />);
+    unmount();
+    expect(ref).toHaveBeenLastCalledWith(null);
+  });
+
+  it("fills an object ref", () => {
+    const ref = { current: null as HTMLInputElement | null };
+    render(<PasswordField label="Contraseña" ref={ref} />);
+    expect(ref.current).toBe(screen.getByLabelText("Contraseña"));
+  });
+
+  it("hides the password on submit of a form the input belongs to through form=", () => {
+    const onSubmit = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
+    render(
+      <>
+        <form id="outside" onSubmit={onSubmit} />
+        <PasswordField label="Contraseña" form="outside" />
+      </>,
+    );
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(input.type).toBe("text");
+    fireEvent.submit(document.getElementById("outside") as HTMLFormElement);
+    expect(input.type).toBe("password");
   });
 });
