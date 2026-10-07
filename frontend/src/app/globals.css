@@ -103,6 +103,7 @@
   --radius-field: 1rem;
   --radius-nav: 1.875rem;
   --radius-sheet: 1.875rem;
+  --tracking-brand: -0.03em;
 }
 
 @theme inline {
@@ -147,6 +148,8 @@
   /* --font-karla / --font-montserrat are set by next/font in layout.tsx. */
   --font-sans: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  /* The Kanza wordmark only (components/brand): --font-bricolage is set where the name renders. */
+  --font-brand: var(--font-bricolage), var(--font-heading);
 }
 
 /*

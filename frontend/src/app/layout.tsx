@@ -22,8 +22,20 @@ const karla = Karla({
 });
 
 export const metadata: Metadata = {
-  title: "Finanzas personales",
+  // Pages set `title` and get "<title> · Kanza"; without one the tab says "Kanza".
+  title: { default: "Kanza", template: "%s · Kanza" },
   description: "Controla tus cuentas, gastos e ingresos en un solo lugar.",
+  applicationName: "Kanza",
+  // Files in public/ (kit v2, docs/marca-kanza.md). Same order as the kit's head-snippet. The
+  // single `theme-color` of the snippet is NOT used: `viewport.themeColor` below is per scheme.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/site.webmanifest",
 };
 
 // Never `maximumScale` / `userScalable`: zoom stays available (accessibility).

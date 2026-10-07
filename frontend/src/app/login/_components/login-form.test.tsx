@@ -427,3 +427,18 @@ describe("LoginForm: creating an account", () => {
     expect(alert.textContent).toContain("Inicia sesión");
   });
 });
+
+describe("LoginForm: Kanza peek", () => {
+  it("shows the cricket as a decorative image placed before the form card", () => {
+    const { container } = renderForm();
+    const peek = container.querySelector('img[src*="kanza-peek"]');
+    expect(peek).not.toBeNull();
+    // Decorative: empty alt, so it has no accessible name and screen readers skip it.
+    expect(peek?.getAttribute("alt")).toBe("");
+    expect(screen.queryByRole("img")).toBeNull();
+    // It comes first in its wrapper, and the wrapper holds the form: it peeks over the card.
+    const wrapper = peek?.parentElement;
+    expect(wrapper?.firstElementChild).toBe(peek);
+    expect(wrapper?.querySelector("form")).not.toBeNull();
+  });
+});
