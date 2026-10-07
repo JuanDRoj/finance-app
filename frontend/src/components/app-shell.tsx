@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
+import { BfcacheGuard } from "@/components/bfcache-guard";
+import { LogoutButton } from "@/components/logout-button";
 
 type AppShellProps = {
   /** Screen title (the page's `h1`). */
   title: string;
   /**
-   * Right side of the header. The "Cerrar sesión" button goes here (it is a client component
-   * that calls `DELETE /api/auth/session`; KAN-27).
+   * Actions of this screen, on the right of the header and before "Cerrar sesión" (which the
+   * shell always adds: no screen with a session can forget it).
    */
   actions?: ReactNode;
   children: ReactNode;
@@ -15,7 +17,8 @@ type AppShellProps = {
  * Frame of a signed-in screen: sticky `glass` header (title + actions), a column that is 448 px
  * wide at most, and the decorative background (two static blobs). It pads the notch, the home
  * indicator and the sides with `env(safe-area-inset-*)` (`viewportFit: "cover"` in layout.tsx).
- * A Server Component: it holds no state.
+ * It always carries "Cerrar sesión" (`LogoutButton`) and the `BfcacheGuard` that keeps a restored
+ * page from showing data after the logout (KAN-27). A Server Component: it holds no state.
  */
 export function AppShell({ title, actions, children }: AppShellProps) {
   return (
@@ -34,9 +37,13 @@ export function AppShell({ title, actions, children }: AppShellProps) {
           <h1 className="line-clamp-2 min-w-0 font-heading text-xl leading-tight font-bold break-words">
             {title}
           </h1>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {actions}
+            <LogoutButton />
+          </div>
         </div>
       </header>
+      <BfcacheGuard />
       <main className="relative mx-auto w-full max-w-md pt-6 pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))]">
         {children}
       </main>

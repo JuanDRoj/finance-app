@@ -213,6 +213,12 @@
     touch-action: manipulation;
   }
 
+  /* KAN-27: after logout, a copy of the page that the browser restores from its back/forward cache
+     shows nothing (`markSessionEnded()` in components/bfcache-guard.tsx sets this). */
+  html[data-session-ended] body {
+    visibility: hidden;
+  }
+
   /* Controls only; the text of links and body copy stays selectable. */
   button,
   [role="button"] {

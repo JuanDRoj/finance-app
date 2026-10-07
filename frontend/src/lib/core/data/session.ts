@@ -16,3 +16,12 @@ export type SessionCreate = components["schemas"]["SessionCreate"];
 export async function createSession(api: ApiClient, body: SessionCreate): Promise<void> {
   await unwrap(api.POST("/auth/session", { body }));
 }
+
+/**
+ * Logs out everywhere: the backend revokes the user's sessions in Firebase and clears the cookie.
+ * It answers 204 in every case (also without a session, with an invalid cookie, or when Firebase
+ * cannot be reached), so the only failures are a 403 `origin_not_allowed` and a network error.
+ */
+export async function deleteSession(api: ApiClient): Promise<void> {
+  await unwrap(api.DELETE("/auth/session"));
+}

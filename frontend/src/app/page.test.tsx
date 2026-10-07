@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api/server", () => ({ getServerApi: mocks.getServerApi }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+// The header's two client pieces need a QueryClientProvider and the browser; they have their own
+// tests. Here only that the shell puts the logout button on the screen matters.
+vi.mock("@/components/logout-button", () => ({
+  LogoutButton: () => <button type="button">Cerrar sesión</button>,
+}));
+vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -69,6 +75,18 @@ describe("HomePage", () => {
     await renderHome();
     expect(greeting()).toBe("Hola, Ana Pérez, tu espacio es Mi espacio.");
     expect(screen.getByRole("heading", { level: 1, name: "Inicio" })).toBeTruthy();
+  });
+
+  it("has the logout button in the header, on the greeting and on the error screen", async () => {
+    const { unmount } = await renderHome();
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
+    unmount();
+
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    backend({ me: failure(500, { code: "internal_error", detail: "Internal Server Error" }) });
+    await renderHome();
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
+    logged.mockRestore();
   });
 
   it("falls back to the part of the email before the @ when there is no display name", async () => {
