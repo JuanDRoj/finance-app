@@ -23,6 +23,7 @@ Estado: **aprobado el 2026-10-06** · Tarea KAN-40 [FE-09] · Kit v2 (carpeta lo
 | `public/icon-192.png`, `icon-512.png`, `maskable-512.png` | Íconos del manifest (el `maskable` es para Android) |
 | `public/site.webmanifest` | Manifest: nombre "Kanza", `theme_color` `#146e4d` (igual que `--primary` claro), `background_color` `#e9f4ee` |
 | `src/app/fonts/bricolage-grotesque-800-opsz96.woff2` | Tipografía del nombre (ver 5) |
+| `src/app/fonts/OFL.txt` | Aviso de copyright y texto de la licencia SIL OFL 1.1 de esa tipografía |
 
 Del kit **no** se copiaron: `kanza-wordmark.svg` (el login usa texto vivo con color de token), `kanza-symbol*.svg` y los mono (estados vacíos y sellos: se copian cuando una tarea los use), `kanza-icon-square.svg` (origen de los PNG de iOS y maskable, ya exportados), `fuentes/src-*.svg` (dibujos de trabajo), `kanza-kit-resumen.png` y `head-snippet.html` (su contenido está en `metadata` de `src/app/layout.tsx`). Nada de la librería de logos de terceros de la skill `logo-design` entra al repo; `src/app/brand-assets.test.ts` vigila que `public/brand/` solo tenga los SVG de arriba.
 
@@ -49,9 +50,9 @@ En la interfaz el nombre se pinta con el token `text-primary`: no escribas hex s
 
 ## 5. Tipografía
 
-- **Logotipo y nombre escrito en pantallas** (cabecera del login; después, la pantalla de carga): Bricolage Grotesque ExtraBold (800), tamaño óptico 96, `letter-spacing: -0.03em`. En código: clase `font-brand` (`--font-brand`), `font-extrabold` y `tracking-brand` (`--tracking-brand: -0.03em`); el tamaño del login es 23 px. Úsala solo para la marca, nunca para texto de la interfaz (Montserrat y Karla).
+- **Logotipo y nombre escrito en pantallas** (cabecera del login; después, la pantalla de carga): Bricolage Grotesque ExtraBold (800), tamaño óptico 96, `letter-spacing: -0.03em`. En código: clase `font-brand` (`--font-brand`), `font-extrabold`, `tracking-brand` (`--tracking-brand: -0.03em`) y `text-brand` (`--text-brand: 1.4375rem`, los 23 px del login). Úsala solo para la marca, nunca para texto de la interfaz (Montserrat y Karla).
 - **Cómo se carga:** `next/font/local` en `src/components/brand/brand-font.ts`, con el woff2 que Google Fonts sirve para `family=Bricolage+Grotesque:opsz,wght@96,800` (subset latin, 21,7 kB). Se eligió local porque `next/font/google` no permite fijar el tamaño óptico junto con un solo peso (con `weight` fijo no admite `axes`; con `weight: "variable"` baja el rango completo, unos 77 kB). La fuente se declara en el componente del nombre, no en el layout, así solo las rutas que lo muestran la precargan.
-- **Licencia:** Bricolage Grotesque es SIL Open Font License 1.1 (autor: Mathieu Triay, vía Google Fonts); la OFL permite usarla y redistribuirla en el repo y en logotipos. Montserrat y Karla también son OFL.
+- **Licencia:** Bricolage Grotesque es SIL Open Font License 1.1, "Copyright 2022 The Bricolage Grotesque Project Authors (https://github.com/ateliertriay/bricolage)". La OFL permite usarla y redistribuirla en el repo y en logotipos, a condición de conservar el aviso de copyright y el texto de la licencia: están en `src/app/fonts/OFL.txt`, junto al woff2 (copia del `OFL.txt` oficial de `google/fonts`, `ofl/bricolagegrotesque/`). Montserrat y Karla también son OFL.
 - Los logotipos del kit ya traen el nombre convertido a trazos: no hace falta la fuente para usarlos.
 
 ## 6. Qué no hacer

@@ -14,7 +14,7 @@ export function KanzaBrand({ className }: { className?: string }) {
       <span
         className={cn(
           brandFont.variable,
-          "font-brand text-[1.4375rem] leading-none font-extrabold tracking-brand text-primary",
+          "font-brand text-brand leading-none font-extrabold tracking-brand text-primary",
         )}
       >
         Kanza

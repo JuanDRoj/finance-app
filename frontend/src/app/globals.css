@@ -104,6 +104,7 @@
   --radius-nav: 1.875rem;
   --radius-sheet: 1.875rem;
   --tracking-brand: -0.03em;
+  --text-brand: 1.4375rem; /* the Kanza name in the login header (23px) */
 }
 
 @theme inline {

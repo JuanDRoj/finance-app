@@ -1,12 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GoogleLogo } from "@phosphor-icons/react/ssr";
+import { Envelope, GoogleLogo, Lock } from "@phosphor-icons/react/ssr";
 import { useMutation } from "@tanstack/react-query";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { PasswordField } from "@/components/password-field";
 import { TextField } from "@/components/text-field";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,7 @@ type Mode = "signin" | "signup";
 const EMPTY_FORM: LoginFormValues = { email: "", password: "" };
 
 const SUBMIT_LABEL: Record<Mode, { idle: string; busy: string }> = {
-  signin: { idle: "Entrar", busy: "Entrando…" },
+  signin: { idle: "Iniciar sesión", busy: "Iniciando sesión…" },
   signup: { idle: "Crear cuenta", busy: "Creando tu cuenta…" },
 };
 
@@ -120,9 +121,10 @@ export function LoginForm() {
         </p>
       </header>
 
-      {/* The cricket peeks over the card: 74px above it, so the 48px margin plus the 24px gap keep
-          the header clear of it. Decorative (alt=""): it carries no information. */}
-      <div className="relative mt-12">
+      {/* The cricket peeks over the card: its 120x90 box rises 74px above the card. The wrapper's
+          56px margin plus the 24px gap of the column leave 80px, so the box never reaches the
+          header (the top of the box is also transparent). Decorative (alt=""): no information. */}
+      <div className="relative mt-14">
         <Image
           src="/brand/kanza-peek.svg"
           alt=""
@@ -132,23 +134,6 @@ export function LoginForm() {
           className="pointer-events-none absolute -top-18.5 right-5.5 z-10"
         />
         <Card variant="solid" className="gap-5 p-5">
-          <Button
-            type="button"
-            variant="outline"
-            loading={googleBusy}
-            disabled={submitBusy}
-            onClick={() => login.mutate({ kind: "google" })}
-          >
-            <GoogleLogo aria-hidden weight="bold" />
-            Continuar con Google
-          </Button>
-
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span aria-hidden className="h-px flex-1 bg-border" />
-            <span>o con tu correo</span>
-            <span aria-hidden className="h-px flex-1 bg-border" />
-          </div>
-
           {/* noValidate: the messages come from the zod schema, in Spanish, not from the browser. */}
           <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
             <TextField
@@ -160,14 +145,17 @@ export function LoginForm() {
               autoCorrect="off"
               spellCheck={false}
               enterKeyHint="next"
+              placeholder="tu@correo.com"
+              startIcon={<Envelope aria-hidden />}
               error={errors.email?.message}
               {...register("email")}
             />
-            <TextField
+            <PasswordField
               label="Contraseña"
-              type="password"
               autoComplete={isSignUp ? "new-password" : "current-password"}
               enterKeyHint="go"
+              placeholder={isSignUp ? "Crea una contraseña" : "Tu contraseña"}
+              startIcon={<Lock aria-hidden />}
               description={isSignUp ? `Mínimo ${PASSWORD_MIN_LENGTH} caracteres.` : undefined}
               error={errors.password?.message}
               {...register("password")}
@@ -179,6 +167,23 @@ export function LoginForm() {
               {submitBusy ? SUBMIT_LABEL[mode].busy : SUBMIT_LABEL[mode].idle}
             </Button>
           </form>
+
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span aria-hidden className="h-px flex-1 bg-border" />
+            <span>o</span>
+            <span aria-hidden className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            loading={googleBusy}
+            disabled={submitBusy}
+            onClick={() => login.mutate({ kind: "google" })}
+          >
+            <GoogleLogo aria-hidden weight="bold" />
+            Continuar con Google
+          </Button>
         </Card>
       </div>
 
