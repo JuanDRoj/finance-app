@@ -14,18 +14,30 @@ import { displayNameOf } from "@/lib/core/user";
 
 export const metadata: Metadata = { title: "Inicio" };
 
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 /**
- * Both calls are independent, so they run together. The failure is returned, not thrown, so that
- * `redirect()` (which works by throwing) is never called inside a `try`.
+ * Both calls are independent, so they run together, and both are awaited to the end
+ * (`allSettled`), so the outcome does not depend on which one fails first. The failure is
+ * returned, not thrown, so that `redirect()` (which works by throwing) is never called inside a
+ * `try`. A 401 from either call wins over any other failure of the other one (the session is
+ * gone, and `/login` is the answer); without a 401, the first failure is the one reported,
+ * `/me` before `/spaces`.
  */
 async function loadHome() {
   const api = await getServerApi();
-  try {
-    const [user, spaces] = await Promise.all([getMe(api), listSpaces(api)]);
-    return { ok: true as const, user, spaces };
-  } catch (error) {
-    return { ok: false as const, error };
+  const [me, spaces] = await Promise.allSettled([getMe(api), listSpaces(api)]);
+
+  if (me.status === "fulfilled" && spaces.status === "fulfilled") {
+    return { ok: true as const, user: me.value, spaces: spaces.value };
   }
+
+  const failures: unknown[] = [];
+  if (me.status === "rejected") failures.push(me.reason);
+  if (spaces.status === "rejected") failures.push(spaces.reason);
+  return { ok: false as const, error: failures.find(isUnauthorized) ?? failures[0] };
 }
 
 /**
@@ -33,8 +45,8 @@ async function loadHome() {
  * no loading state and no flash (no `loading.tsx`, no Suspense, no effects). It asks `/me` and
  * `/spaces` with the session cookie of the request (`getServerApi`).
  *
- * - No session or an expired one (401): `/login`. The proxy of KAN-27 only sees that a cookie
- *   exists, never whether it is valid, so this check stays.
+ * - No session or an expired one (401 from `/me` or from `/spaces`): `/login`. The proxy of KAN-27
+ *   only sees that a cookie exists, never whether it is valid, so this check stays.
  * - Any other failure: an `Alert` in Spanish (`describeApiError`) with a way to try again.
  * - No spaces: a notice. The backend creates the personal space together with the user, so this
  *   is not expected; the first space is the one shown (they come oldest first, the personal one
@@ -45,12 +57,15 @@ export default async function HomePage() {
 
   if (!result.ok) {
     const { error } = result;
-    if (error instanceof ApiError && error.status === 401) redirect("/login");
+    if (isUnauthorized(error)) redirect("/login");
 
-    // Only the kind of failure: nothing from the request or the user goes into the log.
+    // Only the kind of failure: the status of an `ApiError`, or the name of any other error.
+    // Never its message (a parse error can quote a piece of the response body) nor the request.
     console.error(
       "Home: could not load /me and /spaces",
-      error instanceof ApiError ? { status: error.status } : { kind: String(error) },
+      error instanceof ApiError
+        ? { status: error.status }
+        : { kind: error instanceof Error ? error.name : typeof error },
     );
     const { title, message } = describeApiError(error);
     return (

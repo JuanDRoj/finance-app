@@ -83,6 +83,22 @@ describe("HomePage", () => {
     expect(mocks.get.mock.calls.map(([path]) => path).sort()).toEqual(["/me", "/spaces"]);
   });
 
+  it("starts both calls before either one answers", async () => {
+    const pending: Array<(value: unknown) => void> = [];
+    mocks.get.mockImplementation(
+      (path: string) =>
+        new Promise((resolve) => {
+          pending.push((value) => resolve(value ?? (path === "/me" ? ok(USER) : ok([SPACE]))));
+        }),
+    );
+    const page = HomePage();
+    await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
+    expect(pending).toHaveLength(2);
+    pending.forEach((answer) => answer(undefined));
+    render(await page);
+    expect(greeting()).toBe("Hola, Ana Pérez, tu espacio es Mi espacio.");
+  });
+
   it("shows the first space when there are several", async () => {
     backend({ spaces: ok([SPACE, { ...SPACE, id: "s2", name: "Casa", type: "household" }]) });
     await renderHome();
@@ -121,6 +137,29 @@ describe("HomePage", () => {
       backend({ spaces: failure(401, { code: "invalid_session", detail: "Invalid session" }) });
       await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
     });
+
+    it("goes to /login when one call is a 401 and the other fails otherwise, in both orders", async () => {
+      const unauthorized = failure(401, { code: "invalid_session", detail: "Invalid session" });
+      const broken = failure(500, { code: "internal_error", detail: "Internal Server Error" });
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      backend({ me: broken, spaces: unauthorized });
+      await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
+
+      backend({ me: unauthorized, spaces: broken });
+      await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
+
+      // A network failure on one side does not hide the 401 on the other either.
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === "/me") throw new TypeError("fetch failed");
+        return unauthorized;
+      });
+      await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
+
+      expect(mocks.redirect).toHaveBeenCalledTimes(3);
+      expect(logged).not.toHaveBeenCalled();
+      logged.mockRestore();
+    });
   });
 
   describe("when the backend fails", () => {
@@ -158,12 +197,54 @@ describe("HomePage", () => {
       expect(screen.getByRole("alert").textContent).toContain("No pudimos conectar");
     });
 
+    it("reports the first failure, /me before /spaces, when neither is a 401", async () => {
+      const forbidden = failure(403, { code: "forbidden", detail: "Forbidden" });
+      const broken = failure(500, { code: "internal_error", detail: "Internal Server Error" });
+
+      backend({ me: forbidden, spaces: broken });
+      const { unmount } = await renderHome();
+      expect(screen.getByRole("alert").textContent).toContain("No tienes permiso para esto");
+      unmount();
+
+      backend({ me: broken, spaces: forbidden });
+      await renderHome();
+      expect(screen.getByRole("alert").textContent).toContain("Algo salió mal de nuestro lado");
+      expect(mocks.redirect).not.toHaveBeenCalled();
+    });
+
     it("logs only the kind of failure", async () => {
       backend({ me: failure(503, { code: "x", detail: "ana.perez@example.com" }) });
       await renderHome();
       expect(logged).toHaveBeenCalledTimes(1);
       expect(logged.mock.calls[0]?.[1]).toEqual({ status: 503 });
       expect(JSON.stringify(logged.mock.calls)).not.toContain("ana.perez");
+    });
+
+    it("logs only the name of an error that is not an ApiError, never its message", async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === "/me") {
+          throw new SyntaxError("Unexpected token < in JSON at position 0: <html>secret");
+        }
+        return ok([SPACE]);
+      });
+      await renderHome();
+      expect(logged).toHaveBeenCalledTimes(1);
+      expect(logged).toHaveBeenCalledWith("Home: could not load /me and /spaces", {
+        kind: "SyntaxError",
+      });
+      const everything = JSON.stringify(logged.mock.calls);
+      expect(everything).not.toContain("secret");
+      expect(everything).not.toContain("<html>");
+      expect(everything).not.toContain("Unexpected token");
+    });
+
+    it("logs only the type of something that is not an Error", async () => {
+      mocks.get.mockRejectedValue("secret body of the response");
+      await renderHome();
+      expect(logged).toHaveBeenCalledWith("Home: could not load /me and /spaces", {
+        kind: "string",
+      });
+      expect(JSON.stringify(logged.mock.calls)).not.toContain("secret");
     });
   });
 
