@@ -34,8 +34,9 @@ export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"
  * + `FieldError` and nothing else, so a form does not repeat that wiring for every field.
  *
  * It works with react-hook-form: spread `register("name")` into it (React 19 passes `ref` as a
- * prop). `startIcon` and `endAction` sit inside the input (see their docs). The input is 48 px tall with 16 px text; set `type`, `inputMode`, `autoComplete` and
- * `enterKeyHint` for the keyboard each field needs.
+ * prop). `startIcon` and `endAction` sit inside the input (see their docs). The input is 48 px
+ * tall with 16 px text; set `type`, `inputMode`, `autoComplete` and `enterKeyHint` for the
+ * keyboard each field needs.
  */
 export function TextField({
   label,

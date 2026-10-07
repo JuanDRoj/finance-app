@@ -57,6 +57,56 @@ describe("PasswordField", () => {
     expect(input.autocomplete).toBe("current-password");
   });
 
+  it("keeps the focus in the input after the toggle, so the phone keyboard stays open", () => {
+    render(<PasswordField label="Contraseña" />);
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    expect(document.activeElement).not.toBe(input);
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(document.activeElement).toBe(input);
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("keeps the cursor where it was after the toggle", () => {
+    render(<PasswordField label="Contraseña" />);
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "secreta123" } });
+    input.setSelectionRange(3, 3);
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect([input.selectionStart, input.selectionEnd]).toEqual([3, 3]);
+  });
+
+  it("does not take the focus from the input when the eye is pressed with a mouse or finger", () => {
+    render(<PasswordField label="Contraseña" />);
+    const toggle = screen.getByRole("button", { name: "Mostrar contraseña" });
+    // `fireEvent` returns false when the handler called preventDefault (the focus does not move).
+    expect(fireEvent.mouseDown(toggle)).toBe(false);
+  });
+
+  it("hides the password again before the form is submitted, so password managers see it", () => {
+    const seenOnSubmit: string[] = [];
+    render(
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          seenOnSubmit.push((screen.getByLabelText("Contraseña") as HTMLInputElement).type);
+        }}
+      >
+        <PasswordField label="Contraseña" />
+        <button type="submit">Enviar</button>
+      </form>,
+    );
+    const input = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(input.type).toBe("text");
+
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    // When the form's own handler runs, the field is already a password again.
+    expect(seenOnSubmit).toEqual(["password"]);
+    expect(input.type).toBe("password");
+    expect(screen.getByRole("button", { name: "Mostrar contraseña" })).toBeTruthy();
+  });
+
   it("gives the text room for the toggle", () => {
     render(<PasswordField label="Contraseña" />);
     expect(screen.getByLabelText("Contraseña").className).toContain("pr-14");

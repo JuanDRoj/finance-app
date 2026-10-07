@@ -1,5 +1,19 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// Our own `@theme` tokens (globals.css) that tailwind-merge cannot tell apart from other groups.
+// Without them it reads `text-brand` as a text *color* and drops it next to `text-primary`
+// (the Kanza name needs both). Add a token here whenever it is a font size, tracking or radius
+// that is not one of Tailwind's own names. Colors need nothing: any other `text-*` name is a color.
+const twMerge = extendTailwindMerge({
+  extend: {
+    theme: {
+      text: ["brand"],
+      tracking: ["brand"],
+      radius: ["tile", "icon", "field", "nav", "sheet"],
+    },
+  },
+});
 
 /** Combines class names and resolves Tailwind conflicts (the last one wins). */
 export function cn(...inputs: ClassValue[]): string {
