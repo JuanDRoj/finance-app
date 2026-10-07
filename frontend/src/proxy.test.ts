@@ -141,6 +141,25 @@ describe("proxy matcher", () => {
     );
   }
 
+  it("runs for a route that only looks like a static file, outside the places of public/", () => {
+    // Static files live in the root of public/ or one level down in brand/: a dynamic route
+    // that ends in `.png` or `.svg`, or a file nested deeper, must still be checked.
+    for (const url of [
+      "/spaces/abc.png",
+      "/x/y.svg",
+      "/brand/sub/x.svg",
+      "/brand/sub/x.png",
+      "/foo/site.webmanifest",
+      "/foo/favicon.ico",
+      "/images/logo.png",
+      // `brand/` holds only png and svg.
+      "/brand/x.ico",
+      "/brand/site.webmanifest",
+    ]) {
+      expect(runsFor(url), url).toBe(true);
+    }
+  });
+
   it("does not run for any file of public/: /login shows them without a session", () => {
     const urls = publicUrls();
     // Guards the guard: the brand kit is there (favicon, manifest, nested SVGs).

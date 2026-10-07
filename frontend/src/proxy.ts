@@ -47,8 +47,12 @@ export const config = {
     // - `/api/*`: the rewrite to the backend. Login (`POST /api/auth/session`) and logout go
     //   through it, and a 401 from the backend must reach the client as a 401.
     // - `/_next/static` and `/_next/image`: build assets and the image optimizer.
-    // - The static files of `public/` (brand kit, favicon, manifest), by extension: `/login` shows
-    //   them without a session. A test lists `public/` and fails if a file is not covered here.
-    "/((?!api(?:/|$)|_next/static/|_next/image|.*\\.(?:png|svg|ico|webmanifest)$).*)",
+    // - The static files of `public/`, which `/login` shows without a session, by the two places
+    //   they live: the root (`/favicon.ico`, `/site.webmanifest`, ...: `[^/]+`, one segment) and
+    //   `brand/` one level deep (`/brand/kanza-icon.svg`). Not any path that ends in `.png`: a
+    //   future dynamic route such as `/spaces/abc.png` must still go through the proxy. A new
+    //   static file goes in one of those two places; another folder of `public/` needs its own
+    //   entry here (a test lists `public/` and fails if a file is not covered).
+    "/((?!api(?:/|$)|_next/static/|_next/image|[^/]+\\.(?:png|svg|ico|webmanifest)$|brand/[^/]+\\.(?:png|svg)$).*)",
   ],
 };
