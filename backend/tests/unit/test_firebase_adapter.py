@@ -304,12 +304,13 @@ async def test_refresh_tokens_are_revoked_for_this_app_and_uid(
 
     monkeypatch.setattr(auth, "revoke_refresh_tokens", revoke)
 
-    await adapter.revoke_refresh_tokens("uid-7")
+    revoked = await adapter.revoke_refresh_tokens("uid-7")
 
+    assert revoked is True
     assert seen == {"uid": "uid-7", "app": adapter.app}
 
 
-async def test_revoking_an_account_that_is_already_gone_is_not_an_error(
+async def test_revoking_an_account_that_is_already_gone_is_not_an_error_and_says_so(
     adapter: FirebaseAdminAuth, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def fail(*_args: Any, **_kwargs: Any) -> None:
@@ -317,7 +318,8 @@ async def test_revoking_an_account_that_is_already_gone_is_not_an_error(
 
     monkeypatch.setattr(auth, "revoke_refresh_tokens", fail)
 
-    await adapter.revoke_refresh_tokens("uid-gone")  # nothing to revoke: it must not raise
+    # Nothing to revoke: it must not raise, and it must not claim it revoked anything.
+    assert await adapter.revoke_refresh_tokens("uid-gone") is False
 
 
 async def test_any_other_failure_revoking_refresh_tokens_is_not_swallowed(

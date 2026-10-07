@@ -27,7 +27,7 @@ from tests.emulator.helpers import (
     delete_account,
     old_id_token,
     sign_in,
-    wait_for_next_second,
+    wait_until_revocable,
 )
 from tests.fakes import parse_set_cookie, unsigned_id_token
 
@@ -60,6 +60,11 @@ async def _login_ok(
 def _cookie_header(login: Response) -> dict[str, str]:
     name, morsel = parse_set_cookie(login.headers["set-cookie"])
     return {"Cookie": f"{name}={morsel.value}"}
+
+
+def _cookie_value(cookie_header: dict[str, str]) -> str:
+    """The value of the cookie of a `_cookie_header(...)`."""
+    return cookie_header["Cookie"].partition("=")[2]
 
 
 async def _count(session: AsyncSession, model: type[User] | type[Space] | type[SpaceMember]) -> int:
@@ -267,7 +272,7 @@ async def test_logout_clears_the_cookie_and_the_client_is_logged_out(
 
 # --- Logout revokes the session in Firebase (KAN-39) -----------------------------------------
 # A cookie issued in the same second as the revocation is not revoked (Firebase compares `iat`
-# with second granularity), so the tests that log out wait for the next whole second first.
+# with second granularity), so the tests that log out first `wait_until_revocable` for the cookie.
 
 
 def _assert_cookie_cleared(logout: Response) -> None:
@@ -289,7 +294,7 @@ async def test_logout_revokes_the_session_in_firebase_so_the_old_cookie_is_401_i
     account = await emulator_user()
     old_cookie = _cookie_header(await _login_ok(api_client, account.id_token))
     assert (await api_client.get("/me")).status_code == 200
-    await wait_for_next_second()
+    await wait_until_revocable(_cookie_value(old_cookie))
 
     logout = await api_client.delete("/auth/session", headers={"Origin": ORIGIN})
 
@@ -313,7 +318,7 @@ async def test_logout_ends_the_sessions_of_the_users_other_devices_but_not_other
     api_client.cookies.clear()  # every request below carries its own Cookie header
     for cookie in (phone, laptop, bea_phone):
         assert (await api_client.get("/me", headers=cookie)).status_code == 200
-    await wait_for_next_second()
+    await wait_until_revocable(_cookie_value(phone), _cookie_value(laptop))
 
     logout = await api_client.delete("/auth/session", headers={"Origin": ORIGIN, **phone})
 
@@ -330,8 +335,8 @@ async def test_a_user_can_log_in_again_after_logging_out_everywhere(
     api_client: AsyncClient, emulator_user: NewUser, emulator_host: str
 ) -> None:
     account = await emulator_user()
-    await _login_ok(api_client, account.id_token)
-    await wait_for_next_second()
+    login = await _login_ok(api_client, account.id_token)
+    await wait_until_revocable(_cookie_value(_cookie_header(login)))
     _assert_cookie_cleared(await api_client.delete("/auth/session", headers={"Origin": ORIGIN}))
 
     again = await sign_in(emulator_host, account)
@@ -342,8 +347,12 @@ async def test_a_user_can_log_in_again_after_logging_out_everywhere(
 
 
 @pytest.mark.parametrize("kind", ["garbage", "id_token", "already_revoked", "deleted_account"])
-async def test_logout_with_a_cookie_that_is_not_valid_is_204_and_clears_it(
-    api_client: AsyncClient, emulator_user: NewUser, emulator_host: str, kind: str
+async def test_logout_with_a_cookie_that_is_not_valid_is_204_clears_it_and_revokes_nothing(
+    api_client: AsyncClient,
+    emulator_user: NewUser,
+    emulator_host: str,
+    log_stream: io.StringIO,
+    kind: str,
 ) -> None:
     account = await emulator_user()
     real_cookie = _cookie_header(await _login_ok(api_client, account.id_token))
@@ -355,12 +364,18 @@ async def test_logout_with_a_cookie_that_is_not_valid_is_204_and_clears_it(
         "deleted_account": real_cookie,
     }[kind]
     if kind == "already_revoked":
-        await wait_for_next_second()
+        await wait_until_revocable(_cookie_value(real_cookie))
         first = await api_client.delete("/auth/session", headers={"Origin": ORIGIN, **real_cookie})
         _assert_cookie_cleared(first)
+        _assert_revoked(log_stream)  # the first logout did revoke: the second one has nothing left
     if kind == "deleted_account":
         await delete_account(emulator_host, account)
+    logged_before = len(log_stream.getvalue())
 
     logout = await api_client.delete("/auth/session", headers={"Origin": ORIGIN, **cookie})
 
     _assert_cookie_cleared(logout)
+    # "No valid session" is not "Firebase failed": neither a revocation nor an ERROR is logged.
+    logged_by_logout = log_stream.getvalue()[logged_before:]
+    assert "session_revoked" not in logged_by_logout, logged_by_logout
+    assert "session_revocation_failed" not in logged_by_logout, logged_by_logout

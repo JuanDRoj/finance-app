@@ -172,6 +172,20 @@ async def test_ending_an_invalid_session_revokes_nothing_and_does_not_raise() ->
     assert firebase.revoked_uids == []
 
 
+async def test_ending_the_session_of_an_account_deleted_in_between_revokes_nothing(
+    log_stream: io.StringIO,
+) -> None:
+    firebase = FakeFirebaseAuth()
+    firebase.revoke_result = False  # verified, but gone when its sessions were to be revoked
+
+    outcome = await service.end_session(firebase, "the-cookie")
+
+    assert outcome == "no_session"
+    assert firebase.revoked_uids == ["uid-1"]  # it was tried
+    assert _events(log_stream, "session_revoked") == []  # but it must not be reported as revoked
+    assert _events(log_stream, "session_revocation_failed") == []
+
+
 async def test_a_failure_verifying_the_cookie_is_logged_as_error_and_not_raised(
     log_stream: io.StringIO,
 ) -> None:

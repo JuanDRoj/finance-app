@@ -64,7 +64,8 @@ async def create_session(firebase: FirebaseAuth, id_token: str, *, now: datetime
 
 
 # What `end_session` did: revoked the user's sessions, had no valid session to revoke (no cookie,
-# or one that was invalid, expired or already revoked), or could not reach Firebase.
+# one that was invalid, expired or already revoked, or an account that no longer exists), or could
+# not reach Firebase.
 SessionEnd = Literal["revoked", "no_session", "revocation_failed"]
 
 
@@ -83,7 +84,7 @@ async def end_session(firebase: FirebaseAuth, cookie: str | None) -> SessionEnd:
     uid: str | None = None
     try:
         uid = (await firebase.verify_session_cookie(cookie)).uid
-        await firebase.revoke_refresh_tokens(uid)
+        revoked = await firebase.revoke_refresh_tokens(uid)
     except UnauthenticatedError:
         return "no_session"  # the adapter has logged why it was rejected
     except Exception as error:
@@ -95,5 +96,7 @@ async def end_session(firebase: FirebaseAuth, cookie: str | None) -> SessionEnd:
             extra["firebase_uid"] = uid
         logger.error("session_revocation_failed", extra=extra)
         return "revocation_failed"
+    if not revoked:
+        return "no_session"  # the account was deleted in between: nothing was revoked
     logger.info("session_revoked")
     return "revoked"

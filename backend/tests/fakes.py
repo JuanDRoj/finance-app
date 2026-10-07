@@ -36,6 +36,7 @@ class FakeFirebaseAuth:
         self.cookie_error: Exception | None = None
         self.session_error: Exception | None = None
         self.revoke_error: Exception | None = None
+        self.revoke_result = True  # False: the account no longer exists, nothing was revoked
         self.session_identity = make_identity()
         self.verified_cookies: list[str] = []
         self.revoked_uids: list[str] = []
@@ -70,10 +71,11 @@ class FakeFirebaseAuth:
             raise self.cookie_error
         return self.cookie_value
 
-    async def revoke_refresh_tokens(self, uid: str) -> None:
+    async def revoke_refresh_tokens(self, uid: str) -> bool:
         self.revoked_uids.append(uid)
         if self.revoke_error is not None:
             raise self.revoke_error
+        return self.revoke_result
 
 
 def _b64(data: dict[str, object]) -> str:
