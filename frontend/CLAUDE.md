@@ -5,7 +5,7 @@ Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en 
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
-> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo) y **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`) y **KAN-40 [FE-09]** (identidad Kanza): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
 Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos. Vitest 5 usa Vite 8: el alias `@/` se resuelve con `resolve.tsconfigPaths` (no hace falta `vite-tsconfig-paths`).
@@ -36,14 +36,17 @@ frontend/
 │   ├── app/                    # rutas (App Router)
 │   │   ├── layout.tsx          # raíz: fuentes (next/font), `viewport`, <Providers>
 │   │   ├── globals.css         # tokens (claro + oscuro), glass, base móvil
-│   │   ├── login/              # `page.tsx` (marco propio, sin AppShell) y `_components/login-form.tsx` (cliente): entrar y crear cuenta con email, y Google por popup; canjea el ID token por la cookie y va a `/`
+│   │   ├── fonts/              # `bricolage-grotesque-800-opsz96.woff2`: la fuente del nombre Kanza (OFL), cargada con `next/font/local`; `OFL.txt` es su licencia
+│   │   ├── login/              # `page.tsx` (marco propio, sin AppShell; encima del formulario va `KanzaBrand`) y `_components/login-form.tsx` (cliente): entrar y crear cuenta con email, y Google por popup; canjea el ID token por la cookie y va a `/`; el grillo asomado (`kanza-peek.svg`) va sobre la tarjeta del formulario
 │   │   ├── (private)/          # (pendiente) rutas que requieren sesión
 │   │   └── catalog/            # solo en `next dev`: `page.dev.tsx` y `layout.dev.tsx` (catálogo de componentes, con panel de auditoría de 44 px y "Probar GET /me": comprueba a mano que la cookie de sesión viaja con `browserApi`)
 │   ├── proxy.ts                # (pendiente) redirige a /login si no hay cookie de sesión. Next 16 renombró `middleware.ts` a `proxy.ts`
 │   ├── components/
 │   │   ├── providers.tsx       # QueryClientProvider (un QueryClient por request en servidor)
 │   │   ├── app-shell.tsx       # marco de una pantalla con sesión: header glass con ranura `actions` ("Cerrar sesión"), safe areas, fondo
-│   │   ├── text-field.tsx      # campo de texto con la accesibilidad cableada (label, `aria-invalid`, `aria-describedby`, `data-invalid`): `Field` + `Input` + descripción + error; compatible con `register()` de react-hook-form
+│   │   ├── brand/              # identidad Kanza (KAN-40): `KanzaBrand` (ícono + nombre en Bricolage 800, componente de servidor) y `brand-font.ts` (la fuente, solo aquí)
+│   │   ├── text-field.tsx      # campo de texto con la accesibilidad cableada (label, `aria-invalid`, `aria-describedby`, `data-invalid`): `Field` + `Input` + descripción + error; compatible con `register()` de react-hook-form. Opcional `startIcon` (ícono decorativo a la izquierda) y `endAction` (control de 44 px a la derecha)
+│   │   ├── password-field.tsx  # `TextField` de contraseña con botón de ojo (mostrar/ocultar; solo cambia `type`)
 │   │   └── ui/                 # shadcn/Base UI ajustados a Menta: button, input, field, card, alert, skeleton, empty, label y separator (de field), sonner (Toaster) y focus.ts (foco compartido)
 │   ├── lib/
 │   │   ├── core/               # núcleo puro, compartible con la app nativa (ver "Core" abajo)
@@ -68,7 +71,9 @@ frontend/
 │   │   │   └── validate.ts     # `assertValidEnv()`: la llama next.config.ts al arrancar y en el build
 │   │   ├── firebase.ts         # Firebase Auth del navegador, solo para el login: init perezoso en memoria (nunca IndexedDB), emulador en local, `prepareFirebaseAuth` (calienta el SDK al montar el login), `signInForIdToken` y `signOutQuietly`
 │   │   └── utils.ts            # `cn()` (clsx + tailwind-merge)
+├── public/                     # estáticos de marca (kit v2): favicon, apple-touch-icon, íconos del manifest y `site.webmanifest` en la raíz; SVG en `brand/` (ícono, peek, lockups)
 ├── docs/diseno.md              # decisiones de diseño y librerías (FE-06); léelo antes de una pantalla nueva
+├── docs/marca-kanza.md         # guía de la marca Kanza: archivos, color, tipografía, qué no hacer, licencias
 ├── e2e/                        # (pendiente) Playwright (qa)
 ├── components.json             # shadcn: estilo base-nova (Base UI), iconLibrary phosphor
 ├── postcss.config.mjs          # Tailwind v4 (`@tailwindcss/postcss`)
@@ -110,7 +115,8 @@ frontend/
 - **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → mapa único en `lib/core/i18n.ts` (hoy trae los errores del backend; añade ahí los valores de dominio con la primera pantalla que los muestre).
 - **Estados de pantalla:** carga, vacío y error en cada vista que pide datos.
 - **Estilo de código:** componentes en PascalCase, hooks `useXxx`, archivos de rutas según App Router.
-- **Estilos y tokens** (detalle en `docs/diseno.md`): Tailwind v4 con tokens como variables CSS en `src/app/globals.css` (`:root` claro y `@media (prefers-color-scheme: dark)`; no hay clase `.dark`, y `dark:` sigue el sistema). Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`, `rounded-tile`…): nada de hex ni `rgb()` sueltos. Superficies: `card-surface` (tiles bento y grupos), `glass` (nav, toast, header sticky), `glass-strong` (sheets); `card-solid` y `popover` son sólidos. `hover:` ya compila a `@media (hover: hover)`; el feedback táctil va con `active:`. `cn()` de `lib/utils.ts` para combinar clases. Hay un test de contraste AA sobre `globals.css`: si cambias un color, corre `npm test`.
+- **Estilos y tokens** (detalle en `docs/diseno.md`): Tailwind v4 con tokens como variables CSS en `src/app/globals.css` (`:root` claro y `@media (prefers-color-scheme: dark)`; no hay clase `.dark`, y `dark:` sigue el sistema). Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`, `rounded-tile`…): nada de hex ni `rgb()` sueltos. Superficies: `card-surface` (tiles bento y grupos), `glass` (nav, toast, header sticky), `glass-strong` (sheets); `card-solid` y `popover` son sólidos. `hover:` ya compila a `@media (hover: hover)`; el feedback táctil va con `active:`. `cn()` de `lib/utils.ts` para combinar clases: usa `extendTailwindMerge` y registra ahí los tokens propios de `@theme` que no sean colores (hoy `text-brand`, `tracking-brand` y los `rounded-*` propios); sin registrarlos, tailwind-merge descarta `text-brand` junto a un `text-<color>`. Un token nuevo de tamaño, tracking o radio se añade ahí y a `utils.test.ts`. Hay un test de contraste AA sobre `globals.css`: si cambias un color, corre `npm test`.
+- **Marca (Kanza, KAN-40):** el nombre se escribe con `KanzaBrand` (`components/brand/`), que aplica Bricolage Grotesque 800 con `font-brand`, `tracking-brand` y `text-brand`; esa fuente es solo para el nombre, nunca para texto de interfaz. Los íconos de marca junto a texto visible llevan `alt=""`. Los estáticos de `public/` son públicos: `proxy.ts` (KAN-27) debe dejarlos pasar sin sesión. Detalle en `docs/marca-kanza.md` y `docs/diseno.md` D16.
 - **Iconos:** Phosphor siempre desde `@phosphor-icons/react/ssr` (funciona en Server y Client Components; ESLint prohíbe el import raíz). Decorativos con `aria-hidden`; botones solo con icono, `aria-label` en español.
 - **Componentes:** se añaden con `npx shadcn@latest add <componente>` (estilo `base-nova`, Base UI) a `components/ui` y se ajustan a Menta; no se escriben desde cero. Revisa lo que genera: la CLI puede traer `lucide-react` o reescribir `globals.css`, y (visto en KAN-34) añade `cn` y `next-themes` a `package.json`: reviértelo (usamos `cn()` de `lib/utils.ts`) y revisa `git diff package.json package-lock.json`. `shadcn add` importa `cn` del paquete `cn`: cámbialo a `@/lib/utils`. Los componentes y sus props están en `docs/diseno.md` D4; el catálogo, en `/catalog`.
 - **Errores del API en pantalla:** `describeApiError(error)` (`lib/core/i18n.ts`) + `<Alert>`; nunca muestres el `detail` en inglés ni el `code`. Un código nuevo del backend necesita su traducción ahí (un 422 que el usuario no puede corregir en un campo, como `timezone_invalid`, lleva su descripción completa en `VALIDATION_ERROR_BY_TYPE`). Para el login, `describeLoginError` (`lib/core/firebase-errors.ts`) reparte entre los errores de Firebase (`auth/...`, traducidos ahí) y `describeApiError`; cerrar el popup (`isSignInCancelled`) no muestra error.

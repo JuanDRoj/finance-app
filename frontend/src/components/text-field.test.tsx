@@ -91,6 +91,39 @@ describe("TextField", () => {
     expect(screen.getByText("(opcional)", { exact: false })).toBeTruthy();
   });
 
+  it("adds a decorative start icon and makes room for it", () => {
+    const { container } = render(
+      <TextField
+        label="Correo"
+        startIcon={<svg data-testid="icon" />}
+        placeholder="tu@correo.com"
+      />,
+    );
+    const icon = screen.getByTestId("icon");
+    // The icon's wrapper is hidden from assistive tech; the label stays the input's name.
+    expect(icon.parentElement?.getAttribute("aria-hidden")).toBe("true");
+    expect(icon.parentElement?.className).toContain("pointer-events-none");
+    const input = screen.getByLabelText("Correo");
+    expect(input.className).toContain("pl-11");
+    expect(input.className).not.toContain("pr-14");
+    expect(input.getAttribute("placeholder")).toBe("tu@correo.com");
+    expect(container.querySelectorAll("input")).toHaveLength(1);
+  });
+
+  it("adds an end action next to the input, with room for it, and nothing extra without it", () => {
+    const { rerender } = render(
+      <TextField label="Clave" endAction={<button type="button">Ver</button>} />,
+    );
+    expect(screen.getByRole("button", { name: "Ver" })).toBeTruthy();
+    expect(screen.getByLabelText("Clave").className).toContain("pr-14");
+
+    rerender(<TextField label="Clave" />);
+    expect(screen.queryByRole("button")).toBeNull();
+    const plain = screen.getByLabelText("Clave");
+    expect(plain.className).not.toContain("pl-11");
+    expect(plain.className).not.toContain("pr-14");
+  });
+
   it("passes the rest of the props to the input", () => {
     render(
       <TextField

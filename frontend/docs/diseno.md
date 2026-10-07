@@ -1,7 +1,7 @@
 # Diseño y librerías (frontend)
 
 Estado: **aprobado por Juan David el 2026-10-05** · Tarea KAN-32 [FE-06] (historia KAN-31, HU-6 Sistema de diseño base) · Lo implementaron KAN-33 (setup) y KAN-34 (componentes base y catálogo); KAN-26 (login) añadió `TextField`.
-Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/WdpLUxb8M6VgXupjqezr5M (nombre de la app: sin definir).
+Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/WdpLUxb8M6VgXupjqezr5M. Nombre de la app: **Kanza** (identidad en [D16](#d16-identidad-kanza) y en [`marca-kanza.md`](marca-kanza.md), KAN-40).
 
 ## Cómo usar este documento
 
@@ -20,7 +20,7 @@ Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/Wd
 | Estilos | Tailwind CSS v4 | [D3](#d3-estilos) |
 | Componentes | shadcn/ui con primitivas Base UI (código copiado al repo) | [D4](#d4-componentes) |
 | Iconos | Phosphor (`@phosphor-icons/react`) | [D5](#d5-iconos) |
-| Fuentes | Montserrat (números, títulos) + Karla (texto) | [D6](#d6-fuentes) |
+| Fuentes | Montserrat (números, títulos) + Karla (texto); Bricolage Grotesque 800 solo para el nombre Kanza | [D6](#d6-fuentes) |
 | Formularios | react-hook-form + zod | [D7](#d7-formularios) |
 | Toasts con "Deshacer" | Sonner (vía shadcn) | [D8](#d8-toasts-con-deshacer) |
 | Gráficos (dashboard v1) | Diferidos: barras CSS; shadcn Charts con el primer gráfico real | [D9](#d9-gráficos) |
@@ -30,6 +30,7 @@ Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/Wd
 | Dirección visual | "Menta" (verde/blanco/negro + oscuro, bento + glass) | [D13](#d13-dirección-visual-menta) |
 | Tokens | Nombres shadcn + `income` / `expense` / `debt` | [D14](#d14-tokens) |
 | Viewport y móvil | 360 px mínimo; matriz 375 / ~393 / ~430 | [D15](#d15-viewport-y-móvil) |
+| Identidad de marca | Kanza: ícono del grillo con la moneda, favicon simplificado, lema "Haz que alcance" | [D16](#d16-identidad-kanza) |
 
 ## 1. Checklist para una pantalla nueva
 
@@ -41,7 +42,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 4. **Layout.** Diseña a 360 px y revisa 375, ~393 y ~430 antes de ampliar. Safe areas, `dvh`/`svh` (nunca `100vh`), inputs ≥16 px. (D15)
 5. **Componentes.** Busca en `components/ui`, en `components/app-shell.tsx` y en el catálogo (`npm run dev` → http://localhost:3000/catalog; tabla de abajo y D4). Si falta, añádelo con la CLI de shadcn (Base UI), revisa lo que genera y ajústalo a Menta; no lo escribas desde cero. (D4)
 6. **Tokens.** Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`…). Nada de hex ni `rgb()` sueltos. Dinero: `income` / `expense` / `debt`. Glass solo en cromo flotante y tiles: tiles bento → `card`; nav, toast y header sticky → `glass`; sheet → `glass-strong`. (D14, D13 › Glass)
-7. **Tipografía.** Montserrat para números y títulos, Karla para texto; montos con `tabular-nums`. Usa la escala de D13. (D6, D13)
+7. **Tipografía.** Montserrat para números y títulos, Karla para texto; montos con `tabular-nums`. Usa la escala de D13. La fuente de marca (Bricolage Grotesque) es solo para el nombre "Kanza" y va con `KanzaBrand`; nunca en texto de interfaz. (D6, D13, D16)
 8. **Iconos.** Phosphor: regular 20–22 px, fill solo en el tab activo, duotone en iconos de categoría. En Server Components importa de `@phosphor-icons/react/ssr`. (D5)
 9. **Dinero y fechas.** Solo con los formateadores de `lib/core`: locale derivado de la moneda del espacio, exactamente `exponent` decimales, zona horaria del espacio. Sin aritmética con floats. (D11)
 10. **Textos.** Español, tú, sentence case, verbos. Valores del backend (`expense`, `pending`…) solo a través del mapa único de traducciones. (D13 › Tono, `CLAUDE.md`)
@@ -172,7 +173,8 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | `Button` | `components/ui/button.tsx` | `variant` (`default`, `secondary`, `outline`, `ghost`, `destructive`, `link`), `size` (`default` 52 px y `sm` 44 px **como mínimo**: la etiqueta larga se parte en varias líneas y el botón crece, nunca se trunca ni desborda; `icon` 44×44: `aria-label` obligatorio por tipos, con `button.check.tsx` como canario), `loading`, y las props de Base UI (`disabled`, `onClick`…) | Normal, presionado (`active:`), foco, deshabilitado y cargando. Cargando: spinner junto a la etiqueta (el botón crece un poco para hacerle sitio), ignora clics (y el envío del formulario), `aria-busy` y `aria-disabled`, mantiene el color y el foco. Deshabilitado expone `aria-disabled` (sigue enfocable) |
 | `Input` | `components/ui/input.tsx` | Props de `<input>` | 48 px, texto de 16 px, borde `--input`, fondo sólido `card-solid`. Foco, deshabilitado, `aria-invalid` |
 | `Field` (API compuesta de shadcn) | `components/ui/field.tsx` | `<Field>` agrupa `<FieldLabel htmlFor>`, un `<Input id>`, `<FieldDescription id>` y `<FieldError id>` (acepta `errors` de react-hook-form o hijos); `FieldGroup` separa varios campos. El **llamador enlaza**: `htmlFor`/`id`, `aria-invalid` y `aria-describedby` con los ids de la descripción y del error. Pon `data-invalid` en `<Field>` con error. "(opcional)" va como `<span>` dentro del label | Label visible ligada al input; el error (`role="alert"`) lleva icono y texto, nunca solo color. No traduce: recibe el texto en español |
-| `TextField` (KAN-26) | `components/text-field.tsx` (compone `Field`, no es de shadcn) | `label`, `error` (texto en español), `description`, `optional`, `id` (por defecto `useId`) y las props de `<input>`, `ref` incluido: sirve para `{...register("campo")}`. Un `aria-describedby` que pases se conserva | Enlaza solo `htmlFor`/`id`, `aria-invalid`, `aria-describedby` (descripción y error, en ese orden) y `data-invalid` en el `Field`. Sin `error` no pone `aria-invalid`. Probado en `text-field.test.tsx` y, con los campos reales, en `login-form.test.tsx` |
+| `TextField` (KAN-26) | `components/text-field.tsx` (compone `Field`, no es de shadcn) | `label`, `error` (texto en español), `description`, `optional`, `id` (por defecto `useId`) y las props de `<input>`, `ref` incluido: sirve para `{...register("campo")}`. Un `aria-describedby` que pases se conserva | Enlaza solo `htmlFor`/`id`, `aria-invalid`, `aria-describedby` (descripción y error, en ese orden) y `data-invalid` en el `Field`. Sin `error` no pone `aria-invalid`. Probado en `text-field.test.tsx` y, con los campos reales, en `login-form.test.tsx`. **KAN-40:** `startIcon` (ícono Phosphor decorativo, `aria-hidden`, dentro del borde izquierdo; el texto gana `pl-11`) y `endAction` (control de 44 px en el borde derecho; el texto gana `pr-14`). El placeholder nunca sustituye al label |
+| `PasswordField` (KAN-40) | `components/password-field.tsx` (compone `TextField`) | Las props de `TextField` menos `type` y `endAction` | Campo de contraseña con botón de ojo de 44×44 px (`Button` `ghost` `icon`, `type="button"`, íconos `Eye` / `EyeSlash`). Su nombre cambia con el estado: "Mostrar contraseña" / "Ocultar contraseña" (el nombre que dice lo que hará el toque se lee igual en todos los lectores; `aria-pressed` con nombre fijo anuncia el estado dos veces). Solo alterna `type` (`password` / `text`) sobre el mismo input: no pierde el valor ni el autocompletado. Al tocar el ojo el foco y el cursor se quedan en el input (`mousedown` se cancela: el teclado del móvil no se cierra); el foco nunca se mueve, así que con teclado o lector de pantalla se queda en el botón, que anuncia su nuevo nombre. Al enviar el formulario vuelve a `type="password"` antes de que el navegador lo lea, para que el gestor de contraseñas ofrezca guardarla (si el esquema rechaza el envío, queda oculta de nuevo). Probado en `password-field.test.tsx` |
 | `Card` | `components/ui/card.tsx` | `variant`: `glass` (tile bento, token `card`) o `solid`; partes `CardHeader`, `CardTitle` (`as`), `CardDescription`, `CardContent` | Los formularios van en `solid` |
 | `Alert` | `components/ui/alert.tsx` | `variant` (`error` con `role="alert"`, `info` con `role="status"`), `title`, `action`, hijos | Icono y texto, nunca solo color |
 | `Skeleton` | `components/ui/skeleton.tsx` | Props de `<div>` | Decorativo (`aria-hidden`); el contenedor lleva `aria-busy`. Sin animación con `prefers-reduced-motion` |
@@ -225,6 +227,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Carga con `next/font/google` (autoalojada en el build, subset `latin`, que cubre el español).
 - Montos y cifras comparables con `tabular-nums` (`font-variant-numeric`).
 - Escala tipográfica en D13.
+- **Fuente de marca (KAN-40):** Bricolage Grotesque ExtraBold (800, tamaño óptico 96, `letter-spacing: -0.03em`) solo para el nombre "Kanza" (logotipo y cabecera del login). Va por `next/font/local` (`components/brand/brand-font.ts`, woff2 de 21,7 kB en `src/app/fonts/`), no por `next/font/google`: este no deja fijar el tamaño óptico con un solo peso (con `weight` fijo rechaza `axes`; con `weight: "variable"` baja el rango completo, ~77 kB). Clases `font-brand`, `tracking-brand` (`--tracking-brand: -0.03em`) y `text-brand` (`--text-brand: 1.4375rem`, 23 px: el tamaño del login), definidas en `globals.css`. Se declara en el componente del nombre y no en `layout.tsx`, para que solo las rutas que lo muestran lo precarguen. Licencia OFL en `marca-kanza.md`.
 
 **Verificar en KAN-34:** que el archivo de fuente que sirve `next/font` conserva `tnum` en Montserrat y en Karla. El catálogo (sección "Cifras") trae una columna de montos y una fila `1111 / 8888` en cada fuente. **Pendiente de ojo humano:** no se pudo comprobar sin navegador; si las cifras no son tabulares, anótalo aquí.
 
@@ -529,6 +532,26 @@ Todos los pares de texto superan 4,5:1 y todos los no-texto 3:1. Antes de KAN-34
 - **Export `viewport` de Next**, con `viewportFit: "cover"`, `interactiveWidget: "resizes-content"`, `colorScheme: "light dark"` y `themeColor` por esquema (D12).
 - Emulación de Chrome no reproduce nada de esto: cada cambio de este bloque se confirma en hardware real.
 
+### D16. Identidad Kanza
+
+Definida el 2026-10-06 (KAN-40 [FE-09]). Guía completa, archivos y licencias en [`marca-kanza.md`](marca-kanza.md).
+
+**Elección**
+- **Nombre:** Kanza (de "¿me al-kanza?"). **Lema:** "Haz que alcance".
+- **Ícono de app y marca principal:** el grillo verde menta asomado por encima de una moneda gigante que sujeta con las patitas, sobre una baldosa verde bosque `#146e4d` ("B2 · Detrás de la moneda"). La misma pieza sirve en claro y en oscuro.
+- **Mascota:** el grillo. El de cuerpo entero quedó archivado; en la app solo se usa la cabeza asomada (`kanza-peek.svg`).
+- **Favicon:** versión simplificada del ícono (cabeza más grande, antenas gruesas, moneda lisa) para menos de 32 px.
+- **Login:** fila superior con el ícono (40 px) y "Kanza" (Bricolage Grotesque 800, 23 px, -0.03em, `text-primary`), y la cabeza del grillo asomada sobre la tarjeta del formulario.
+- **Tarjeta del login:** primero el formulario (correo con ícono de sobre y placeholder `tu@correo.com`, contraseña con ícono de candado, placeholder y botón de ojo, aviso de error, botón "Iniciar sesión" / "Crear cuenta"), luego el separador "o" y al final "Continuar con Google" (como el mockup K-Login). El título de la página ("Entrar") y el h1 ("Entra a tu cuenta") no cambian.
+
+**Reglas de uso**
+- Archivos en `public/` (favicon, apple-touch-icon, manifest) y `public/brand/` (SVG); se registran en `metadata` de `layout.tsx`. El `theme-color` sigue por esquema (D12); `#146e4d` solo es el `theme_color` del manifest.
+- Título de pestaña: "Kanza" (`%s · Kanza` en las pantallas que definen el suyo).
+- Íconos de marca junto a texto visible: `alt=""`. Nombre en `text-primary` (contraste 5,54 claro / 11,48 oscuro sobre `background`). Ícono completo desde 32 px; por debajo, el favicon.
+- El peek va en un contenedor `relative` sobre la tarjeta: `-top-18.5 right-5.5` (74 px arriba y 22 px a la derecha), 120×90 px, `z-10`, y 80 px libres encima de la tarjeta (`mt-14` + `gap-6`): la caja del peek sube 74 px sobre la tarjeta, así que no llega al título (y su parte superior es transparente).
+- Fuera de v1 / otras tareas: pantalla de carga, avisos del grillo y estados vacíos con la mascota, registro formal de marca.
+- Los estáticos de marca son públicos: `proxy.ts` (KAN-27) debe dejar pasar sin sesión `/favicon.ico`, `/favicon.svg`, `/site.webmanifest`, `/brand/*` y los `*.png` de `public/`, o el ícono del login y la pestaña se romperían.
+
 ## 3. Skills de apoyo
 
 Están en `.claude/skills/`. Las convenciones del proyecto ganan sobre las skills; si una skill contradice este documento o `CLAUDE.md`, sigue al proyecto y anótalo.
@@ -570,6 +593,8 @@ Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en 
 | Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) | Hecho (KAN-34): 6000 ms (D8) |
 | Revisión humana del catálogo: dirección visual, 360/375/393/430 px, claro y oscuro, panel "Auditoría", foco con Tab, en un iPhone y un Android reales | Juan David o qa (KAN-34) |
 | Revisar los motivos marcados con † (motivos redactados en FE-06) | Juan David, en el repaso |
+| Identidad Kanza (KAN-40) a ojo y en hardware: el favicon legible a 16 px en pestaña clara y oscura (Chrome, Safari y Firefox), el login a 360 / 375 / 393 / 430 px en claro y oscuro (fila de marca, grillo sobre la tarjeta sin tapar el título, sin desbordes), el contraste del nombre cerca del blob y la carga de Bricolage sin salto visible | Juan David o qa |
+| `proxy.ts` (KAN-27) debe excluir los estáticos de marca de la redirección a `/login` (D16) | KAN-27 |
 | Login (KAN-26) en hardware: popup de Google en Safari iOS (que el primer toque abra la ventana, sin `auth/popup-blocked`: el SDK se calienta al montar la pantalla, ver `CLAUDE.md` > Sesión) y en un Android real (con el emulador no se puede: escucha solo en `127.0.0.1`; hace falta el proyecto de staging), 360 / 375 / 393 / 430 px en claro y oscuro, y el teclado abierto en el formulario | Juan David o qa |
 | Cookie de sesión en un navegador real (`Set-Cookie` de `POST /api/auth/session` a través del rewrite y de vuelta en `browserApi`): curl lo confirmó en KAN-26; falta el navegador (`/catalog` > "Probar GET /me") | Juan David |
 

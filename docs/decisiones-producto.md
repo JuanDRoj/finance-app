@@ -1,6 +1,6 @@
 # Personal Finance App — Decisiones de producto
  
-Última actualización: 2026-10-05
+Última actualización: 2026-10-06
  
 ## Visión
 App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero (pensada para celular), app móvil después.
@@ -23,6 +23,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Presupuestos | Límite mensual por categoría con barra de progreso. |
 | Metas de ahorro | Apartados virtuales **repartidos en una o varias cuentas** (solo banco/efectivo, nunca tarjeta). Libre para gastar = Disponible − apartado. Al registrar un gasto/transferencia desde una cuenta con apartados, la app pregunta si usa dinero de una meta y libera el apartado con un toque. Si el saldo queda por debajo de lo apartado, se permite y se avisa. |
 | Editar/borrar | Edición libre de transacciones confirmadas; borrado suave (`deleted_at`) con "Deshacer". Historial de cambios en v2. |
+| Identidad | Nombre **Kanza** (de "¿me al-kanza?"); lema "Haz que alcance"; mercado: toda Latinoamérica. Ícono: grillo verde menta asomado sobre una moneda gigante, sobre baldosa verde bosque `#146e4d` ("B2 · Detrás de la moneda"), igual en claro y oscuro. Mascota: el grillo (cabeza asomada en el login; el de cuerpo entero quedó archivado). Favicon: versión simplificada para menos de 32 px. Logotipo en Bricolage Grotesque ExtraBold, solo para la marca. Definido el 2026-10-06; guía en [`frontend/docs/marca-kanza.md`](../frontend/docs/marca-kanza.md). Fuera de v1: pantalla de carga, avisos del grillo, estados vacíos con mascota y registro de marca. |
  
 ## Roadmap
 - **v1:** registro, plantillas, cuentas (cierre/vencimiento de tarjetas), transferencias, ajustes, categorías, dashboard (A, B, D). Estructura de espacios preparada.

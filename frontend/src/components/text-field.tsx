@@ -1,6 +1,7 @@
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"> & {
   /** Visible label (always: a placeholder is not a label). */
@@ -11,6 +12,17 @@ export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"
   description?: string;
   /** Adds "(opcional)" to the label. */
   optional?: boolean;
+  /**
+   * Decorative icon inside the left edge of the input (a Phosphor icon; it is hidden from screen
+   * readers and the label stays the field's name). The text gets room so it never runs under it.
+   */
+  startIcon?: ReactNode;
+  /**
+   * An interactive control inside the right edge, at most 44 px wide (an icon `Button`, such as
+   * the show/hide password toggle). It needs its own accessible name. The text gets room so it
+   * never runs under it.
+   */
+  endAction?: ReactNode;
   /** Defaults to a generated id; pass one when something else needs to point at the input. */
   id?: string;
 };
@@ -22,8 +34,9 @@ export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"
  * + `FieldError` and nothing else, so a form does not repeat that wiring for every field.
  *
  * It works with react-hook-form: spread `register("name")` into it (React 19 passes `ref` as a
- * prop). The input is 48 px tall with 16 px text; set `type`, `inputMode`, `autoComplete` and
- * `enterKeyHint` for the keyboard each field needs.
+ * prop). `startIcon` and `endAction` sit inside the input (see their docs). The input is 48 px
+ * tall with 16 px text; set `type`, `inputMode`, `autoComplete` and `enterKeyHint` for the
+ * keyboard each field needs.
  */
 export function TextField({
   label,
@@ -32,6 +45,8 @@ export function TextField({
   optional,
   id,
   className,
+  startIcon,
+  endAction,
   "aria-describedby": extraDescribedBy,
   ...inputProps
 }: TextFieldProps) {
@@ -51,12 +66,27 @@ export function TextField({
           <span className="font-normal text-muted-foreground">{" (opcional)"}</span>
         ) : null}
       </FieldLabel>
-      <Input
-        {...inputProps}
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-      />
+      <div className="relative">
+        {startIcon ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-muted-foreground [&_svg]:size-5"
+          >
+            {startIcon}
+          </span>
+        ) : null}
+        <Input
+          {...inputProps}
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className={cn(startIcon && "pl-11", endAction && "pr-14")}
+        />
+        {endAction ? (
+          // 44 px control inside the 48 px input: 2 px margin on the free sides.
+          <div className="absolute inset-y-0 right-0.5 flex items-center">{endAction}</div>
+        ) : null}
+      </div>
       {description ? <FieldDescription id={descriptionId}>{description}</FieldDescription> : null}
       {error ? <FieldError id={errorId}>{error}</FieldError> : null}
     </Field>

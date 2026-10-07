@@ -94,7 +94,7 @@ describe("LoginForm: Firebase warm-up", () => {
 describe("LoginForm: validation and field wiring", () => {
   it("shows both fields invalid and wired to their errors when it is sent empty", async () => {
     renderForm();
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
 
     const alerts = await screen.findAllByRole("alert");
     expect(alerts).toHaveLength(2);
@@ -120,7 +120,7 @@ describe("LoginForm: validation and field wiring", () => {
   it("leaves a valid field clean: no aria-invalid and no link to an error", async () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
 
     const password = await screen.findByLabelText("Contraseña");
     await waitFor(() => expect(password.getAttribute("aria-invalid")).toBe("true"));
@@ -133,7 +133,7 @@ describe("LoginForm: validation and field wiring", () => {
     renderForm();
     type("Correo electrónico", "ana");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
     const error = await screen.findByRole("alert");
     expect(error.textContent).toContain("Escribe un correo válido");
     expect(mocks.signInForIdToken).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "  ana@correo.com ");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
 
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
     expect(mocks.signInForIdToken).toHaveBeenCalledWith({
@@ -184,7 +184,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
     await waitFor(() => expect(order).toEqual(["signOut", "replace"]));
   });
 
@@ -195,7 +195,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "equivocada");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Correo o contraseña incorrectos");
@@ -204,7 +204,7 @@ describe("LoginForm: signing in with email", () => {
     expect(mocks.post).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalled();
     // The button is usable again to retry.
-    expect(isBlocked(button("Entrar"))).toBe(false);
+    expect(isBlocked(button("Iniciar sesión"))).toBe(false);
   });
 
   it("shows the backend's error in Spanish, never its English detail, and still signs out", async () => {
@@ -212,7 +212,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Vuelve a iniciar sesión");
@@ -235,7 +235,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No pudimos detectar tu zona horaria");
   });
@@ -245,7 +245,7 @@ describe("LoginForm: signing in with email", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("No pudimos conectar");
     expect(mocks.signOutQuietly).toHaveBeenCalledTimes(1);
@@ -259,7 +259,7 @@ describe("LoginForm: busy state", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    const submit = button("Entrar");
+    const submit = button("Iniciar sesión");
     fireEvent.click(submit);
 
     await waitFor(() => expect(submit.getAttribute("aria-busy")).toBe("true"));
@@ -276,7 +276,7 @@ describe("LoginForm: busy state", () => {
     signIn.resolve("fake-id-token");
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
     // After success it does not flip back to idle while the navigation happens.
-    expect(isBlocked(button("Entrando…"))).toBe(true);
+    expect(isBlocked(button("Iniciando sesión…"))).toBe(true);
   });
 
   it("shows the busy label and keeps the focus on the button", async () => {
@@ -284,9 +284,9 @@ describe("LoginForm: busy state", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    button("Entrar").focus();
-    fireEvent.click(button("Entrar"));
-    const busy = await screen.findByRole("button", { name: "Entrando…" });
+    button("Iniciar sesión").focus();
+    fireEvent.click(button("Iniciar sesión"));
+    const busy = await screen.findByRole("button", { name: "Iniciando sesión…" });
     expect(document.activeElement).toBe(busy);
   });
 });
@@ -307,7 +307,7 @@ describe("LoginForm: Google", () => {
     fireEvent.click(button("Continuar con Google"));
     const google = button("Continuar con Google");
     await waitFor(() => expect(google.getAttribute("aria-busy")).toBe("true"));
-    const submit = button("Entrar");
+    const submit = button("Iniciar sesión");
     expect(submit.getAttribute("aria-busy")).toBeNull();
     expect(isBlocked(submit)).toBe(true);
   });
@@ -324,7 +324,7 @@ describe("LoginForm: Google", () => {
     await waitFor(() => expect(mocks.signOutQuietly).toHaveBeenCalled());
     await waitFor(() => expect(isBlocked(button("Continuar con Google"))).toBe(false));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(isBlocked(button("Entrar"))).toBe(false);
+    expect(isBlocked(button("Iniciar sesión"))).toBe(false);
   });
 
   it("tells the user to allow pop-ups when the browser blocked the window", async () => {
@@ -369,7 +369,7 @@ describe("LoginForm: creating an account", () => {
     renderForm();
     type("Correo electrónico", "ana@correo.com");
     type("Contraseña", "secreta");
-    fireEvent.click(button("Entrar"));
+    fireEvent.click(button("Iniciar sesión"));
     await screen.findByRole("alert");
 
     fireEvent.click(button("Crea una"));
@@ -425,5 +425,83 @@ describe("LoginForm: creating an account", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Ya existe una cuenta con ese correo");
     expect(alert.textContent).toContain("Inicia sesión");
+  });
+});
+
+describe("LoginForm: Kanza peek", () => {
+  it("shows the cricket as a decorative image placed before the form card", () => {
+    const { container } = renderForm();
+    const peek = container.querySelector('img[src*="kanza-peek"]');
+    expect(peek).not.toBeNull();
+    // Decorative: empty alt, so it has no accessible name and screen readers skip it.
+    expect(peek?.getAttribute("alt")).toBe("");
+    expect(screen.queryByRole("img")).toBeNull();
+    // It comes first in its wrapper, and the wrapper holds the form: it peeks over the card.
+    const wrapper = peek?.parentElement;
+    expect(wrapper?.firstElementChild).toBe(peek);
+    expect(wrapper?.querySelector("form")).not.toBeNull();
+  });
+});
+
+describe("LoginForm: layout of the card", () => {
+  it("puts the email form first, then the separator, then Google, in both modes", () => {
+    const { container } = renderForm();
+    const order = () => {
+      const card = container.querySelector("[data-slot=card]") as HTMLElement;
+      const form = card.querySelector("form") as HTMLElement;
+      const google = button("Continuar con Google");
+      const separator = [...card.querySelectorAll("span")].find((el) => el.textContent === "o");
+      expect(separator).toBeTruthy();
+      // DOM order: form, then separator, then the Google button.
+      expect(
+        form.compareDocumentPosition(separator as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        (separator as Node).compareDocumentPosition(google) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(form.contains(google)).toBe(false);
+    };
+    order();
+    expect(screen.queryByText("o con tu correo")).toBeNull();
+    fireEvent.click(button("Crea una"));
+    order();
+  });
+
+  it("says Iniciar sesión on the submit button when signing in, and keeps Crear cuenta", () => {
+    renderForm();
+    expect(button("Iniciar sesión")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Entrar" })).toBeNull();
+    // The heading is not renamed.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Entra a tu cuenta");
+    fireEvent.click(button("Crea una"));
+    expect(button("Crear cuenta")).toBeTruthy();
+  });
+
+  it("gives both inputs a placeholder and a decorative icon, without replacing the labels", () => {
+    const { container } = renderForm();
+    const email = screen.getByLabelText("Correo electrónico");
+    const password = screen.getByLabelText("Contraseña");
+    expect(email.getAttribute("placeholder")).toBe("tu@correo.com");
+    expect(password.getAttribute("placeholder")).toBe("Tu contraseña");
+    // One decorative icon per input, hidden from assistive tech, and the labels remain.
+    const icons = container.querySelectorAll("form [aria-hidden=true] > svg");
+    expect(icons.length).toBeGreaterThanOrEqual(2);
+    expect(email.className).toContain("pl-11");
+    expect(password.className).toContain("pl-11");
+    expect(password.className).toContain("pr-14");
+  });
+
+  it("shows and hides the password without submitting or losing what was typed", () => {
+    renderForm();
+    const password = screen.getByLabelText("Contraseña") as HTMLInputElement;
+    type("Contraseña", "secreta123");
+    expect(password.type).toBe("password");
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar contraseña" }));
+    expect(password.type).toBe("text");
+    expect(password.value).toBe("secreta123");
+    fireEvent.click(screen.getByRole("button", { name: "Ocultar contraseña" }));
+    expect(password.type).toBe("password");
+    expect(mocks.signInForIdToken).not.toHaveBeenCalled();
+    expect(password.autocomplete).toBe("current-password");
   });
 });
