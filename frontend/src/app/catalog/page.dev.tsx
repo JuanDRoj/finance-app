@@ -77,14 +77,7 @@ export default async function CatalogPage({
   const { title } = await searchParams;
   const headerTitle = (Array.isArray(title) ? title[0] : title)?.slice(0, 200) || "Catálogo";
   return (
-    <AppShell
-      title={headerTitle}
-      actions={
-        <Button variant="ghost" size="sm">
-          Cerrar sesión
-        </Button>
-      }
-    >
+    <AppShell title={headerTitle}>
       <div className="flex flex-col gap-8">
         <p className="text-sm text-muted-foreground">
           Solo en local (`npm run dev`). Cambia el tema del sistema para ver claro y oscuro y

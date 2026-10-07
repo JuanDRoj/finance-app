@@ -6,17 +6,13 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getServerApi } from "@/lib/api/server";
-import { ApiError } from "@/lib/core/data/errors";
+import { ApiError, isUnauthorized } from "@/lib/core/data/errors";
 import { getMe } from "@/lib/core/data/me";
 import { listSpaces } from "@/lib/core/data/spaces";
 import { describeApiError } from "@/lib/core/i18n";
 import { displayNameOf } from "@/lib/core/user";
 
 export const metadata: Metadata = { title: "Inicio" };
-
-function isUnauthorized(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 401;
-}
 
 /**
  * Both calls are independent, so they run together, and both are awaited to the end

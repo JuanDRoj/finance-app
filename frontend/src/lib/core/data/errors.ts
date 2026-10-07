@@ -12,6 +12,14 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * True when the backend answered 401: no session, an expired one or a revoked one. A Server
+ * Component answers with `redirect("/login")`; nothing else is a reason to leave the page.
+ */
+export function isUnauthorized(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
 type ApiResult<T> = { data?: T; error?: unknown; response: Response };
 
 /**

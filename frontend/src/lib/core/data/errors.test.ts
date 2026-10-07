@@ -2,7 +2,7 @@ import createClient from "openapi-fetch";
 import { describe, expect, it } from "vitest";
 import type { paths } from "@/lib/api/schema";
 import type { ApiClient } from "./api-client";
-import { ApiError, unwrap } from "./errors";
+import { ApiError, isUnauthorized, unwrap } from "./errors";
 
 function clientAnswering(response: Response): ApiClient {
   return createClient<paths>({ baseUrl: "http://backend.test", fetch: async () => response });
@@ -59,5 +59,21 @@ describe("unwrap", () => {
     await expect(unwrap({ data: 7, response: new Response(null, { status: 200 }) })).resolves.toBe(
       7,
     );
+  });
+});
+
+describe("isUnauthorized", () => {
+  it("is true only for an ApiError with status 401, with or without a body", () => {
+    expect(isUnauthorized(new ApiError(401, { code: "invalid_session", detail: "x" }))).toBe(true);
+    expect(isUnauthorized(new ApiError(401, undefined))).toBe(true);
+  });
+
+  it("is false for other statuses and for anything that is not an ApiError", () => {
+    for (const status of [400, 403, 404, 422, 500, 502]) {
+      expect(isUnauthorized(new ApiError(status, undefined))).toBe(false);
+    }
+    expect(isUnauthorized(new TypeError("fetch failed"))).toBe(false);
+    expect(isUnauthorized({ status: 401 })).toBe(false);
+    expect(isUnauthorized(undefined)).toBe(false);
   });
 });
