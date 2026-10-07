@@ -5,7 +5,7 @@ Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en 
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
-> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`) y **KAN-40 [FE-09]** (identidad Kanza): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`), **KAN-40 [FE-09]** (identidad Kanza) y **KAN-28 [FE-05]** (home y cookie de sesión del servidor): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
 Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos. Vitest 5 usa Vite 8: el alias `@/` se resuelve con `resolve.tsconfigPaths` (no hace falta `vite-tsconfig-paths`).
@@ -14,7 +14,7 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Para | Comando |
 |---|---|
 | Instalar dependencias | `npm ci` (usa `npm install <paquete>` solo si el plan aprobado lo incluye) |
-| Variables de entorno (una vez) | `cp .env.example .env.local` (sin ellas `dev` y `build` fallan) |
+| Variables de entorno (una vez) | `cp .env.example .env.local` (sin ellas `dev` y `build` fallan). Si ya tenías un `.env.local`, añade `SESSION_COOKIE_NAME=session` (KAN-28) |
 | Levantar en local | `npm run dev` → http://localhost:3000 |
 | Catálogo de componentes (solo `next dev`) | http://localhost:3000/catalog: no existe en `build` ni en producción (ver `docs/diseno.md` D4) |
 | Lint | `npm run lint` (`eslint .`; Next 16 ya no trae `next lint` ni lintea en el build) |
@@ -38,9 +38,10 @@ frontend/
 │   │   ├── globals.css         # tokens (claro + oscuro), glass, base móvil
 │   │   ├── fonts/              # `bricolage-grotesque-800-opsz96.woff2`: la fuente del nombre Kanza (OFL), cargada con `next/font/local`; `OFL.txt` es su licencia
 │   │   ├── login/              # `page.tsx` (marco propio, sin AppShell; encima del formulario va `KanzaBrand`) y `_components/login-form.tsx` (cliente): entrar y crear cuenta con email, y Google por popup; canjea el ID token por la cookie y va a `/`; el grillo asomado (`kanza-peek.svg`) va sobre la tarjeta del formulario
+│   │   ├── page.tsx            # `/` (home, KAN-28): Server Component; `/me` y `/spaces` en paralelo con `getServerApi()` y "Hola, {nombre}, tu espacio es {espacio}" en AppShell + Card. 401 → `redirect("/login")`; otro error → `Alert` + "Reintentar"; sin espacios → aviso. Sin `loading.tsx`: el saludo llega en el HTML
 │   │   ├── (private)/          # (pendiente) rutas que requieren sesión
 │   │   └── catalog/            # solo en `next dev`: `page.dev.tsx` y `layout.dev.tsx` (catálogo de componentes, con panel de auditoría de 44 px y "Probar GET /me": comprueba a mano que la cookie de sesión viaja con `browserApi`)
-│   ├── proxy.ts                # (pendiente) redirige a /login si no hay cookie de sesión. Next 16 renombró `middleware.ts` a `proxy.ts`
+│   ├── proxy.ts                # (pendiente) redirige a /login si no hay cookie de sesión (el nombre, de `serverEnv.SESSION_COOKIE_NAME`). Next 16 renombró `middleware.ts` a `proxy.ts`
 │   ├── components/
 │   │   ├── providers.tsx       # QueryClientProvider (un QueryClient por request en servidor)
 │   │   ├── app-shell.tsx       # marco de una pantalla con sesión: header glass con ranura `actions` ("Cerrar sesión"), safe areas, fondo
@@ -53,13 +54,15 @@ frontend/
 │   │   │   ├── locale.ts       # locale por moneda del espacio (mapa fijo, fallback es-UY)
 │   │   │   ├── money.ts        # `formatMoney(minor, currency, opts)`: unidades menores → texto
 │   │   │   ├── dates.ts        # `formatLocalDate`, `formatInstant`, `todayInTimezone`
+│   │   │   ├── user.ts         # `displayNameOf(user)`: `display_name`, o la parte del email antes del `@` (docs/decisiones-producto.md); nunca se guarda
 │   │   │   ├── i18n.ts         # mapa único de traducciones del backend: `describeApiError`, `fieldErrorMessage` (errores BE-08). Los valores de dominio (`expense`…) se añaden aquí con la primera pantalla que los muestre
 │   │   │   ├── firebase-errors.ts # errores de Firebase Auth en español (`describeFirebaseAuthError`, `isSignInCancelled`) y `describeLoginError` (Firebase o API). Puro: no importa `firebase`
 │   │   │   ├── schemas/        # esquemas zod de formularios (`auth.ts`: login y registro; mínimo 8 caracteres al crear cuenta)
-│   │   │   └── data/           # `ApiClient`, `ApiError` + `unwrap`, y las funciones de datos (`queryOptions`, `createSession`)
+│   │   │   └── data/           # `ApiClient`, `ApiError` + `unwrap`, y las funciones de datos: `createSession`, `getMe` (`me.ts`) y `listSpaces` (`spaces.ts`; sin `queryOptions` hasta que un Client Component las pida)
 │   │   ├── api/                # adaptadores del cliente tipado de la API (openapi-fetch)
 │   │   │   ├── schema.d.ts     # GENERADO por gen:api (versionado) — nunca editar a mano
-│   │   │   ├── server.ts       # `getServerApi()` (import "server-only"): BACKEND_URL + reenvía la cabecera Cookie
+│   │   │   ├── server.ts       # `getServerApi()` (import "server-only"): BACKEND_URL + reenvía solo la cookie de sesión (`SESSION_COOKIE_NAME`), tal cual llegó
+│   │   │   ├── cookie-header.ts # `pickCookie(header, name)`: saca una cookie de la cabecera `Cookie` en bruto, nombre exacto y valor sin tocar. Puro (sin `server-only`), con test
 │   │   │   ├── browser.ts      # `browserApi`: baseUrl `/api` (rewrite) + `credentials: "include"`
 │   │   │   └── contract.check.ts # canario de tipos que revisa `typecheck`; nadie lo importa ni se ejecuta
 │   │   ├── env/                # validación de variables de entorno (zod)
@@ -109,7 +112,9 @@ frontend/
   - **Popup y Safari/iOS:** `window.open` tras una espera de red se bloquea (`auth/popup-blocked`). Antes de abrir el popup el SDK carga el iframe del `authDomain`, y solo lo precarga al crear el auth si ya tiene el resolver y estás en móvil, Safari o iOS. Por eso el resolver va en `initializeAuth` y `LoginForm` llama a `prepareFirebaseAuth()` en un `useEffect` al montarse (lo prepara antes del primer toque; es idempotente y no abre nada). El SDK sigue siendo perezoso: no se inicializa al importar el módulo ni en el servidor (la página también se renderiza allí). `firebase/auth` se importa de forma estática, no con `import()`, por lo mismo. Un toque en los primeros instantes, antes de que cargue el iframe, aún podría bloquearse: prueba en un iPhone real _(pendiente de hardware)_.
   - **Emulador:** si existe `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST`, `connectAuthEmulator` (sin banner). En local, abre la app en `http://localhost:3000` (no `127.0.0.1` ni la IP de la LAN): el backend solo acepta ese origen en `ALLOWED_ORIGINS` y respondería 403 `origin_not_allowed`.
   - **Comprobar la cookie a mano:** inicia sesión en `/login` y, en `/catalog`, pulsa "Probar GET /me" (200 con tu email = la cookie HttpOnly llegó y viaja en las llamadas de `browserApi`).
-- **Server Components** llaman directo a `BACKEND_URL` y **reenvían la cookie** de la petición entrante: `getServerApi()` copia tal cual la cabecera `Cookie` (`(await headers()).get("cookie")`), no la reconstruye con `cookies()` porque eso re-codifica los valores. Un `Set-Cookie` del backend no se propaga desde un Server Component (no puede escribir cookies).
+- **Server Components** llaman directo a `BACKEND_URL` y **reenvían solo la cookie de sesión** de la petición entrante (KAN-28): `getServerApi()` lee la cabecera `Cookie` en bruto (`(await headers()).get("cookie")`) y `pickCookie` deja únicamente `SESSION_COOKIE_NAME=<valor>`, con el valor exactamente como llegó; no usa `cookies()` porque eso re-codifica los valores. Las demás cookies del navegador (tema, analítica, la de Vercel…) no salen de Next. Si no hay cookie de sesión no se manda cabecera `Cookie` y el backend responde 401. Un `Set-Cookie` del backend no se propaga desde un Server Component (no puede escribir cookies).
+  - **Nombre de la cookie:** el backend usa `session` si corre con `ENV=local` y `__Host-session` en cualquier otro caso (`Settings.session_cookie_name`). El frontend lo recibe en `SESSION_COOKIE_NAME` (obligatoria, ver "Variables de entorno"). No lo deduzcas de `NODE_ENV` ni de `VERCEL_ENV`: un `next start` o `vercel dev` con backend local no coinciden con el `ENV` del backend.
+  - **401 en una página:** `redirect("/login")` fuera del `try` (`redirect` lanza). Si una página hace varias llamadas en paralelo, usa `Promise.allSettled` y deja que un 401 de cualquiera gane sobre otro fallo (sin 401, se informa el primer fallo en el orden de las llamadas), para que el resultado no dependa de cuál falla antes. En el log del servidor, de un error que no es `ApiError` solo va su nombre (`error.name`), nunca el mensaje: un error de parseo puede citar un trozo del cuerpo de la respuesta. El proxy de KAN-27 solo ve que hay cookie, no si es válida, así que esa comprobación se queda. Un Server Component no puede borrar la cookie vencida: si KAN-27 hace que `/login` redirija a `/` cuando hay cookie, habría un bucle (`/` → 401 → `/login` → `/`).
 - **Dinero:** llega como entero en la **unidad menor de la moneda** (ISO 4217): valor × 10^exponente, con el `exponent` que el API envía junto a `currency` (UYU 15,50 = `1550`; CLP 1.500 = `1500`). Nunca asumas ×100. Se formatea solo para mostrar, con `formatMoney(minor, { code, exponent }, { sign })` de `lib/core/money.ts`: locale fijo por moneda del espacio (`lib/core/locale.ts`: UYU → es-UY, COP → es-CO, USD → es-UY, fallback es-UY; nunca el del dispositivo), **exactamente `exponent` decimales** y "−" tipográfico (U+2212) en negativos. Acepta `number` entero seguro, `bigint` o `string`; convierte con enteros y cadenas, nunca con `/ 100` ni floats. Sin aritmética con floats.
 - **Fechas:** `lib/core/dates.ts`. La fecha de una transacción (`date`, `YYYY-MM-DD`) se formatea tal cual con `formatLocalDate` (sin zona horaria: no se corre un día); un instante (`timestamptz`) con `formatInstant(instante, space.timezone)`; "hoy" con `todayInTimezone(space.timezone)`. Siempre la zona del espacio, nunca la del dispositivo.
 - **Textos:** todo lo visible en español. Valores del backend (`expense`, `pending`, `credit_card`) → mapa único en `lib/core/i18n.ts` (hoy trae los errores del backend; añade ahí los valores de dominio con la primera pantalla que los muestre).
@@ -124,7 +129,7 @@ frontend/
 
 ## Variables de entorno
 - **Validación:** `next.config.ts` llama `assertValidEnv()` (`lib/env/validate.ts`), así que `npm run dev` y `npm run build` fallan con un mensaje claro que lista **todas** las variables que faltan o están mal (servidor y cliente juntas). En local: `cp .env.example .env.local`.
-- **Servidor:** `BACKEND_URL` (URL http(s), sin barra final). Solo se lee desde `lib/env/server.ts` (`serverEnv`), que lleva `import "server-only"`: importarlo desde un componente cliente rompe el build.
+- **Servidor:** `BACKEND_URL` (URL http(s), sin barra final) y `SESSION_COOKIE_NAME` (obligatoria: `session` o `__Host-session`, el nombre de la cookie que pone el backend; sin valor por defecto a propósito: olvidarla en staging dejaría a todos rebotando a `/login`; en Vercel va en Production y en Preview, KAN-14). Solo se leen desde `lib/env/server.ts` (`serverEnv`), que lleva `import "server-only"`: importarlo desde un componente cliente rompe el build.
 - **Cliente:** `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID` (obligatorias) y `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` (opcional, solo local). Se leen desde `lib/env/client.ts` (`clientEnv`). Son públicas: se incrustan en el bundle al hacer build, **nunca secretos**. Next solo las incrusta si se escriben como `process.env.NEXT_PUBLIC_X` literal (`client.ts` ya lo hace); no uses claves dinámicas ni pases `process.env` entero.
 - **No leas `process.env` directamente** fuera de `lib/env/` (ESLint lo prohíbe): añade la variable al schema y léela vía `serverEnv` / `clientEnv`.
 - **Emulador solo en local:** el build falla si `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` está definida y existe `VERCEL_ENV` (misma regla que el backend). `vercel dev` también define `VERCEL_ENV=development`, así que la guarda impide usarlo con el emulador: en local usa `npm run dev`.
@@ -136,6 +141,7 @@ frontend/
 - Los tests de dinero y fecha comparan texto exacto: NBSP (U+00A0) entre símbolo y cifra y "−" (U+2212), escritos con escapes. Una subida de Node puede cambiar el ICU y romperlos: revisa la salida antes de tocar la expectativa.
 - El proyecto "unit" corre con `TZ=America/Montevideo` (`test.env` en `vitest.config.mts`): una zona con offset negativo, para que un formateo que use la zona de la máquina falle en cualquier equipo y en CI. `dates.test.ts` lo comprueba. El proyecto "ui" (jsdom) no lo fija.
 - Pasa el `env` como argumento en vez de tocar `process.env` (`assertValidEnv(env)` lo admite).
+- Un módulo con `import "server-only"` (como `lib/api/server.ts`) lanza al importarlo fuera de un Server Component: en su test, `vi.mock("server-only", () => ({}))`, y mockea `next/headers` y `@/lib/env/server`. `server.test.ts` lo hace y comprueba la cabecera `cookie` que llega al backend; `app/page.test.tsx` prueba una página async con `render(await HomePage())` y `redirect` mockeado para que lance.
 - E2E con Playwright en `e2e/`, pocos y de flujos reales (los escribe qa). _(pendiente: todavía no está instalado.)_
 
 <!-- BEGIN:nextjs-agent-rules -->

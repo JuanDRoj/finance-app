@@ -3,6 +3,7 @@ import { assertValidEnv } from "./validate";
 
 const VALID_ENV = {
   BACKEND_URL: "http://localhost:8000",
+  SESSION_COOKIE_NAME: "session",
   NEXT_PUBLIC_FIREBASE_API_KEY: "demo-key",
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "demo.firebaseapp.com",
   NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-project",
@@ -70,6 +71,26 @@ describe("assertValidEnv", () => {
     }
   });
 
+  it("accepts both session cookie names the backend can use", () => {
+    for (const name of ["session", "__Host-session"]) {
+      expect(() => assertValidEnv({ ...VALID_ENV, SESSION_COOKIE_NAME: name })).not.toThrow();
+    }
+  });
+
+  it("rejects a missing, empty or unknown SESSION_COOKIE_NAME", () => {
+    expect(messageOf({ ...VALID_ENV, SESSION_COOKIE_NAME: undefined })).toContain(
+      "SESSION_COOKIE_NAME is required",
+    );
+    expect(messageOf({ ...VALID_ENV, SESSION_COOKIE_NAME: "  " })).toContain(
+      "SESSION_COOKIE_NAME is required",
+    );
+    for (const name of ["Session", "__host-session", "sid", "session2"]) {
+      expect(messageOf({ ...VALID_ENV, SESSION_COOKIE_NAME: name })).toContain(
+        'SESSION_COOKIE_NAME must be "session"',
+      );
+    }
+  });
+
   it("rejects each missing public Firebase variable", () => {
     for (const name of [
       "NEXT_PUBLIC_FIREBASE_API_KEY",
@@ -94,6 +115,7 @@ describe("assertValidEnv", () => {
       VERCEL_ENV: "preview",
     });
     expect(message).toContain("BACKEND_URL is required");
+    expect(message).toContain("SESSION_COOKIE_NAME is required");
     expect(message).toContain("NEXT_PUBLIC_FIREBASE_API_KEY is required");
     expect(message).toContain("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is required");
     expect(message).toContain("NEXT_PUBLIC_FIREBASE_PROJECT_ID is required");
