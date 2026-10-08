@@ -1,0 +1,225 @@
+# CI de cada PR a `main` (KAN-15).
+#
+# Los nombres de los jobs (`name:`) SON los nombres de los checks que exige el ruleset
+# `protect-main`: backend, frontend, api-types y secrets. Si cambias uno, vuelve a correr
+# infra/scripts/05_github_main_protection.sh con los nombres nuevos o se bloquearán los merges.
+#
+# Sin filtro `paths:` a propósito: un check requerido que no se dispara deja el PR sin poder mergear.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Permisos mínimos: ningún job escribe en el repo ni necesita secretos.
+permissions:
+  contents: read
+
+# Un push nuevo al mismo PR cancela la ejecución anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # uv falla si uv.lock no coincide con pyproject.toml en vez de reescribirlo.
+  UV_LOCKED: "1"
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Valores de desarrollo local (los mismos de .env.example): no son secretos.
+      PGHOST: localhost
+      PGUSER: finance
+      PGPASSWORD: finance_dev
+      DATABASE_URL: postgresql+asyncpg://finance:finance_dev@localhost:5432/finance
+      # La suite se niega a correr si el nombre de esta BD no termina en `_test`.
+      TEST_DATABASE_URL: postgresql+asyncpg://finance:finance_dev@localhost:5432/finance_test
+    services:
+      postgres:
+        image: postgres:16.15-alpine
+        env:
+          # POSTGRES_USER es superusuario, así que ya tiene CREATEDB (los tests de migraciones
+          # crean y borran una BD por test).
+          POSTGRES_USER: finance
+          POSTGRES_PASSWORD: finance_dev
+          POSTGRES_DB: finance
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finance -d finance"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 10s
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # uv lee backend/.python-version (3.14) y descarga ese Python si hace falta.
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format (ruff format --check)
+        run: uv run ruff format --check .
+
+      - name: Types (mypy)
+        run: uv run mypy .
+
+      # En el compose local, infra/postgres/init crea finance_test; un service de Actions no puede
+      # montar ese directorio, así que se crea aquí. `finance` queda vacía para el upgrade.
+      - name: Create the test database
+        run: psql -d finance -c 'CREATE DATABASE finance_test'
+
+      - name: Migrations on an empty database (alembic upgrade head)
+        run: uv run alembic upgrade head
+
+      # Un service no puede construir una imagen: se construye la del emulador (con caché de capas)
+      # y se levanta con el servicio del docker-compose.yml de la raíz, igual que en local.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the Firebase Auth emulator image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infra/firebase-emulator
+          tags: finance-firebase-emulator:local
+          load: true
+          push: false
+          cache-from: type=gha,scope=firebase-emulator
+          cache-to: type=gha,mode=max,scope=firebase-emulator
+
+      - name: Start the Firebase Auth emulator
+        working-directory: .
+        run: docker compose up -d --no-build --wait firebase-emulator
+
+      - name: Tests (pytest, with PostgreSQL and the emulator)
+        run: uv run pytest
+
+      - name: Emulator logs (on failure)
+        if: failure()
+        working-directory: .
+        run: docker compose logs --no-color firebase-emulator
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Types (tsc)
+        run: npm run typecheck
+
+      - name: Format (prettier --check)
+        run: npm run format:check
+
+      - name: Tests (vitest)
+        run: npm test
+
+      # `next build` valida el entorno (src/lib/env/validate.ts) y falla sin estas variables.
+      # Son valores de relleno NO secretos; no se define el host del emulador a propósito.
+      - name: Build (next build)
+        run: npm run build
+        env:
+          BACKEND_URL: http://localhost:8000
+          SESSION_COOKIE_NAME: session
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci-placeholder
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-finance-ci
+
+  # El contrato (backend/openapi.json) y los tipos del frontend (schema.d.ts) son archivos
+  # generados y versionados: si regenerarlos cambia algo, el PR olvidó incluir el cambio.
+  api-types:
+    name: api-types
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # El export no necesita BD ni variables de entorno ni las dependencias de desarrollo.
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --no-dev
+
+      - name: Export openapi.json
+        working-directory: backend
+        run: uv run python -m app.export_openapi
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Generate the TypeScript types
+        working-directory: frontend
+        run: npm run gen:api
+
+      - name: Fail if the generated files differ from the committed ones
+        run: |
+          if ! git diff --exit-code backend/openapi.json frontend/src/lib/api/schema.d.ts; then
+            echo "::error::openapi.json or schema.d.ts is out of date. Run 'cd backend && uv run python -m app.export_openapi' and 'cd frontend && npm run gen:api', then commit the result."
+            exit 1
+          fi
+
+  # Secretos en los commits del PR (el historial completo se escanea con infra/scripts/04_scan_history.sh).
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan the commits of the PR with gitleaks
+        env:
+          # Por `env:` y no interpolados en el script, para que ningún valor se ejecute como código.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version="$(tr -d '[:space:]' < infra/gitleaks/VERSION)"
+          # Sin base (ejecución manual) se escanea todo el historial hasta HEAD_SHA.
+          log_opts="${BASE_SHA:+${BASE_SHA}..}${HEAD_SHA}"
+          # --user: el repo pertenece al usuario del runner; con root git lo rechazaría ("dubious ownership").
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/repo:ro \
+            "zricethezav/gitleaks:${version}" \
+            detect --source /repo --log-opts="${log_opts}" --redact --no-banner \
+            --gitleaks-ignore-path /repo/infra/gitleaks/.gitleaksignore

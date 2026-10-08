@@ -9,9 +9,12 @@ source "$(dirname "$0")/lib.sh"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  log "Escaneando el historial con gitleaks (Docker)"
+  # La versión vive en infra/gitleaks/VERSION: la comparten este script y el job `secrets` del CI.
+  GITLEAKS_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/infra/gitleaks/VERSION")"
+  [[ "$GITLEAKS_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "infra/gitleaks/VERSION inválida: '$GITLEAKS_VERSION'"
+  log "Escaneando el historial con gitleaks ${GITLEAKS_VERSION} (Docker)"
   # Montaje de solo lectura; se analizan todas las ramas y tags.
-  docker run --rm -v "$REPO_ROOT":/repo:ro zricethezav/gitleaks:latest \
+  docker run --rm -v "$REPO_ROOT":/repo:ro "zricethezav/gitleaks:${GITLEAKS_VERSION}" \
     detect --source /repo --log-opts="--all" --redact --no-banner \
     --gitleaks-ignore-path /repo/infra/gitleaks/.gitleaksignore
 else

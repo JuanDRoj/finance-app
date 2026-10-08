@@ -33,7 +33,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 ## Flujo de trabajo y `main` protegida
 
 - `main` solo recibe cambios por Pull Request: no se admite push directo, force push ni borrado de la rama (tampoco para el administrador).
-- Los checks de CI obligatorios se añaden con KAN-15; hasta entonces el ruleset no exige checks.
+- Cada PR corre el CI (`.github/workflows/ci.yml`): checks `backend`, `frontend`, `api-types` y `secrets`. El ruleset los exige (se aplican tras la primera ejecución del CI, ver `infra/CLAUDE.md`).
 - La protección se aplica con `infra/scripts/05_github_main_protection.sh` (`DRY_RUN=1` para ver qué hará).
 - El repositorio es público: nunca se suben secretos (`.env*`, llaves, credenciales). Usa los `.env.example` como referencia.
 
