@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { focusRing, focusRingForced } from "./focus";
+import { focusRing, focusRingForced, sidebarFocusRing } from "./focus";
 
 describe("focus ring", () => {
   it("is a solid outline in the ring color, 2 px wide, with an offset", () => {
@@ -19,5 +19,19 @@ describe("focus ring", () => {
 
   it("only paints on keyboard focus", () => {
     expect(focusRing.split(" ").every((c) => c.startsWith("focus-visible:"))).toBe(true);
+  });
+});
+
+describe("sidebar focus ring", () => {
+  it("is the same ring, in the sidebar's own color", () => {
+    expect(sidebarFocusRing).toMatch(/outline-solid/);
+    expect(sidebarFocusRing).toMatch(/outline-2/);
+    expect(sidebarFocusRing).toMatch(/outline-offset-2/);
+    expect(sidebarFocusRing).toMatch(/outline-sidebar-ring(\s|$)/);
+    expect(sidebarFocusRing).not.toMatch(/outline-(none|hidden)/);
+  });
+
+  it("only paints on keyboard focus", () => {
+    expect(sidebarFocusRing.split(" ").every((c) => c.startsWith("focus-visible:"))).toBe(true);
   });
 });

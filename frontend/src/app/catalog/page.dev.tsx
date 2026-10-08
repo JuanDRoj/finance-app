@@ -57,6 +57,14 @@ function State({ name, children }: Readonly<{ name: string; children: ReactNode 
   );
 }
 
+// An extreme user for the avatar menu: a name and an email that do not fit in one line anywhere.
+const DEMO_USER = {
+  display_name:
+    "Ana María de los Ángeles Fernández-Rodríguez y Pérez de la Cruz Montenegro Villanueva",
+  email:
+    "ana.maria.de.los.angeles.fernandez.rodriguez.perez.montenegro@un-dominio-muy-largo.example.com",
+};
+
 const NOT_FOUND = describeApiError(
   new ApiError(404, { detail: "Space not found", code: "space_not_found" }),
 );
@@ -77,12 +85,13 @@ export default async function CatalogPage({
   const { title } = await searchParams;
   const headerTitle = (Array.isArray(title) ? title[0] : title)?.slice(0, 200) || "Catálogo";
   return (
-    <AppShell title={headerTitle}>
+    <AppShell title={headerTitle} user={DEMO_USER}>
       <div className="flex flex-col gap-8">
         <p className="text-sm text-muted-foreground">
           Solo en local (`npm run dev`). Cambia el tema del sistema para ver claro y oscuro y
-          estrecha la ventana a 360 px. Con Tab ves el foco real; &quot;Foco&quot; aplica el mismo
-          anillo sin esperar.
+          estrecha la ventana a 360 px (o ensánchala hasta 1440 px: desde 1024 px aparece la barra
+          lateral). Con Tab ves el foco real; &quot;Foco&quot; aplica el mismo anillo sin esperar.
+          El menú del avatar trae un usuario de nombre y correo larguísimos.
         </p>
 
         <Section title="Botones">

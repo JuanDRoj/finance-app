@@ -11,15 +11,22 @@ const mocks = vi.hoisted(() => ({
   getServerApi: vi.fn(),
   get: vi.fn(),
   redirect: vi.fn(),
+  userMenu: vi.fn(),
 }));
 
 vi.mock("@/lib/api/server", () => ({ getServerApi: mocks.getServerApi }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
-// The header's two client pieces need a QueryClientProvider and the browser; they have their own
-// tests. Here only that the shell puts the logout button on the screen matters.
-vi.mock("@/components/logout-button", () => ({
-  LogoutButton: () => <button type="button">Cerrar sesión</button>,
+// The shell's client pieces need a QueryClientProvider, the router and the browser; they have
+// their own tests. Here only what the shell hands them matters: the user menu is where
+// "Cerrar sesión" lives (KAN-41), and the shell renders it twice (header and sidebar; CSS shows
+// one of them), so the stand-in records the props it receives.
+vi.mock("@/components/user-menu", () => ({
+  UserMenu: (props: { placement: string }) => {
+    mocks.userMenu(props);
+    return <button type="button" aria-label="Menú de la cuenta" data-placement={props.placement} />;
+  },
 }));
+vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 
 // No vitest globals, so Testing Library does not clean up by itself.
@@ -58,6 +65,7 @@ async function renderHome() {
 beforeEach(() => {
   mocks.getServerApi.mockReset().mockResolvedValue({ GET: mocks.get });
   mocks.get.mockReset();
+  mocks.userMenu.mockReset();
   // `redirect()` works by throwing; the stand-in does too, so the page stops like the real one.
   mocks.redirect.mockReset().mockImplementation((url: string) => {
     throw new Error(`NEXT_REDIRECT ${url}`);
@@ -77,16 +85,69 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Inicio" })).toBeTruthy();
   });
 
-  it("has the logout button in the header, on the greeting and on the error screen", async () => {
+  // KAN-27 made "Cerrar sesión" a button of every screen with a session; KAN-41 moved it into the
+  // avatar menu (tested in user-menu.test.tsx). What stays true here: every screen has that menu,
+  // in the header (below 1024 px) and in the sidebar (from 1024 px).
+  function menuPlacements() {
+    return screen
+      .getAllByRole("button", { name: "Menú de la cuenta" })
+      .map((button) => button.getAttribute("data-placement"))
+      .sort();
+  }
+
+  it("has the account menu in the header and in the sidebar, on the greeting and on the error screen", async () => {
     const { unmount } = await renderHome();
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
+    expect(menuPlacements()).toEqual(["header", "sidebar"]);
     unmount();
 
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     backend({ me: failure(500, { code: "internal_error", detail: "Internal Server Error" }) });
     await renderHome();
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
+    expect(menuPlacements()).toEqual(["header", "sidebar"]);
     logged.mockRestore();
+  });
+
+  it("has the menu on the screen without a space too", async () => {
+    backend({ spaces: ok([]) });
+    await renderHome();
+    expect(menuPlacements()).toEqual(["header", "sidebar"]);
+  });
+
+  it("hands the menus the name, the email and the initial of the user, and nothing else", async () => {
+    await renderHome();
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
+    for (const [props] of mocks.userMenu.mock.calls) {
+      expect(props.user).toEqual({
+        name: "Ana Pérez",
+        email: "ana.perez@example.com",
+        initial: "A",
+      });
+    }
+  });
+
+  it("uses the part of the email before the @ as the name when there is no display name", async () => {
+    backend({ me: ok({ ...USER, display_name: null }) });
+    await renderHome();
+    expect(mocks.userMenu.mock.calls[0]?.[0].user).toEqual({
+      name: "ana.perez",
+      email: "ana.perez@example.com",
+      initial: "A",
+    });
+  });
+
+  it("gives the menus no user when /me failed: a generic avatar, but the menu is still there", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    backend({ me: failure(502) });
+    await renderHome();
+    expect(menuPlacements()).toEqual(["header", "sidebar"]);
+    for (const [props] of mocks.userMenu.mock.calls) expect(props.user).toBeUndefined();
+    logged.mockRestore();
+  });
+
+  it("has the main landmark and the logo of the sidebar", async () => {
+    await renderHome();
+    expect(screen.getByRole("main")).toBeTruthy();
+    expect(screen.getByAltText("Kanza")).toBeTruthy();
   });
 
   it("falls back to the part of the email before the @ when there is no display name", async () => {

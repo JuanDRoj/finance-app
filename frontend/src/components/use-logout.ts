@@ -1,17 +1,14 @@
-"use client";
-
-import { SignOut } from "@phosphor-icons/react/ssr";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { toast } from "sonner";
 import { markSessionEnded } from "@/components/bfcache-guard";
-import { Button } from "@/components/ui/button";
 import { browserApi } from "@/lib/api/browser";
 import { deleteSession } from "@/lib/core/data/session";
 import { describeApiError } from "@/lib/core/i18n";
 
 /**
- * "Cerrar sesión" (it lives in `AppShell`): `DELETE /api/auth/session` (the backend revokes the
- * user's sessions in Firebase and clears the cookie) and then `/login`.
+ * "Cerrar sesión" (KAN-27; it lives in the avatar menu, `UserMenu`): `DELETE /api/auth/session`
+ * (the backend revokes the user's sessions in Firebase and clears the cookie) and then `/login`.
  *
  * The way out is a full page load (`location.replace`), not `router.replace`: with a client
  * navigation, a "back" restores the page from the Router Cache without asking the server, and
@@ -19,12 +16,18 @@ import { describeApiError } from "@/lib/core/i18n";
  * memory (the TanStack Query cache has user data), and `replace` takes `/` out of the history.
  *
  * It fails only with a network error or a 403 (`origin_not_allowed`): the session is still there,
- * so a toast says so and the button can be pressed again.
+ * so a toast says so and `logout` can be called again.
+ *
+ * Whoever owns the menu calls this hook (not the menu item): the item unmounts when the menu
+ * closes, and the request must keep its state if the user presses Escape while it is pending.
  */
-export function LogoutButton() {
+export function useLogout() {
   const queryClient = useQueryClient();
+  // Set the moment `logout` is called, before React renders `isPending`: two calls in the same
+  // tick (a double Enter) must not send two requests. Cleared only when the request fails.
+  const started = useRef(false);
 
-  const logout = useMutation({
+  const mutation = useMutation({
     // Offline, fail right away instead of waiting for a connection.
     networkMode: "always",
     mutationFn: () => deleteSession(browserApi),
@@ -34,17 +37,21 @@ export function LogoutButton() {
       window.location.replace("/login");
     },
     onError: (error) => {
+      started.current = false;
       toast.error("No pudimos cerrar tu sesión", { description: describeApiError(error).message });
     },
   });
 
-  // After success the button stays busy until the new page replaces this one: no second request.
-  const busy = logout.isPending || logout.isSuccess;
-
-  return (
-    <Button variant="ghost" size="sm" loading={busy} onClick={() => logout.mutate()}>
-      {busy ? null : <SignOut aria-hidden />}
-      Cerrar sesión
-    </Button>
-  );
+  return {
+    /** Starts the logout. A second call while one is pending (or done) does nothing. */
+    logout: () => {
+      if (started.current) return;
+      started.current = true;
+      mutation.mutate();
+    },
+    /**
+     * After success it stays `true` until the new page replaces this one: no second request.
+     */
+    busy: mutation.isPending || mutation.isSuccess,
+  };
 }

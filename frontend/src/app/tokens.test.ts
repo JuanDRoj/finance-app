@@ -62,6 +62,16 @@ const PAIRS: Pair[] = [
   ["foreground", "card-solid", 4.5, undefined],
   ["popover-foreground", "popover", 4.5, undefined],
   ["ring", "background", 3, { light: 5.54, dark: 11.48 }],
+  // Desktop sidebar (KAN-41, D17). Same values in both themes: it is dark in light mode too.
+  // Idle icons need 3:1 (non-text); 4.5 is asked for so that the same pair also serves for text.
+  ["sidebar-foreground", "sidebar", 4.5, { light: 9.84, dark: 9.84 }],
+  ["sidebar-foreground", "sidebar-accent", 4.5, { light: 7.45, dark: 7.45 }],
+  ["sidebar-accent-foreground", "sidebar", 4.5, { light: 15.98, dark: 15.98 }], // tooltip text
+  ["sidebar-accent-foreground", "sidebar-accent", 4.5, { light: 12.11, dark: 12.11 }], // hover
+  ["sidebar-primary", "sidebar", 3, { light: 10.7, dark: 10.7 }], // active icon, avatar, indicator
+  ["sidebar-primary", "sidebar-accent", 3, { light: 8.1, dark: 8.1 }], // active icon on its pill
+  ["sidebar-primary-foreground", "sidebar-primary", 4.5, { light: 10.27, dark: 10.27 }], // avatar
+  ["sidebar-ring", "sidebar", 3, { light: 10.7, dark: 10.7 }], // focus ring on the sidebar
 ];
 
 describe.each([
@@ -200,6 +210,22 @@ describe("tokens", () => {
     for (const token of declarations(rootBlocks[1] ?? "").keys()) {
       expect(light.has(token), `--${token} exists in the light palette`).toBe(true);
     }
+  });
+
+  it("keeps the sidebar dark and identical in the light and dark themes", () => {
+    const sidebarTokens = [...light.keys()].filter((token) => token.startsWith("sidebar"));
+    expect(sidebarTokens.length).toBeGreaterThan(0);
+    const darkOverrides = declarations(rootBlocks[1] ?? "");
+    for (const token of sidebarTokens) {
+      // `dark` inherits from `light`, so look at what the dark block itself declares.
+      const override = darkOverrides.get(token);
+      if (override !== undefined) {
+        expect(override, `--${token} is the same in both themes`).toBe(light.get(token));
+      }
+    }
+    // "Dark": the surface's relative luminance is far below the page background of the light theme.
+    expect(luminance(hexOf(light, "sidebar"))).toBeLessThan(0.02);
+    expect(luminance(hexOf(dark, "sidebar"))).toBeLessThan(0.02);
   });
 
   it("keeps the theme-color values of layout.tsx in sync with --background", () => {

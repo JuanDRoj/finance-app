@@ -43,7 +43,8 @@ async function loadHome() {
  *
  * - No session or an expired one (401 from `/me` or from `/spaces`): `/login`. The proxy of KAN-27
  *   only sees that a cookie exists, never whether it is valid, so this check stays.
- * - Any other failure: an `Alert` in Spanish (`describeApiError`) with a way to try again.
+ * - Any other failure: an `Alert` in Spanish (`describeApiError`) with a way to try again. That
+ *   screen has no `user` for the avatar (generic icon), but its menu still has "Cerrar sesión".
  * - No spaces: a notice. The backend creates the personal space together with the user, so this
  *   is not expected; the first space is the one shown (they come oldest first, the personal one
  *   first) until there is a space selector.
@@ -85,7 +86,7 @@ export default async function HomePage() {
   const space = result.spaces[0];
 
   return (
-    <AppShell title="Inicio">
+    <AppShell title="Inicio" user={result.user}>
       <div className="flex flex-col gap-4">
         {space ? (
           <Card>
