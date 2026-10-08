@@ -2,6 +2,7 @@
 
 Estado: **aprobado por Juan David el 2026-10-05** · Tarea KAN-32 [FE-06] (historia KAN-31, HU-6 Sistema de diseño base) · Lo implementaron KAN-33 (setup) y KAN-34 (componentes base y catálogo); KAN-26 (login) añadió `TextField`.
 Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/WdpLUxb8M6VgXupjqezr5M. Nombre de la app: **Kanza** (identidad en [D16](#d16-identidad-kanza) y en [`marca-kanza.md`](marca-kanza.md), KAN-40).
+Pantallas de Kanza en celular, tablet y escritorio (claro y oscuro): https://claude.ai/artifact/QhYwACgCTYJHpApRSWLgRa (responsive en [D17](#d17-web-responsive-y-escritorio)).
 
 ## Cómo usar este documento
 
@@ -24,13 +25,14 @@ Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/Wd
 | Formularios | react-hook-form + zod | [D7](#d7-formularios) |
 | Toasts con "Deshacer" | Sonner (vía shadcn) | [D8](#d8-toasts-con-deshacer) |
 | Gráficos (dashboard v1) | Diferidos: barras CSS; shadcn Charts con el primer gráfico real | [D9](#d9-gráficos) |
-| Tests | vitest + Testing Library; E2E Playwright iPhone (WebKit) y Pixel (Chromium, 360 px) | [D10](#d10-tests) |
+| Tests | vitest + Testing Library; E2E Playwright iPhone (WebKit), Pixel (Chromium, 360 px) y Escritorio (Chromium, 1280 px, D17) | [D10](#d10-tests) |
 | Dinero y fechas | Locale por moneda del espacio; `exponent` decimales; zona horaria del espacio | [D11](#d11-formato-de-dinero-y-fechas) |
 | Modo oscuro | Sí en v1, siguiendo el sistema con CSS | [D12](#d12-modo-oscuro) |
 | Dirección visual | "Menta" (verde/blanco/negro + oscuro, bento + glass) | [D13](#d13-dirección-visual-menta) |
 | Tokens | Nombres shadcn + `income` / `expense` / `debt` | [D14](#d14-tokens) |
 | Viewport y móvil | 360 px mínimo; matriz 375 / ~393 / ~430 | [D15](#d15-viewport-y-móvil) |
 | Identidad de marca | Kanza: ícono del grillo con la moneda, favicon simplificado, lema "Haz que alcance" | [D16](#d16-identidad-kanza) |
+| Web responsive y escritorio | Menos de 1024 px: barra inferior; desde 1024 px: barra lateral; mismas secciones; "Cerrar sesión" en el menú del avatar | [D17](#d17-web-responsive-y-escritorio) |
 
 ## 1. Checklist para una pantalla nueva
 
@@ -39,7 +41,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 1. **Contrato.** Confirma que los endpoints y campos existen en `../backend/openapi.json` y que `src/lib/api/schema.d.ts` está generado. Si falta algo, la tarea queda **bloqueada** hasta que backend lo exponga; no lo inventes. (`CLAUDE.md`)
 2. **Datos.** Prefetch en el Server Component con `getServerApi()` + `HydrationBoundary`; en el cliente `useQuery` / `useInfiniteQuery` sobre funciones de `lib/core`. Tras mutar, invalida las queries afectadas. (D1, D2)
 3. **Estados de pantalla.** Carga, vacío (invita a actuar) y error (qué pasó + qué hacer + datos a salvo). (D13 › Tono)
-4. **Layout.** Diseña a 360 px y revisa 375, ~393 y ~430 antes de ampliar. Safe areas, `dvh`/`svh` (nunca `100vh`), inputs ≥16 px. (D15)
+4. **Layout.** Diseña a 360 px y revisa 375, ~393 y ~430 antes de ampliar; después 768, 1024, 1280 y 1440. Safe areas, `dvh`/`svh` (nunca `100vh`), inputs ≥16 px. (D15, D17)
 5. **Componentes.** Busca en `components/ui`, en `components/app-shell.tsx` y en el catálogo (`npm run dev` → http://localhost:3000/catalog; tabla de abajo y D4). Si falta, añádelo con la CLI de shadcn (Base UI), revisa lo que genera y ajústalo a Menta; no lo escribas desde cero. (D4)
 6. **Tokens.** Solo clases de token (`bg-background`, `text-muted-foreground`, `text-income`…). Nada de hex ni `rgb()` sueltos. Dinero: `income` / `expense` / `debt`. Glass solo en cromo flotante y tiles: tiles bento → `card`; nav, toast y header sticky → `glass`; sheet → `glass-strong`. (D14, D13 › Glass)
 7. **Tipografía.** Montserrat para números y títulos, Karla para texto; montos con `tabular-nums`. Usa la escala de D13. La fuente de marca (Bricolage Grotesque) es solo para el nombre "Kanza" y va con `KanzaBrand`; nunca en texto de interfaz. (D6, D13, D16)
@@ -72,6 +74,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Selector, hoja inferior, nav, lista | Aún no existen: se añaden con la CLI de shadcn en la tarea que los necesite | D4 |
 | Tile bento o grupo de lista sobre el fondo decorativo | Token `card` (glass) | D13, D14 |
 | Nav flotante, toast, header sticky | Token `glass` | D13, D14 |
+| Barra lateral de escritorio (desde 1024 px) | Sólida y oscura en los dos temas; sus tokens los define la sub-tarea del `AppShell` responsive | D17 |
 | Hoja inferior (sheet) | Token `glass-strong` | D13, D14 |
 | Superficie sólida (fallback, campos de formulario) | `card-solid`; popovers y menús: `popover` | D13, D14 |
 | Barra de progreso o top-5 | Barras CSS accesibles (v1), `Progress` (v1.1) | D9 |
@@ -309,6 +312,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 **Reglas de uso**
 - Tests de lógica junto al archivo (`*.test.ts` o `*.test.tsx`), solo para lógica no trivial: formateo de dinero y fechas, traducciones, esquemas y utilidades. Tests de componentes solo para lógica no trivial.
 - E2E en `e2e/`, 3–5 flujos reales; los escribe qa.
+- Desde D17 (web responsive) se suma un tercer proyecto, **"Escritorio"** (Chromium, 1280 px), para los flujos que cambian con la barra lateral.
 - Los tests de formato de dinero comparan con el espacio **NBSP** (U+00A0) entre símbolo y cifra y con el signo menos **U+2212** (ver D11). Esos tests corren en Node: la salida de WebKit y Chromium se contrasta aparte (Pendientes).
 - WebKit de Playwright aproxima Safari iOS, no lo reemplaza: la prueba en dispositivo real sigue siendo obligatoria (skill `mobile-native`).
 
@@ -554,6 +558,38 @@ Definida el 2026-10-06 (KAN-40 [FE-09]). Guía completa, archivos y licencias en
 - Fuera de v1 / otras tareas: pantalla de carga, avisos del grillo y estados vacíos con la mascota, registro formal de marca.
 - Los estáticos de marca son públicos: `proxy.ts` (KAN-27) los deja pasar sin sesión (`/favicon.ico`, `/favicon.svg`, `/site.webmanifest`, `/brand/*` y los `*.png` de la raíz): su `matcher` excluye solo los archivos de la raíz de `public/` (`png`, `svg`, `ico`, `webmanifest`) y los de `public/brand/` (`png`, `svg`), no cualquier ruta que acabe en `.png`. Un estático nuevo va en la raíz o en `public/brand/`; otra carpeta exige ampliar el matcher, y `proxy.test.ts` recorre `public/` para que un archivo nuevo no se rompa en silencio.
 
+### D17. Web responsive y escritorio
+
+Aprobada por Juan David el 2026-10-07. La web es el producto de ahora (celular, tablet y escritorio); la app nativa llega después. Pantallas de referencia en el lienzo de Kanza: "Inicio con aviso del grillo" (360 px), "Inicio en tablet (768 px)" e "Inicio en escritorio" (1440 px, claro y oscuro).
+
+**Opciones evaluadas**
+
+| Opción | Veredicto |
+|---|---|
+| Columna de celular centrada en todos los anchos (`max-w-md`, lo que hay hasta KAN-27) | Descartada: en escritorio la app se ve como un teléfono en medio de la pantalla |
+| Barra inferior por debajo de 1024 px y barra lateral de íconos desde 1024 px | **Elegida** |
+| Cambio a barra lateral en 768 px | Descartada: en una tablet vertical la barra inferior se usa mejor con el dedo |
+| Barra lateral ancha con nombres | Descartada en el lienzo: la de íconos deja más espacio al contenido |
+
+**Elección**
+- **Menos de 1024 px (celular y tablet):** encabezado con el espacio y el avatar, y la barra de navegación inferior flotante. En tablet el contenido se ensancha hasta unos 640 px, centrado.
+- **Desde 1024 px (`lg` de Tailwind):** barra lateral fija de íconos a la izquierda (logo, secciones, botón "+", y abajo Ayuda y Ajustes), con el nombre de cada ícono en un globo al pasar el mouse o al llegar con el teclado. El contenido se reparte en tarjetas bento, hasta 1440 px de ancho.
+- **Las mismas secciones en todos los anchos.** Celular y tablet: Inicio · Movimientos · "+" · Pendientes (con contador) · Más. "Más" agrupa Cuentas, Ayuda y Ajustes. Escritorio: Inicio, Movimientos, Pendientes, Cuentas, "+", y abajo Ayuda y Ajustes.
+- **"Cerrar sesión" va en el menú del avatar**, en todos los anchos. Sigue lo de KAN-27: siempre disponible en una pantalla con sesión, y la página no muestra datos al volver atrás.
+- **Login:** sin versión propia de escritorio; la tarjeta centrada (`max-w-md`) sirve en todos los anchos. Un diseño de escritorio dedicado queda como idea para más adelante.
+
+**Motivo:** la web va primero y tiene que ser cómoda en un computador, no solo en el celular. 1024 px separa el uso con el dedo (celular, tablet vertical) del uso con mouse o en apaisado. Las mismas secciones evitan que el usuario aprenda dos menús. Pendientes va en la barra porque se confirma a diario; Cuentas se consulta menos.
+
+**Reglas de uso**
+- Se sigue diseñando a 360 px primero (D15); se amplía con los prefijos de Tailwind (`md:` 768, `lg:` 1024), nunca al revés.
+- Matriz de prueba de anchos grandes: **768** (tablet vertical), **1024** (cambio a barra lateral), **1280** y **1440**. El panel "Auditoría" del catálogo y `break-ui` se pasan también en esos anchos.
+- El globo con el nombre se muestra al pasar el mouse solo bajo `@media (hover: hover)` (D15) y siempre con el foco del teclado. Cada ícono lleva `aria-label`.
+- En una tablet táctil apaisada (≥1024 px) la barra lateral solo muestra íconos y no hay globo al tocarlos. Se acepta en v1; si molesta, se agregan los nombres debajo del ícono.
+- La barra lateral es sólida y oscura también en tema claro. Sus colores (fondo, ícono, ítem activo, contador, globo) son tokens nuevos con su par de contraste en `tokens.test.ts`; nada de hex sueltos (el lienzo tiene `#062016` fijo en el contador: pasa a token).
+- Las safe areas siguen aplicando en todos los anchos (`env(safe-area-inset-*)`), incluida la barra lateral en un iPad apaisado.
+- El `Toaster` se sube por encima de la barra inferior (D8) y, desde 1024 px, va abajo a la derecha.
+- Las listas de dinero (top-5 de gastos) muestran el porcentaje en texto en todos los anchos (D9).
+
 ## 3. Skills de apoyo
 
 Están en `.claude/skills/`. Las convenciones del proyecto ganan sobre las skills; si una skill contradice este documento o `CLAUDE.md`, sigue al proyecto y anótalo.
@@ -600,5 +636,8 @@ Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en 
 | "Atrás" tras cerrar sesión (KAN-27): con Home → "Cerrar sesión" → atrás no debe verse ningún dato, en iPhone Safari y en Android Chrome, también con varias pantallas privadas en el historial (cuando existan). La capa del bfcache (`BfcacheGuard` y `data-session-ended`) y la carga completa solo se prueban en el navegador. En local el origen es solo `localhost`: hace falta staging para un dispositivo real | Juan David o qa (y un E2E de Playwright "login → logout → atrás" cuando se instale) |
 | Login (KAN-26) en hardware: popup de Google en Safari iOS (que el primer toque abra la ventana, sin `auth/popup-blocked`: el SDK se calienta al montar la pantalla, ver `CLAUDE.md` > Sesión) y en un Android real (con el emulador no se puede: escucha solo en `127.0.0.1`; hace falta el proyecto de staging), 360 / 375 / 393 / 430 px en claro y oscuro, y el teclado abierto en el formulario | Juan David o qa |
 | Cookie de sesión en un navegador real (`Set-Cookie` de `POST /api/auth/session` a través del rewrite y de vuelta en `browserApi`): curl lo confirmó en KAN-26; falta el navegador (`/catalog` > "Probar GET /me") | Juan David |
+| `AppShell` responsive (D17): barra inferior por debajo de 1024 px, barra lateral desde 1024 px, menú del avatar con "Cerrar sesión", tokens de la barra lateral y posición del `Toaster` en escritorio | Sub-tarea de frontend nueva, antes del dashboard |
+| Panel "Auditoría" del catálogo en 768 / 1024 / 1280 / 1440 px (hoy mide los anchos de celular) | Con la sub-tarea del `AppShell` responsive |
+| Playwright: un tercer proyecto "Escritorio" (Chromium, 1280 px) además de "iPhone" y "Pixel" (D10) | Primera sub-tarea de E2E (qa) |
 
 Dependencias instaladas en KAN-33 (`tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` y `shadcn` van en devDependencies: solo se usan en el build, `tw-animate-css` y `shadcn` como `@import` de CSS): `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css`, `shadcn`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@base-ui/react`, `@phosphor-icons/react`, `sonner`, `@tanstack/react-query`, `react-hook-form`, `@hookform/resolvers`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react` y `@testing-library/dom`. Dependencia añadida en KAN-26: `firebase` (SDK modular; el código usa solo `firebase/app` y `firebase/auth`, en `lib/firebase.ts`). `npm audit` marca `@grpc/grpc-js` (de `@firebase/firestore`, solo servidor/Node): no entra en el bundle del navegador porque no se importa Firestore. No se instalan: `@playwright/test` (ver arriba), `@testing-library/jest-dom` y `user-event` (cuando un test los necesite), `vite-tsconfig-paths` (Vite 8 resuelve los alias con `resolve.tsconfigPaths`), `recharts` (con el primer gráfico real), `next-themes` ni Zustand (v1).

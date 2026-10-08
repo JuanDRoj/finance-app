@@ -1,7 +1,7 @@
 # Frontend — Next.js
 
 Next.js (App Router) · TypeScript **strict** · React Server Components · Tailwind CSS v4 · shadcn/ui con Base UI · Phosphor · TanStack Query · react-hook-form + zod · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · vitest + Testing Library · Playwright (E2E, _pendiente_).
-Despliegue: Vercel (funciones en `gru1`). Diseño **mobile-first**, interfaz en **español**.
+Despliegue: Vercel (funciones en `gru1`). Diseño **web responsive**: se diseña a 360 px (mobile-first) y se amplía hasta escritorio, con la barra lateral desde 1024 px (`docs/diseno.md` D17). Interfaz en **español**.
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
