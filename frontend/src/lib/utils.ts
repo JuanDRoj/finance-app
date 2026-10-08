@@ -9,9 +9,9 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["brand"],
-      tracking: ["brand"],
-      radius: ["tile", "icon", "field", "nav", "sheet"],
+      text: ["brand", "title-tablet", "title-desktop", "tooltip-label", "avatar"],
+      tracking: ["brand", "title"],
+      radius: ["tile", "icon", "field", "nav", "sheet", "tooltip", "mark"],
       shadow: ["tooltip"],
     },
   },

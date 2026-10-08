@@ -29,7 +29,7 @@ export function SidebarNav() {
               {active ? (
                 <span
                   aria-hidden
-                  className="absolute top-3 -left-3.5 h-6 w-1 rounded-r-[4px] bg-sidebar-primary"
+                  className="absolute top-3 -left-3.5 h-6 w-1 rounded-r-mark bg-sidebar-primary"
                 />
               ) : null}
               <Tooltip>

@@ -41,6 +41,43 @@ describe("cn", () => {
     );
   });
 
+  it("resolves the font size tokens of KAN-41 against Tailwind's and keeps them apart from colors", () => {
+    // The screen title: 24 px, then 26 px and 30 px at the breakpoints (different variants).
+    expect(cn("text-2xl", "md:text-title-tablet", "lg:text-title-desktop")).toBe(
+      "text-2xl md:text-title-tablet lg:text-title-desktop",
+    );
+    expect(cn("text-title-tablet", "text-title-desktop")).toBe("text-title-desktop");
+    expect(cn("text-2xl", "text-title-tablet")).toBe("text-title-tablet");
+    expect(cn("text-title-tablet", "text-2xl")).toBe("text-2xl");
+    // The avatar's and the tooltip's sizes next to a text color: both stay.
+    expect(cn("text-sm", "md:text-avatar", "md:text-secondary-foreground")).toBe(
+      "text-sm md:text-avatar md:text-secondary-foreground",
+    );
+    expect(cn("text-tooltip-label", "text-tooltip-foreground")).toBe(
+      "text-tooltip-label text-tooltip-foreground",
+    );
+    expect(cn("text-xs", "text-tooltip-label")).toBe("text-tooltip-label");
+  });
+
+  it("resolves the title tracking token against Tailwind's", () => {
+    expect(cn("tracking-title", "tracking-tight")).toBe("tracking-tight");
+    expect(cn("tracking-tight", "tracking-title")).toBe("tracking-title");
+    expect(cn("tracking-title", "tracking-brand")).toBe("tracking-brand");
+  });
+
+  it("resolves the tooltip and mark radius tokens, also on one side", () => {
+    expect(cn("rounded-tooltip", "rounded-full")).toBe("rounded-full");
+    expect(cn("rounded-full", "rounded-tooltip")).toBe("rounded-tooltip");
+    expect(cn("rounded-tile", "rounded-tooltip")).toBe("rounded-tooltip");
+    expect(cn("rounded-r-lg", "rounded-r-mark")).toBe("rounded-r-mark");
+    expect(cn("rounded-r-mark", "rounded-r-lg")).toBe("rounded-r-lg");
+    // A one-sided radius does not remove the others, a color or a size.
+    expect(cn("rounded-icon", "rounded-r-mark")).toBe("rounded-icon rounded-r-mark");
+    expect(cn("rounded-tooltip bg-tooltip text-tooltip-label")).toBe(
+      "rounded-tooltip bg-tooltip text-tooltip-label",
+    );
+  });
+
   it("keeps font families and weights apart", () => {
     expect(cn("font-brand", "font-extrabold")).toBe("font-brand font-extrabold");
     expect(cn("font-heading", "font-bold")).toBe("font-heading font-bold");

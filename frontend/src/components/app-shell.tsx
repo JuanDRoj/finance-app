@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { BfcacheGuard } from "@/components/bfcache-guard";
+import { DESKTOP_GROUP_VERTICAL_PADDING } from "@/components/shell-layout";
 import { Sidebar } from "@/components/sidebar";
 import { UserMenu, type UserMenuUser } from "@/components/user-menu";
 import type { UserRead } from "@/lib/core/data/me";
 import { displayNameOf, initialsOf } from "@/lib/core/user";
+import { cn } from "@/lib/utils";
 
 type AppShellProps = {
   /** Screen title (the page's `h1`). */
@@ -59,13 +61,22 @@ export function AppShell({ title, actions, user, children }: AppShellProps) {
         aria-hidden
         className="pointer-events-none absolute top-96 -left-24 -z-10 size-72 rounded-full bg-blob-2 blur-3xl"
       />
-      <div className="relative mx-auto w-full max-w-160 pr-[max(1rem,env(safe-area-inset-right,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))] lg:flex lg:max-w-360 lg:items-stretch lg:gap-6 lg:pt-[max(1rem,env(safe-area-inset-top,0px))] lg:pr-[max(1.5rem,env(safe-area-inset-right,0px))] lg:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+      <div
+        className={cn(
+          "relative mx-auto w-full max-w-160 pr-[max(1rem,env(safe-area-inset-right,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))] lg:flex lg:max-w-360 lg:items-stretch lg:gap-6 lg:pr-[max(1.5rem,env(safe-area-inset-right,0px))]",
+          // Shared with the sidebar card's height (shell-layout.ts): they must add up to a screen.
+          DESKTOP_GROUP_VERTICAL_PADDING,
+        )}
+      >
         <Sidebar />
         {/* `min-w-0`: a flex item is as wide as its widest content by default, and a long word
             would widen the column past the screen instead of wrapping. */}
         <div className="min-w-0 lg:flex-1">
-          <header className="flex items-center justify-between gap-3 pt-[calc(1.125rem+env(safe-area-inset-top,0px))] pb-3 lg:pt-2 lg:pb-0">
-            <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-[-0.02em] break-words md:text-[26px] lg:text-[30px]">
+          {/* Spacing from the canvas: a phone 18 px above (plus the inset) and 12 + 8 px to the
+              content; a tablet (K-Tablet) 24 px above and 14 px to the content; a desktop 8 px
+              above (the group's padding is the rest) and 20 px to the content. */}
+          <header className="flex items-center justify-between gap-3 pt-[calc(1.125rem+env(safe-area-inset-top,0px))] pb-3 md:pt-[calc(1.5rem+env(safe-area-inset-top,0px))] md:pb-0 lg:pt-2">
+            <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop">
               {title}
             </h1>
             <div className="flex shrink-0 items-center gap-2.5">
@@ -74,7 +85,7 @@ export function AppShell({ title, actions, user, children }: AppShellProps) {
             </div>
           </header>
           <BfcacheGuard />
-          <main className="relative pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:pt-5 lg:pb-0">
+          <main className="relative pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] md:pt-3.5 lg:pt-5 lg:pb-0">
             {children}
           </main>
         </div>

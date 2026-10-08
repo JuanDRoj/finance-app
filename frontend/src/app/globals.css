@@ -126,6 +126,14 @@
   --tracking-brand: -0.03em;
   --text-brand: 1.4375rem; /* the Kanza name in the login header (23px) */
   --shadow-tooltip: 0 8px 20px rgba(0, 0, 0, 0.18); /* the sidebar's tooltip */
+  /* KAN-41, from the Kanza canvas (docs/diseno.md D13 and D14). */
+  --radius-tooltip: 0.625rem; /* 10px: the sidebar's tooltip */
+  --radius-mark: 0.25rem; /* 4px: the outer corners of the active-section mark */
+  --text-title-tablet: 1.625rem; /* 26px: screen title from 768px */
+  --text-title-desktop: 1.875rem; /* 30px: screen title from 1024px */
+  --tracking-title: -0.02em; /* screen title */
+  --text-tooltip-label: 0.8125rem; /* 13px: text of the sidebar's tooltip */
+  --text-avatar: 0.9375rem; /* 15px: initials of the 48px avatar */
 }
 
 @theme inline {

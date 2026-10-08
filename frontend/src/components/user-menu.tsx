@@ -72,7 +72,7 @@ export function UserMenu({ user, className }: UserMenuProps) {
         className={cn(
           "flex size-11 shrink-0 items-center justify-center rounded-full font-heading text-sm font-bold transition-transform duration-150 ease-out active:scale-[0.97]",
           "card-surface text-foreground",
-          "md:size-12 md:border-0 md:bg-secondary md:text-[15px] md:text-secondary-foreground md:backdrop-blur-none",
+          "md:size-12 md:border-0 md:bg-secondary md:text-avatar md:text-secondary-foreground md:backdrop-blur-none",
           focusRing,
           className,
         )}

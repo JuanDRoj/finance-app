@@ -45,7 +45,7 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "w-fit origin-(--transform-origin) rounded-[10px] bg-tooltip px-3 py-1.5 text-[13px] leading-snug font-bold whitespace-nowrap text-tooltip-foreground shadow-tooltip",
+            "w-fit origin-(--transform-origin) rounded-tooltip bg-tooltip px-3 py-1.5 text-tooltip-label leading-snug font-bold whitespace-nowrap text-tooltip-foreground shadow-tooltip",
             "transition-opacity duration-150 ease-out motion-reduce:transition-none",
             "data-ending-style:opacity-0 data-starting-style:opacity-0",
             className,
