@@ -1,3 +1,4 @@
+import os  # CI probe, do not merge
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager

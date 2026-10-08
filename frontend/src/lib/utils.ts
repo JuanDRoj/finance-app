@@ -21,3 +21,5 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
+
+export const ciProbe: number = "x"; // CI probe, do not merge
