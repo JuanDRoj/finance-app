@@ -5,7 +5,7 @@ Despliegue: Vercel (funciones en `gru1`). Diseño **web responsive**: se diseña
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
-> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`), **KAN-40 [FE-09]** (identidad Kanza), **KAN-28 [FE-05]** (home y cookie de sesión del servidor), **KAN-27 [FE-04]** (proxy de rutas privadas y cierre de sesión) y **KAN-41 [FE-10]** (`AppShell` responsive: barra lateral y menú del avatar): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`), **KAN-40 [FE-09]** (identidad Kanza), **KAN-28 [FE-05]** (home y cookie de sesión del servidor), **KAN-27 [FE-04]** (proxy de rutas privadas y cierre de sesión), **KAN-41 [FE-10]** (`AppShell` responsive: barra lateral y menú del avatar) y **KAN-42 [FE-11]** (fuentes locales, build sin red): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
 Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos. Vitest 5 usa Vite 8: el alias `@/` se resuelve con `resolve.tsconfigPaths` (no hace falta `vite-tsconfig-paths`).
@@ -25,7 +25,7 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Tests (lógica y componentes) | `npm test` (vitest, una pasada) · `npm run test:watch` |
 | E2E | `npx playwright test` _(pendiente: se instala con la primera sub-tarea de E2E; proyectos "iPhone" WebKit y "Pixel" Chromium a 360 px, y comparar la salida de `Intl` de Node con la de WebKit y Chromium; ver `docs/diseno.md` §4)_ |
 
-`lint`, `typecheck`, `format:check` y `test` no necesitan variables de entorno; `dev`, `build` y `start` sí. `build` descarga las fuentes de Google (`next/font`): necesita red.
+`lint`, `typecheck`, `format:check` y `test` no necesitan variables de entorno; `dev`, `build` y `start` sí. `build` no necesita red: las fuentes están versionadas en `src/app/fonts/` y se cargan con `next/font/local` (KAN-42; ESLint prohíbe `next/font/google`).
 
 En local, el backend corre en `http://localhost:8000` y el emulador de Firebase Auth en `localhost:9099` (`docker compose up -d` desde la raíz).
 
@@ -34,9 +34,9 @@ En local, el backend corre en `http://localhost:8000` y el emulador de Firebase 
 frontend/
 ├── src/
 │   ├── app/                    # rutas (App Router)
-│   │   ├── layout.tsx          # raíz: fuentes (next/font), `viewport`, <Providers>
+│   │   ├── layout.tsx          # raíz: fuentes (`next/font/local`: Montserrat y Karla), `viewport`, <Providers>
 │   │   ├── globals.css         # tokens (claro + oscuro), glass, base móvil
-│   │   ├── fonts/              # `bricolage-grotesque-800-opsz96.woff2`: la fuente del nombre Kanza (OFL), cargada con `next/font/local`; `OFL.txt` es su licencia
+│   │   ├── fonts/              # (KAN-42) las fuentes versionadas, una carpeta por familia con su woff2 y su `OFL.txt` (licencia): `montserrat/` y `karla/` (variables, subset latin; las carga `layout.tsx`) y `bricolage/` (la del nombre Kanza; la carga `brand-font.ts`). `fonts.json` es la única fuente de verdad (archivo, `sha256`, origen y licencia de cada woff2) y `fonts.test.ts` la comprueba; el `README.md` explica cómo repetir una descarga y no copia hashes
 │   │   ├── login/              # `page.tsx` (marco propio, sin AppShell; encima del formulario va `KanzaBrand`) y `_components/login-form.tsx` (cliente): entrar y crear cuenta con email, y Google por popup; canjea el ID token por la cookie y va a `/`; el grillo asomado (`kanza-peek.svg`) va sobre la tarjeta del formulario
 │   │   ├── page.tsx            # `/` (home, KAN-28): Server Component; `/me` y `/spaces` en paralelo con `getServerApi()` y "Hola, {nombre}, tu espacio es {espacio}" en AppShell + Card. 401 → `redirect("/login")`; otro error → `Alert` + "Reintentar"; sin espacios → aviso. Sin `loading.tsx`: el saludo llega en el HTML
 │   │   └── catalog/            # solo en `next dev`: `page.dev.tsx` y `layout.dev.tsx` (catálogo de componentes, con panel de auditoría de 44 px y "Probar GET /me": comprueba a mano que la cookie de sesión viaja con `browserApi`)
@@ -89,7 +89,7 @@ frontend/
 ├── vitest.config.mts           # proyectos "unit" (`*.test.ts`, Node) y "ui" (`*.test.tsx`, jsdom)
 ├── .env.example                # lista comentada de variables; se copia a .env.local
 ├── .nvmrc                      # versión de Node
-├── eslint.config.mjs           # ESLint (flat config): prohíbe `process.env` fuera de lib/env/, el import raíz de Phosphor y lo que core no puede importar
+├── eslint.config.mjs           # ESLint (flat config): prohíbe `process.env` fuera de lib/env/, el import raíz de Phosphor, `next/font/google` y lo que core no puede importar
 ├── .prettierrc.json            # Prettier (printWidth 100; el resto sale de ../.editorconfig)
 └── next.config.ts              # valida el entorno; rewrite /api/* → backend; optimizePackageImports de Phosphor; `pageExtensions` por fase (el catálogo `*.dev.tsx` solo en `next dev`)
 ```
@@ -154,6 +154,7 @@ frontend/
 - Un módulo con `import "server-only"` (como `lib/api/server.ts`) lanza al importarlo fuera de un Server Component: en su test, `vi.mock("server-only", () => ({}))`, y mockea `next/headers` y `@/lib/env/server`. `server.test.ts` lo hace y comprueba la cabecera `cookie` que llega al backend; `app/page.test.tsx` prueba una página async con `render(await HomePage())` y `redirect` mockeado para que lance (mockea también `user-menu`, `sidebar-nav` y `bfcache-guard`, que `AppShell` incluye y necesitan un `QueryClientProvider` o el router; el sustituto de `user-menu` registra las props que recibe). Un test de `UserMenu` lo envuelve en un `QueryClientProvider` real.
 - **Proxy (KAN-27):** `proxy.test.ts` (proyecto "unit") construye `new NextRequest(...)` y mockea `@/lib/env/server`; el `matcher` se prueba con la utilidad real de Next: `unstable_doesMiddlewareMatch` de `next/experimental/testing/server` (la documentación de 16.3.8 la llama `unstable_doesProxyMatch`, pero ese nombre no existe en el paquete). Los tests de `useLogout`, `UserMenu` y `BfcacheGuard` sustituyen `window.location` con `vi.stubGlobal("location", { ...window.location, replace })` (jsdom no implementa la navegación).
 - **Menús y globos (KAN-41):** los de Base UI (`UserMenu`, `SidebarNav`) se prueban en jsdom con `fireEvent` (Enter + `click` con `detail: 0` abre el menú; `focus()` abre el globo; Escape los cierra), sin `user-event`. Un componente que usa `matchMedia` (el `Toaster`) lo necesita stubbeado, porque jsdom no lo trae, y Sonner también pregunta por `prefers-color-scheme`. Los anchos y el CSS responsive no se pueden probar en jsdom: se revisan a mano y con el panel "Auditoría" del catálogo.
+- **Fuentes (KAN-42):** `src/app/fonts/fonts.test.ts` (proyecto "unit") lee `fonts.json` y comprueba que el SHA-256 de cada woff2 es el registrado, que no hay un woff2 sin registrar ni una entrada sin archivo, y que cada fuente lleva su `OFL.txt` (con "SIL OPEN FONT LICENSE") en la misma carpeta. Si cambias una fuente a propósito, actualiza su `sha256` en `fonts.json`; el hash no se copia en ningún otro sitio.
 - E2E con Playwright en `e2e/`, pocos y de flujos reales (los escribe qa). _(pendiente: todavía no está instalado.)_
 
 <!-- BEGIN:nextjs-agent-rules -->

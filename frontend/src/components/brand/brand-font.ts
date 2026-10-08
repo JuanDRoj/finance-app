@@ -6,7 +6,7 @@ import localFont from "next/font/local";
 // `opsz,wght@96,800` (latin subset, 21.7 kB, SIL OFL) lives in the repo. See docs/marca-kanza.md.
 // Declared here, not in layout.tsx, so only the routes that show the name preload it.
 export const brandFont = localFont({
-  src: "../../app/fonts/bricolage-grotesque-800-opsz96.woff2",
+  src: "../../app/fonts/bricolage/bricolage-grotesque-800-opsz96.woff2",
   weight: "800",
   style: "normal",
   display: "swap",

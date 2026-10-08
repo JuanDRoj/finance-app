@@ -34,6 +34,11 @@ const PROCESS_ENV_IMPORT_PATHS = ["process", "node:process"].map((name) => ({
 const PHOSPHOR_MESSAGE =
   'Import icons from "@phosphor-icons/react/ssr": it works in Server and Client Components (the root entry is client-only).';
 
+// next/font/google downloads the fonts from Google while `next build` runs, so a flaky network
+// fails the build (KAN-42). Fonts are versioned in src/app/fonts and loaded with next/font/local.
+const GOOGLE_FONTS_MESSAGE =
+  "Do not use next/font/google: it needs the network at build time. Version the woff2 in src/app/fonts and use next/font/local (see src/app/fonts/README.md).";
+
 // Core is plain TypeScript shared with the future native app (docs/diseno.md D1): no Next, no
 // DOM React, no server-only code, no API adapters and no env. `import type` from
 // "@/lib/api/schema" stays allowed.
@@ -60,6 +65,7 @@ export default defineConfig([
             ...PROCESS_ENV_IMPORT_PATHS,
             // Only the root entry: "/ssr" is the allowed one.
             { name: "@phosphor-icons/react", message: PHOSPHOR_MESSAGE },
+            { name: "next/font/google", message: GOOGLE_FONTS_MESSAGE },
           ],
         },
       ],
@@ -67,6 +73,7 @@ export default defineConfig([
   },
   {
     // Replaces the options of the block above for core (same rule, so `paths` is repeated).
+    // Core already forbids every `next/*` import, so it needs no entry for next/font/google.
     files: ["src/lib/core/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
