@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, dirname } from "node:path/posix";
 import { describe, expect, it } from "vitest";
 
 // fonts.json is the only place that lists the font files and their SHA-256 (the README explains
@@ -26,13 +27,17 @@ const sha256Of = (file: string) =>
     .update(readFileSync(new URL(file, fontsDir)))
     .digest("hex");
 
-// Every .woff2 under src/app/fonts/, as a path relative to it (e.g. "karla/karla-latin-variable.woff2").
-function woff2Files(dir: URL = fontsDir, prefix = ""): string[] {
+// Any font binary, not only the .woff2 that the app loads today: a .ttf or .otf left in the folder
+// would also ship without a registered hash and license.
+const FONT_FILE = /\.(woff2?|ttf|otf)$/i;
+
+// Every font file under src/app/fonts/, as a path relative to it (e.g. "karla/karla-latin-variable.woff2").
+function fontFiles(dir: URL = fontsDir, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isDirectory()) {
-      return woff2Files(new URL(`${entry.name}/`, dir), `${prefix}${entry.name}/`);
+      return fontFiles(new URL(`${entry.name}/`, dir), `${prefix}${entry.name}/`);
     }
-    return entry.name.endsWith(".woff2") ? [`${prefix}${entry.name}`] : [];
+    return FONT_FILE.test(entry.name) ? [`${prefix}${entry.name}`] : [];
   });
 }
 
@@ -55,19 +60,22 @@ describe("versioned fonts (src/app/fonts)", () => {
     },
   );
 
-  it("has no .woff2 that fonts.json does not list, and no entry without its file", () => {
+  it("has no font file (.woff, .woff2, .ttf, .otf) that fonts.json does not list, and no entry without its file", () => {
     const listed = files.map((entry) => entry.file).sort();
-    expect(woff2Files().sort()).toEqual(listed);
+    expect(fontFiles().sort()).toEqual(listed);
   });
 
   it.each(files.map((entry) => [entry.file, entry] as const))(
-    "%s ships with its SIL OFL license in the same folder",
+    "%s ships with its SIL OFL license (OFL.txt) in the same folder",
     (_file, entry) => {
-      const folder = entry.file.slice(0, entry.file.lastIndexOf("/") + 1);
       expect(
-        entry.license.startsWith(folder),
-        `${entry.license} must sit next to ${entry.file}`,
-      ).toBe(true);
+        dirname(entry.license),
+        `${entry.license} must be in the same folder as ${entry.file} (${dirname(entry.file)}), not in another one or in a subfolder`,
+      ).toBe(dirname(entry.file));
+      expect(
+        basename(entry.license),
+        `The license of ${entry.file} must be named OFL.txt, not ${basename(entry.license)}`,
+      ).toBe("OFL.txt");
       const text = readFileSync(new URL(entry.license, fontsDir), "utf8");
       expect(text).toMatch(/^Copyright /);
       expect(text).toContain("SIL OPEN FONT LICENSE");

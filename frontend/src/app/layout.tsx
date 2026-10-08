@@ -6,9 +6,10 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 // Montserrat: numbers and headings. Karla: body text. Both are variable fonts versioned in
-// ./fonts (subset `latin`, which covers Spanish; origin, hashes and licenses in ./fonts/README.md
-// and fonts.json), so `next build` never needs the network. The weight ranges are the weights the
-// UI uses: Montserrat 600-700, Karla 400-700. `adjustFontFallback: "Arial"` because the default
+// ./fonts (subset `latin`, which covers Spanish), so `next build` never needs the network. Origin,
+// SHA-256 hashes and licenses are listed in ./fonts/fonts.json (the only place that holds the
+// hashes); ./fonts/README.md explains how to repeat a download. The weight ranges are the weights
+// the UI uses: Montserrat 600-700, Karla 400-700. `adjustFontFallback: "Arial"` because the default
 // for local fonts is a serif fallback.
 const montserrat = localFont({
   src: "./fonts/montserrat/montserrat-latin-variable.woff2",

@@ -13,7 +13,8 @@ aviso de copyright y el texto):
 `fonts.json` lista cada woff2 con su `sha256`, la URL del CSS de Google Fonts del que sale, la URL
 del archivo (`source`) y su licencia. Los hashes viven solo ahí: este README, `CLAUDE.md` y los docs
 nunca los copian. `fonts.test.ts` (`npm test`) falla si un woff2 no coincide con su hash, si hay un
-woff2 sin registrar (o una entrada sin archivo) o si falta la `OFL.txt` junto a una fuente.
+archivo de fuente (woff, woff2, ttf u otf) sin registrar o una entrada sin archivo, o si una fuente
+no tiene un `OFL.txt` exactamente en su misma carpeta.
 
 ## Cómo obtener o repetir un archivo
 
