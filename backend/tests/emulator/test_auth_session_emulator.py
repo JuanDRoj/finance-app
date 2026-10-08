@@ -30,7 +30,7 @@ async def test_a_real_sign_up_gets_a_session_cookie_that_firebase_accepts(
     emulator_user: NewUser,
     session: AsyncSession,
 ) -> None:
-    account = await emulator_user()
+    account = await emulator_user("Eva E2E")
     email = account.email
     id_token = account.id_token
 
