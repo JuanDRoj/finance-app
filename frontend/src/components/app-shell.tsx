@@ -73,9 +73,10 @@ export function AppShell({ title, actions, user, children }: AppShellProps) {
             would widen the column past the screen instead of wrapping. */}
         <div className="min-w-0 lg:flex-1">
           {/* Spacing from the canvas: a phone 18 px above (plus the inset) and 12 + 8 px to the
-              content; a tablet (K-Tablet) 24 px above and 14 px to the content; a desktop 8 px
-              above (the group's padding is the rest) and 20 px to the content. */}
-          <header className="flex items-center justify-between gap-3 pt-[calc(1.125rem+env(safe-area-inset-top,0px))] pb-3 md:pt-[calc(1.5rem+env(safe-area-inset-top,0px))] md:pb-0 lg:pt-2">
+              content; a tablet (K-Tablet) 24 px above and 18 px to the content (4 px of the
+              header's padding-bottom plus the 14 px gap of the canvas); a desktop 8 px above (the
+              group's padding is the rest) and 20 px to the content. */}
+          <header className="flex items-center justify-between gap-3 pt-[calc(1.125rem+env(safe-area-inset-top,0px))] pb-3 md:pt-[calc(1.5rem+env(safe-area-inset-top,0px))] md:pb-1 lg:pt-2 lg:pb-0">
             <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop">
               {title}
             </h1>
