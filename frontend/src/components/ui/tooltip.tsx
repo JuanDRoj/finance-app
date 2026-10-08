@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
  * Tooltips are visual labels for mouse and keyboard users (docs/diseno.md D17): Base UI opens them
  * on a mouse (or pen) hover, never on touch, and on keyboard focus (`:focus-visible`), and closes
  * them with Escape. The trigger must carry its own `aria-label` with the same text: the tooltip is
- * not what names it. The only tooltips in the app are the desktop sidebar's, so they wear the
- * sidebar tokens.
+ * not what names it. The only tooltips in the app are the desktop sidebar's, so they follow the
+ * canvas: inverted against the page (`tooltip` tokens: dark on a light page, light on a dark one),
+ * 13 px bold, radius 10 px, with a shadow.
  */
 function TooltipProvider({ delay = 300, ...props }: TooltipPrimitive.Provider.Props) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
@@ -25,7 +26,7 @@ function TooltipTrigger(props: TooltipPrimitive.Trigger.Props) {
 function TooltipContent({
   className,
   side = "right",
-  sideOffset = 10,
+  sideOffset = 12,
   align = "center",
   alignOffset = 0,
   children,
@@ -44,7 +45,7 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "w-fit max-w-64 origin-(--transform-origin) rounded-field border border-sidebar-border bg-sidebar px-3 py-2 text-sm leading-tight font-semibold wrap-anywhere text-sidebar-accent-foreground shadow-md",
+            "w-fit origin-(--transform-origin) rounded-[10px] bg-tooltip px-3 py-1.5 text-[13px] leading-snug font-bold whitespace-nowrap text-tooltip-foreground shadow-tooltip",
             "transition-opacity duration-150 ease-out motion-reduce:transition-none",
             "data-ending-style:opacity-0 data-starting-style:opacity-0",
             className,

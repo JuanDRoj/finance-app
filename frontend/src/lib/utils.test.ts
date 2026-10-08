@@ -33,6 +33,14 @@ describe("cn", () => {
     );
   });
 
+  it("resolves the custom shadow token against Tailwind's, and keeps it apart from a color", () => {
+    expect(cn("shadow-md", "shadow-tooltip")).toBe("shadow-tooltip");
+    expect(cn("shadow-tooltip", "shadow-md")).toBe("shadow-md");
+    expect(cn("shadow-tooltip bg-tooltip text-tooltip-foreground")).toBe(
+      "shadow-tooltip bg-tooltip text-tooltip-foreground",
+    );
+  });
+
   it("keeps font families and weights apart", () => {
     expect(cn("font-brand", "font-extrabold")).toBe("font-brand font-extrabold");
     expect(cn("font-heading", "font-bold")).toBe("font-heading font-bold");

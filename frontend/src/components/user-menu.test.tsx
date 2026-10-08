@@ -1,8 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_ENDED_ATTRIBUTE } from "./bfcache-guard";
-import { LogoutProvider } from "./logout-provider";
 import { UserMenu, type UserMenuUser } from "./user-menu";
 
 // The edges are mocked: the typed API client, the toast and the full-page navigation (as in
@@ -32,15 +31,13 @@ beforeEach(() => {
   vi.stubGlobal("location", { ...window.location, replace: mocks.replace });
 });
 
-const ANA: UserMenuUser = { name: "Ana Pérez", email: "ana.perez@example.com", initial: "A" };
+const ANA: UserMenuUser = { name: "Ana Pérez", email: "ana.perez@example.com", initials: "AP" };
 
 function renderMenu(props: Partial<Parameters<typeof UserMenu>[0]> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LogoutProvider>
-        <UserMenu placement="header" user={ANA} {...props} />
-      </LogoutProvider>
+      <UserMenu user={ANA} {...props} />
     </QueryClientProvider>,
   );
 }
@@ -65,14 +62,19 @@ describe("UserMenu trigger", () => {
     expect(trigger().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("shows the initial of the user, hidden from assistive technology (the label names it)", () => {
-    renderMenu();
-    expect(trigger().textContent).toBe("A");
-    expect(trigger().querySelector("[aria-hidden='true']")?.textContent).toBe("A");
+  it("shows the initials of the user, hidden from assistive technology (the label names it)", () => {
+    const { unmount } = renderMenu();
+    expect(trigger().textContent).toBe("AP");
+    expect(trigger().querySelector("[aria-hidden='true']")?.textContent).toBe("AP");
+    unmount();
+
+    renderMenu({ user: { ...ANA, name: "Juan David", initials: "JD" } });
+    expect(trigger().textContent).toBe("JD");
+    expect(trigger().getAttribute("aria-label")).toBe("Menú de la cuenta");
   });
 
-  it("shows a person icon, not text, when there is no initial or no user", () => {
-    const { unmount } = renderMenu({ user: { ...ANA, initial: null } });
+  it("shows a person icon, not text, when there are no initials or no user", () => {
+    const { unmount } = renderMenu({ user: { ...ANA, initials: null } });
     expect(trigger().textContent).toBe("");
     expect(trigger().querySelector("svg")).not.toBeNull();
     unmount();
@@ -117,7 +119,7 @@ describe("UserMenu popup", () => {
 
   it("holds a very long name and email without failing", async () => {
     const long = "x".repeat(120);
-    renderMenu({ user: { name: long, email: `${long}@example.com`, initial: "X" } });
+    renderMenu({ user: { name: long, email: `${long}@example.com`, initials: "X" } });
     await openWithKeyboard();
     expect(screen.getByText(long)).toBeTruthy();
     expect(screen.getByText(`${long}@example.com`)).toBeTruthy();
@@ -199,113 +201,6 @@ describe("UserMenu 'Cerrar sesión'", () => {
     expect(screen.getByRole("menu")).toBeTruthy();
 
     fireEvent.click(item);
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/login"));
-    expect(mocks.del).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("UserMenu in the sidebar", () => {
-  it("keeps the name, the menu semantics and the menu when it also has a tooltip", async () => {
-    renderMenu({ placement: "sidebar" });
-    expect(trigger().getAttribute("aria-haspopup")).toBe("menu");
-
-    await openWithKeyboard();
-    expect(screen.getByRole("menuitem", { name: "Cerrar sesión" })).toBeTruthy();
-    expect(trigger().getAttribute("aria-expanded")).toBe("true");
-  });
-
-  it("shows the name of the avatar in a tooltip on keyboard focus", async () => {
-    renderMenu({ placement: "sidebar" });
-    await act(async () => {
-      trigger().focus();
-    });
-    const tooltip = await screen.findByText("Menú de la cuenta");
-    expect(tooltip.closest("[data-slot='tooltip-content']")).not.toBeNull();
-  });
-
-  it("has no tooltip in the header, where the avatar has room for nothing else", async () => {
-    renderMenu({ placement: "header" });
-    await act(async () => {
-      trigger().focus();
-    });
-    expect(document.querySelector("[data-slot='tooltip-content']")).toBeNull();
-  });
-});
-
-// AppShell renders two menus (header below 1024 px, sidebar from 1024 px; CSS shows one) under a
-// single LogoutProvider. A user who starts the logout on a phone and then widens the window while
-// the request is pending must find the other menu already busy, and must not be able to send a
-// second DELETE from it.
-describe("two UserMenu under one LogoutProvider", () => {
-  function renderBoth() {
-    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <LogoutProvider>
-          <UserMenu placement="header" user={ANA} />
-          <UserMenu placement="sidebar" user={ANA} />
-        </LogoutProvider>
-      </QueryClientProvider>,
-    );
-    const [header, sidebar] = screen.getAllByRole("button", { name: "Menú de la cuenta" }) as [
-      HTMLElement,
-      HTMLElement,
-    ];
-    return { header, sidebar };
-  }
-
-  /** Opens the menu of this avatar with the keyboard and returns its "Cerrar sesión" item. */
-  async function openItemOf(avatar: HTMLElement) {
-    avatar.focus();
-    fireEvent.keyDown(avatar, { key: "Enter" });
-    fireEvent.keyUp(avatar, { key: "Enter" });
-    fireEvent.click(avatar, { detail: 0 });
-    return screen.findByRole("menuitem", { name: "Cerrar sesión" });
-  }
-
-  it("shows the other avatar as busy and sends no second DELETE from it", async () => {
-    let finish!: (value: { response: Response }) => void;
-    mocks.del.mockReturnValue(
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-    );
-    const { header, sidebar } = renderBoth();
-    expect(sidebar.getAttribute("aria-busy")).toBeNull();
-
-    // The logout starts from the header menu...
-    fireEvent.click(await openItemOf(header));
-    await waitFor(() => expect(header.getAttribute("aria-busy")).toBe("true"));
-    // ...and the other avatar, which was not touched, is busy too.
-    expect(sidebar.getAttribute("aria-busy")).toBe("true");
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-
-    // Its menu shows the item busy, and pressing it sends nothing.
-    const otherItem = await openItemOf(sidebar);
-    expect(otherItem.getAttribute("aria-busy")).toBe("true");
-    expect(otherItem.getAttribute("aria-disabled")).toBe("true");
-    fireEvent.click(otherItem);
-    fireEvent.click(otherItem);
-    expect(mocks.del).toHaveBeenCalledTimes(1);
-
-    finish({ response: new Response(null, { status: 204 }) });
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/login"));
-    expect(mocks.del).toHaveBeenCalledTimes(1);
-  });
-
-  it("frees both avatars when the logout fails, and either can try again", async () => {
-    mocks.del.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { header, sidebar } = renderBoth();
-
-    fireEvent.click(await openItemOf(header));
-    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(header.getAttribute("aria-busy")).toBeNull());
-    expect(sidebar.getAttribute("aria-busy")).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-
-    fireEvent.click(await openItemOf(sidebar));
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/login"));
     expect(mocks.del).toHaveBeenCalledTimes(2);
   });

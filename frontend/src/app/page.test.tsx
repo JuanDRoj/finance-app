@@ -1,5 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpaceRead } from "@/lib/core/data/spaces";
 import type { UserRead } from "@/lib/core/data/me";
@@ -19,24 +18,15 @@ vi.mock("@/lib/api/server", () => ({ getServerApi: mocks.getServerApi }));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 // The shell's client pieces need a QueryClientProvider, the router and the browser; they have
 // their own tests. Here only what the shell hands them matters: the user menu is where
-// "Cerrar sesión" lives (KAN-41), and the shell renders it twice (header and sidebar; CSS shows
-// one of them), so the stand-in records the props it receives.
+// "Cerrar sesión" lives (KAN-41), so the stand-in records the props it receives.
 vi.mock("@/components/user-menu", () => ({
-  UserMenu: (props: { placement: string }) => {
+  UserMenu: (props: { user?: unknown }) => {
     mocks.userMenu(props);
-    return <button type="button" aria-label="Menú de la cuenta" data-placement={props.placement} />;
+    return <button type="button" aria-label="Menú de la cuenta" />;
   },
 }));
 vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
-// The real provider needs a QueryClientProvider. The stand-in draws a marker element, so that a test
-// can check what is inside it: both menus must sit under the one provider (a single owner of the
-// logout state).
-vi.mock("@/components/logout-provider", () => ({
-  LogoutProvider: ({ children }: { children: ReactNode }) => (
-    <div data-testid="logout-provider">{children}</div>
-  ),
-}));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -96,42 +86,41 @@ describe("HomePage", () => {
 
   // KAN-27 made "Cerrar sesión" a button of every screen with a session; KAN-41 moved it into the
   // avatar menu (tested in user-menu.test.tsx). What stays true here: every screen has that menu,
-  // in the header (below 1024 px) and in the sidebar (from 1024 px).
-  function menuPlacements() {
-    return screen
-      .getAllByRole("button", { name: "Menú de la cuenta" })
-      .map((button) => button.getAttribute("data-placement"))
-      .sort();
+  // once, in the header, at every width. The sidebar has no avatar.
+  function accountMenu() {
+    return screen.getByRole("button", { name: "Menú de la cuenta" });
   }
 
-  it("has the account menu in the header and in the sidebar, on the greeting and on the error screen", async () => {
+  it("has the account menu in the header, on the greeting and on the error screen", async () => {
     const { unmount } = await renderHome();
-    expect(menuPlacements()).toEqual(["header", "sidebar"]);
+    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(1);
+    expect(accountMenu().closest("header")).toBe(
+      screen.getByRole("heading", { level: 1 }).closest("header"),
+    );
     unmount();
 
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     backend({ me: failure(500, { code: "internal_error", detail: "Internal Server Error" }) });
     await renderHome();
-    expect(menuPlacements()).toEqual(["header", "sidebar"]);
+    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(1);
+    expect(accountMenu().closest("header")).not.toBeNull();
     logged.mockRestore();
   });
 
   it("has the menu on the screen without a space too", async () => {
     backend({ spaces: ok([]) });
     await renderHome();
-    expect(menuPlacements()).toEqual(["header", "sidebar"]);
+    expect(accountMenu()).toBeTruthy();
   });
 
-  it("hands the menus the name, the email and the initial of the user, and nothing else", async () => {
+  it("hands the menu the name, the email and the initials of the user, and nothing else", async () => {
     await renderHome();
-    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
-    for (const [props] of mocks.userMenu.mock.calls) {
-      expect(props.user).toEqual({
-        name: "Ana Pérez",
-        email: "ana.perez@example.com",
-        initial: "A",
-      });
-    }
+    expect(mocks.userMenu).toHaveBeenCalledTimes(1);
+    expect(mocks.userMenu.mock.calls[0]?.[0].user).toEqual({
+      name: "Ana Pérez",
+      email: "ana.perez@example.com",
+      initials: "AP",
+    });
   });
 
   it("uses the part of the email before the @ as the name when there is no display name", async () => {
@@ -140,28 +129,17 @@ describe("HomePage", () => {
     expect(mocks.userMenu.mock.calls[0]?.[0].user).toEqual({
       name: "ana.perez",
       email: "ana.perez@example.com",
-      initial: "A",
+      initials: "A",
     });
   });
 
-  it("gives the menus no user when /me failed: a generic avatar, but the menu is still there", async () => {
+  it("gives the menu no user when /me failed: a generic avatar, but the menu is still there", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     backend({ me: failure(502) });
     await renderHome();
-    expect(menuPlacements()).toEqual(["header", "sidebar"]);
-    for (const [props] of mocks.userMenu.mock.calls) expect(props.user).toBeUndefined();
+    expect(accountMenu()).toBeTruthy();
+    expect(mocks.userMenu.mock.calls[0]?.[0].user).toBeUndefined();
     logged.mockRestore();
-  });
-
-  it("puts both menus under one logout provider, so they share the logout state", async () => {
-    await renderHome();
-    const providers = screen.getAllByTestId("logout-provider");
-    expect(providers).toHaveLength(1);
-    const provider = providers[0] as HTMLElement;
-    expect(within(provider).getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(2);
-    // The sidebar (logo) and the page (main) are under it too: nothing of the shell is outside.
-    expect(within(provider).getByAltText("Kanza")).toBeTruthy();
-    expect(within(provider).getByRole("main")).toBeTruthy();
   });
 
   it("has the main landmark and the logo of the sidebar", async () => {

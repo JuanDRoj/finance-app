@@ -62,16 +62,15 @@ const PAIRS: Pair[] = [
   ["foreground", "card-solid", 4.5, undefined],
   ["popover-foreground", "popover", 4.5, undefined],
   ["ring", "background", 3, { light: 5.54, dark: 11.48 }],
-  // Desktop sidebar (KAN-41, D17). Same values in both themes: it is dark in light mode too.
-  // Idle icons need 3:1 (non-text); 4.5 is asked for so that the same pair also serves for text.
-  ["sidebar-foreground", "sidebar", 4.5, { light: 9.84, dark: 9.84 }],
-  ["sidebar-foreground", "sidebar-accent", 4.5, { light: 7.45, dark: 7.45 }],
-  ["sidebar-accent-foreground", "sidebar", 4.5, { light: 15.98, dark: 15.98 }], // tooltip text
-  ["sidebar-accent-foreground", "sidebar-accent", 4.5, { light: 12.11, dark: 12.11 }], // hover
-  ["sidebar-primary", "sidebar", 3, { light: 10.7, dark: 10.7 }], // active icon, avatar, indicator
-  ["sidebar-primary", "sidebar-accent", 3, { light: 8.1, dark: 8.1 }], // active icon on its pill
-  ["sidebar-primary-foreground", "sidebar-primary", 4.5, { light: 10.27, dark: 10.27 }], // avatar
-  ["sidebar-ring", "sidebar", 3, { light: 10.7, dark: 10.7 }], // focus ring on the sidebar
+  // Desktop sidebar (KAN-41, D17), with the values of the Kanza canvas. It is dark in both themes
+  // (#0E1A14 in light, #13241B in dark). Idle icons need 3:1 (non-text); 4.5 is asked for so the
+  // same pair also serves for text.
+  ["sidebar-foreground", "sidebar", 4.5, { light: 8.3, dark: 7.54 }], // idle icons
+  ["sidebar-primary", "sidebar", 3, { light: 10.7, dark: 9.71 }], // active icon and its mark
+  ["sidebar-primary-foreground", "sidebar-primary", 4.5, { light: 10.27, dark: 10.27 }], // counter
+  ["sidebar-ring", "sidebar", 3, { light: 10.7, dark: 9.71 }], // focus ring on the sidebar
+  ["tooltip-foreground", "tooltip", 4.5, { light: 15.98, dark: 15.98 }], // text of the tooltip
+  ["tooltip", "background", 3, { light: 15.84, dark: 17.15 }], // the tooltip stands out of the page
 ];
 
 describe.each([
@@ -205,6 +204,26 @@ describe.each([
   });
 });
 
+// The sidebar's hover and active background is a translucent mint (--sidebar-accent) painted over
+// the sidebar itself, so the pairs are measured on the composited color, as for the glass above.
+const SIDEBAR_STATE_PAIRS: [string, number, { light: number; dark: number }][] = [
+  ["sidebar-foreground", 4.5, { light: 6.15, dark: 5.45 }], // idle icon under the pointer
+  ["sidebar-primary", 3, { light: 7.93, dark: 7.03 }], // active icon on its pill
+  ["sidebar-ring", 3, { light: 7.93, dark: 7.03 }], // focus ring next to the pill
+];
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("sidebar hover and active state, %s palette", (name, palette) => {
+  it.each(SIDEBAR_STATE_PAIRS)("%s reaches %s:1 on the composited pill", (token, minimum, doc) => {
+    const pill = over(palette, "sidebar-accent", hexOf(palette, "sidebar"));
+    const ratio = contrast(hexOf(palette, token), pill);
+    expect(ratio).toBeGreaterThanOrEqual(minimum);
+    expect(ratio).toBeCloseTo(doc[name], 1);
+  });
+});
+
 describe("tokens", () => {
   it("defines the same tokens in the light and dark palettes", () => {
     for (const token of declarations(rootBlocks[1] ?? "").keys()) {
@@ -212,20 +231,26 @@ describe("tokens", () => {
     }
   });
 
-  it("keeps the sidebar dark and identical in the light and dark themes", () => {
-    const sidebarTokens = [...light.keys()].filter((token) => token.startsWith("sidebar"));
-    expect(sidebarTokens.length).toBeGreaterThan(0);
-    const darkOverrides = declarations(rootBlocks[1] ?? "");
-    for (const token of sidebarTokens) {
-      // `dark` inherits from `light`, so look at what the dark block itself declares.
-      const override = darkOverrides.get(token);
-      if (override !== undefined) {
-        expect(override, `--${token} is the same in both themes`).toBe(light.get(token));
-      }
-    }
+  it("keeps the sidebar dark in both themes, with its own value in each", () => {
     // "Dark": the surface's relative luminance is far below the page background of the light theme.
     expect(luminance(hexOf(light, "sidebar"))).toBeLessThan(0.02);
     expect(luminance(hexOf(dark, "sidebar"))).toBeLessThan(0.02);
+    // The canvas uses a different sidebar in each theme: #0E1A14 in light, #13241B in dark.
+    expect(hexOf(light, "sidebar").toLowerCase()).toBe("#0e1a14");
+    expect(hexOf(dark, "sidebar").toLowerCase()).toBe("#13241b");
+  });
+
+  it("keeps the tooltip of the sidebar icons inverted against the page", () => {
+    // Dark on a light page, light on a dark page.
+    expect(luminance(hexOf(light, "tooltip"))).toBeLessThan(luminance(hexOf(light, "background")));
+    expect(luminance(hexOf(dark, "tooltip"))).toBeGreaterThan(luminance(hexOf(dark, "background")));
+  });
+
+  it("needs its own focus ring on the sidebar: --ring (light) is under 3:1 there", () => {
+    // If this ever starts failing, --ring got stronger and --sidebar-ring could be dropped.
+    expect(contrast(hexOf(light, "ring"), hexOf(light, "sidebar"))).toBeLessThan(3);
+    // In the dark theme --ring is the same mint, so nothing is lost by using the sidebar's own.
+    expect(contrast(hexOf(dark, "ring"), hexOf(dark, "sidebar"))).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps the theme-color values of layout.tsx in sync with --background", () => {

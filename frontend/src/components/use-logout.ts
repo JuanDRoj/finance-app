@@ -18,11 +18,8 @@ import { describeApiError } from "@/lib/core/i18n";
  * It fails only with a network error or a 403 (`origin_not_allowed`): the session is still there,
  * so a toast says so and `logout` can be called again.
  *
- * Call it once per screen, in `LogoutProvider` (which `AppShell` mounts), not in the menu item and
- * not in each menu: the item unmounts when the menu closes, and the request must keep its state if
- * the user presses Escape while it is pending; and the two avatar menus (header and sidebar) must
- * share one state and one guard, or a window resized across 1024 px mid-request would let the
- * other menu send a second `DELETE`.
+ * `UserMenu` calls this hook, not the menu item: the item unmounts when the menu closes, and the
+ * request must keep its state if the user presses Escape while it is pending.
  */
 export function useLogout() {
   const queryClient = useQueryClient();
