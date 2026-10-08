@@ -1,0 +1,28 @@
+{
+  "files": [
+    {
+      "file": "montserrat/montserrat-latin-variable.woff2",
+      "family": "Montserrat",
+      "sha256": "6438d7b8ea9c7c3992d5e2fd2afdb1ff948570a3ef0bedae76247b51632960ba",
+      "css": "https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap",
+      "source": "https://fonts.gstatic.com/s/montserrat/v31/JTUSjIg1_i6t8kCHKm459WlhyyTh89Y.woff2",
+      "license": "montserrat/OFL.txt"
+    },
+    {
+      "file": "karla/karla-latin-variable.woff2",
+      "family": "Karla",
+      "sha256": "690fabf2f17b4a9833e86103153cc497d3d6c4e8bf2d5fb8ade6a005f5fd731e",
+      "css": "https://fonts.googleapis.com/css2?family=Karla:wght@400;500;600;700&display=swap",
+      "source": "https://fonts.gstatic.com/s/karla/v33/qkB9XvYC6trAT55ZBi1ueQVIjQTD-JrIH2G7nytkHRyQ8p4wUje6bmMorHA.woff2",
+      "license": "karla/OFL.txt"
+    },
+    {
+      "file": "bricolage/bricolage-grotesque-800-opsz96.woff2",
+      "family": "Bricolage Grotesque",
+      "sha256": "597e906917c95b92eb96480df00acc8db3befe5089a124608e1c1333a065a4cf",
+      "css": "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@96,800&display=swap",
+      "license": "bricolage/OFL.txt",
+      "note": "Copy from KAN-40 (21,748 bytes), the reference. It is NOT reproducible from Google any more: today the same request returns a slightly different build of the same face (21,824 bytes). Do not refresh it from Google without a visual review of the wordmark (docs/marca-kanza.md)."
+    }
+  ]
+}

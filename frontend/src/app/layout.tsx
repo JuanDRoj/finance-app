@@ -1,24 +1,32 @@
 import type { Metadata, Viewport } from "next";
-import { Karla, Montserrat } from "next/font/google";
+import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-// Montserrat: numbers and headings. Karla: body text. Self-hosted at build time (no request to
-// Google at runtime); the `latin` subset covers Spanish.
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+// Montserrat: numbers and headings. Karla: body text. Both are variable fonts versioned in
+// ./fonts (subset `latin`, which covers Spanish), so `next build` never needs the network. Origin,
+// SHA-256 hashes and licenses are listed in ./fonts/fonts.json (the only place that holds the
+// hashes); ./fonts/README.md explains how to repeat a download. The weight ranges are the weights
+// the UI uses: Montserrat 600-700, Karla 400-700. `adjustFontFallback: "Arial"` because the default
+// for local fonts is a serif fallback.
+const montserrat = localFont({
+  src: "./fonts/montserrat/montserrat-latin-variable.woff2",
+  weight: "600 700",
+  style: "normal",
   display: "swap",
   variable: "--font-montserrat",
+  adjustFontFallback: "Arial",
 });
 
-const karla = Karla({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const karla = localFont({
+  src: "./fonts/karla/karla-latin-variable.woff2",
+  weight: "400 700",
+  style: "normal",
   display: "swap",
   variable: "--font-karla",
+  adjustFontFallback: "Arial",
 });
 
 export const metadata: Metadata = {
