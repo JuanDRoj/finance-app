@@ -161,6 +161,8 @@ jobs:
     name: api-types
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      UV_NO_DEV: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -175,10 +177,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      # El export no necesita BD ni variables de entorno ni las dependencias de desarrollo.
+      # El export no necesita BD, variables de entorno ni las dependencias de desarrollo.
+      # UV_NO_DEV (en el env del job) vale para `uv sync` y para el `uv run` siguiente: con solo
+      # `uv sync --no-dev`, `uv run` volvería a sincronizar el grupo dev.
       - name: Install backend dependencies
         working-directory: backend
-        run: uv sync --no-dev
+        run: uv sync
 
       - name: Export openapi.json
         working-directory: backend
