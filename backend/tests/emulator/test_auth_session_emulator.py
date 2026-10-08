@@ -6,7 +6,7 @@ cover what the fake cannot: the emulator's own tokens and its `createSessionCook
 """
 
 import asyncio
-import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from firebase_admin import auth
@@ -17,20 +17,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auth.firebase import FirebaseAdminAuth
 from app.modules.spaces.models import Space
 from app.modules.users.models import User
-from tests.emulator.helpers import sign_up
+from tests.emulator.helpers import EmulatorAccount
 from tests.fakes import parse_set_cookie, unsigned_id_token
 
 ORIGIN = "http://localhost:3000"
+NewUser = Callable[..., Awaitable[EmulatorAccount]]
 
 
 async def test_a_real_sign_up_gets_a_session_cookie_that_firebase_accepts(
     api_client: AsyncClient,
     real_firebase: FirebaseAdminAuth,
-    emulator_host: str,
+    emulator_user: NewUser,
     session: AsyncSession,
 ) -> None:
-    email = f"e2e-{uuid.uuid4().hex[:10]}@example.com"
-    account = await sign_up(emulator_host, email, "Eva E2E")
+    account = await emulator_user()
+    email = account.email
     id_token = account.id_token
 
     response = await api_client.post(
