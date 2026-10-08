@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { focusRing, sidebarFocusRing } from "@/components/ui/focus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useLogout } from "@/components/use-logout";
+import { useLogoutState } from "@/components/logout-provider";
 import { cn } from "@/lib/utils";
 
 /** What the menu shows about the user. The server computes it (`AppShell`): only this crosses. */
@@ -40,14 +40,16 @@ const ACCOUNT_LABEL = "Menú de la cuenta";
 
 /**
  * The avatar and its menu (docs/diseno.md D17): the name and email of the user and "Cerrar
- * sesión", at every width. The logout is `useLogout` (KAN-27, full page load to `/login`); it is
- * called here and not in the menu item, so its busy state survives if the menu closes with Escape
- * while the request is pending. While it runs, the item stays in the menu with a spinner and
- * ignores presses (`closeOnClick={false}`); if it fails, a toast says so and the item is
- * available again.
+ * sesión", at every width. The logout is `useLogout` (KAN-27, full page load to `/login`), but its
+ * state is not owned here: `LogoutProvider` (mounted once by `AppShell`) holds it and the header
+ * menu and the sidebar menu both read it. So the busy state survives if the menu closes with
+ * Escape while the request is pending, and it is the same in the other menu if the window is
+ * resized across 1024 px meanwhile (no second `DELETE`). While it runs, the item stays in the
+ * menu with a spinner and ignores presses (`closeOnClick={false}`); if it fails, a toast says so
+ * and the item is available again.
  */
 export function UserMenu({ user, placement, className }: UserMenuProps) {
-  const { logout, busy } = useLogout();
+  const { logout, busy } = useLogoutState();
   const inSidebar = placement === "sidebar";
 
   const avatar = (

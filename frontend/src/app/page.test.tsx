@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpaceRead } from "@/lib/core/data/spaces";
 import type { UserRead } from "@/lib/core/data/me";
@@ -28,6 +29,14 @@ vi.mock("@/components/user-menu", () => ({
 }));
 vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
+// The real provider needs a QueryClientProvider. The stand-in draws a marker element, so that a test
+// can check what is inside it: both menus must sit under the one provider (a single owner of the
+// logout state).
+vi.mock("@/components/logout-provider", () => ({
+  LogoutProvider: ({ children }: { children: ReactNode }) => (
+    <div data-testid="logout-provider">{children}</div>
+  ),
+}));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -142,6 +151,17 @@ describe("HomePage", () => {
     expect(menuPlacements()).toEqual(["header", "sidebar"]);
     for (const [props] of mocks.userMenu.mock.calls) expect(props.user).toBeUndefined();
     logged.mockRestore();
+  });
+
+  it("puts both menus under one logout provider, so they share the logout state", async () => {
+    await renderHome();
+    const providers = screen.getAllByTestId("logout-provider");
+    expect(providers).toHaveLength(1);
+    const provider = providers[0] as HTMLElement;
+    expect(within(provider).getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(2);
+    // The sidebar (logo) and the page (main) are under it too: nothing of the shell is outside.
+    expect(within(provider).getByAltText("Kanza")).toBeTruthy();
+    expect(within(provider).getByRole("main")).toBeTruthy();
   });
 
   it("has the main landmark and the logo of the sidebar", async () => {
