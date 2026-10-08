@@ -1,8 +1,10 @@
 # CI de cada PR a `main` (KAN-15).
 #
 # Los nombres de los jobs (`name:`) SON los nombres de los checks que exige el ruleset
-# `protect-main`: backend, frontend, api-types y secrets. Si cambias uno, vuelve a correr
-# infra/scripts/05_github_main_protection.sh con los nombres nuevos o se bloquearán los merges.
+# `protect-main`: backend, frontend, api-types y secrets. Esos mismos nombres son el valor por
+# defecto de REQUIRED_CHECKS en infra/scripts/05_github_main_protection.sh. Si cambias uno,
+# actualiza ese valor por defecto y vuelve a correr el script (con CHECKS_REF=<sha>) o se
+# bloquearán los merges.
 #
 # Sin filtro `paths:` a propósito: un check requerido que no se dispara deja el PR sin poder mergear.
 name: CI

@@ -34,7 +34,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 
 - `main` solo recibe cambios por Pull Request: no se admite push directo, force push ni borrado de la rama (tampoco para el administrador).
 - Cada PR corre el CI (`.github/workflows/ci.yml`): checks `backend`, `frontend`, `api-types` y `secrets`. El ruleset los exige (se aplican tras la primera ejecución del CI, ver `infra/CLAUDE.md`).
-- La protección se aplica con `infra/scripts/05_github_main_protection.sh` (`DRY_RUN=1` para ver qué hará).
+- La protección se aplica con `infra/scripts/05_github_main_protection.sh`. Con checks requeridos hace falta `CHECKS_REF=<sha de un commit donde el CI ya corrió>`: primero `CHECKS_REF=<sha> DRY_RUN=1 bash infra/scripts/05_github_main_protection.sh` para ver qué hará, y luego sin `DRY_RUN`. Detalle en `infra/CLAUDE.md`.
 - El repositorio es público: nunca se suben secretos (`.env*`, llaves, credenciales). Usa los `.env.example` como referencia.
 
 ## Equipo de agentes (Claude Code)
