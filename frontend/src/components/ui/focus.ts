@@ -14,3 +14,10 @@ export const focusRing =
   "focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 export const focusRingForced = "outline-solid outline-2 outline-offset-2 outline-ring";
+
+/**
+ * The same ring on the desktop sidebar, which is dark in both themes: `--ring` (light theme) is
+ * only 2.86:1 against it, so the sidebar has its own token (`--sidebar-ring`, 10.7:1).
+ */
+export const sidebarFocusRing =
+  "focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring";

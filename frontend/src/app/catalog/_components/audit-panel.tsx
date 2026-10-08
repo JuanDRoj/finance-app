@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 
 type Report = {
   viewport: number;
+  /** The desktop sidebar (`nav` "Principal") is on screen: it is only from 1024 px (`lg`). */
+  sidebar: boolean;
+  /** Width of `main`, the content column: at most 640 px below 1024 px, 1440 px from there. */
+  contentWidth: number | null;
+  /** The page itself scrolls sideways. */
+  pageScrollsSideways: boolean;
   controls: number;
   /** Controls under 44×44 px. */
   small: string[];
@@ -60,8 +66,14 @@ function measure(): Report {
       return left < -TOLERANCE || right > window.innerWidth + TOLERANCE;
     })
     .map(describe);
+  const sidebarNav = document.querySelector("nav[aria-label='Principal']");
+  const main = document.querySelector("main");
+  const page = document.documentElement;
   return {
     viewport: window.innerWidth,
+    sidebar: sidebarNav !== null && sidebarNav.getClientRects().length > 0,
+    contentWidth: main ? Math.round(main.getBoundingClientRect().width) : null,
+    pageScrollsSideways: page.scrollWidth > page.clientWidth + TOLERANCE,
     controls: controls.length,
     small,
     overflowing,
@@ -89,7 +101,9 @@ function Issues({ title, lines }: Readonly<{ title: string; lines: string[] }>) 
 
 /**
  * Catalog only. Measures this page: controls under 44×44 px, any element that sticks out of the
- * viewport, and buttons or links whose text does not fit. Resize the window to 360, 375, 393 and 430 px and run it again.
+ * viewport, and buttons or links whose text does not fit; it also says whether the sidebar is on
+ * screen, how wide the content column is and whether the page scrolls sideways (KAN-41).
+ * Resize the window to 360, 375, 393, 430, 768, 1024, 1280 and 1440 px and run it again.
  */
 export function AuditPanel() {
   const [report, setReport] = useState<Report | null>(null);
@@ -104,6 +118,11 @@ export function AuditPanel() {
           <p>
             Ancho: <strong>{report.viewport} px</strong> · Controles medidos:{" "}
             <strong>{report.controls}</strong>
+          </p>
+          <p>
+            Barra lateral: <strong>{report.sidebar ? "visible" : "oculta"}</strong> · Contenido:{" "}
+            <strong>{report.contentWidth === null ? "—" : `${report.contentWidth} px`}</strong> ·
+            Scroll horizontal: <strong>{report.pageScrollsSideways ? "sí" : "no"}</strong>
           </p>
           <Issues title="Controles menores de 44 px" lines={report.small} />
           <Issues title="Elementos que se salen de la pantalla" lines={report.overflowing} />
