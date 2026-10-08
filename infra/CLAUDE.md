@@ -33,6 +33,7 @@ docker-compose.yml         # en la raíz del repo (entorno local)
 infra/firebase-emulator/   # Dockerfile + firebase.json del emulador de Auth (imagen propia)
 infra/postgres/init/       # SQL que corre con el volumen vacío (crea finance_test)
 .github/workflows/         # ci.yml (PR) y cd-staging.yml (merge a main)
+infra/gitleaks/            # .gitleaksignore (falsos positivos) y VERSION (imagen de gitleaks fijada)
 ```
 
 ## Convenciones de scripts
@@ -54,7 +55,7 @@ infra/postgres/init/       # SQL que corre con el volumen vacío (crea finance_t
 - **Migraciones:** Cloud Run Job separado, ejecutado antes de desplegar la nueva revisión. Nunca al arrancar la app.
 - **Cloud Run:** público en el Hito 0, sin header secreto. Cuenta de servicio propia con permisos mínimos (Cloud SQL Client y acceso a sus secretos).
 - **GitHub → GCP:** solo Workload Identity Federation, restringido a este repositorio. **Nunca llaves JSON.**
-- **CI (PR):** ruff + mypy · eslint + tsc · tests backend con PostgreSQL · `alembic upgrade` sobre BD vacía · tipos TS regenerados sin diferencias · build del frontend.
+- **CI (PR, KAN-15):** `.github/workflows/ci.yml` con cuatro jobs, cuyos `name:` son los checks requeridos: **`backend`** (ruff check + format, mypy, `alembic upgrade head` sobre BD vacía, pytest con PostgreSQL 16 y el emulador de Firebase Auth), **`frontend`** (eslint, tsc, prettier, vitest, `next build` con variables de relleno no secretas), **`api-types`** (regenera `openapi.json` y `schema.d.ts` y falla si hay diff) y **`secrets`** (gitleaks sobre los commits del PR).
 - **CD (merge a `main`):** build de imagen → Artifact Registry → job de migraciones → deploy a Cloud Run staging. Prod será promoción manual de la **misma imagen**.
 - **Vercel:** las previews solo verifican build; en staging, `BACKEND_URL` apunta a Cloud Run y el rewrite `/api/*` de `next.config.ts` la usa.
 - **IaC:** scripts `gcloud` en el Hito 0; migrar a Terraform antes de prod.
@@ -72,6 +73,7 @@ Las variables de los servicios locales van documentadas en `.env.example` (raíz
 ## GitHub
 - Protección de `main` (KAN-7): PR obligatorio + CI en verde, sin force push. **Verificar primero** si el plan de GitHub lo permite (repos privados en plan Free no tienen protección de ramas); si no, es una decisión del humano.
 - Decisión KAN-7: el repo es **público** (los rulesets no existen en privado/Free). `main` se protege con el ruleset `protect-main` (`infra/scripts/05_github_main_protection.sh`): PR obligatorio, sin force push ni borrado, sin bypass (aplica también al admin). Antes de publicar se corre `infra/scripts/04_scan_history.sh`.
-- Excepciones de gitleaks (falsos positivos confirmados) viven en `infra/gitleaks/.gitleaksignore`; el script 04 las pasa con `--gitleaks-ignore-path`. **KAN-15** debe usar el mismo flag y archivo en el CI.
-- Checks requeridos: el ruleset nace **sin** checks porque aún no hay CI. **KAN-15** debe poner los nombres de sus jobs en `REQUIRED_CHECKS` (ej. `REQUIRED_CHECKS=backend,frontend`) y volver a correr el script 05.
+- Excepciones de gitleaks (falsos positivos confirmados) viven en `infra/gitleaks/.gitleaksignore`; el script 04 y el job `secrets` del CI las pasan con `--gitleaks-ignore-path`. La versión de la imagen (`zricethezav/gitleaks`) está fijada en `infra/gitleaks/VERSION` y la leen ambos; para subirla, cambia solo ese archivo.
+- Checks requeridos (KAN-15): `backend`, `frontend`, `api-types` y `secrets`, exactamente el `name:` de cada job de `ci.yml` (si renombras un job, renombra el check aquí, o se bloquean todos los merges: el ruleset no tiene bypass). Se aplican **después** de que los checks hayan corrido al menos una vez en un PR (paso del humano). `REQUIRED_CHECKS` vale por defecto esos cuatro nombres, así que volver a correr el script no los quita; `REQUIRED_CHECKS=""` (explícita y vacía) significa "sin checks". Con checks, el script **exige** `CHECKS_REF=<sha o rama donde el CI ya corrió>` y comprueba que cada check exista ahí; `SKIP_CHECKS_VERIFY=1` salta esa verificación a propósito (con aviso). Sin ninguno de los dos, se detiene sin cambiar nada. Si el ruleset actual exige checks que el payload nuevo no incluye, avisa y pide una confirmación aparte. Uso: `DRY_RUN=1 CHECKS_REF=<sha-del-PR> bash infra/scripts/05_github_main_protection.sh` y luego sin `DRY_RUN`. El script recorta espacios en los nombres. Sin filtro `paths:` en el workflow: un check requerido que no se dispara deja el PR sin poder mergear.
+- El job `backend` levanta PostgreSQL como service (`postgres:16.15-alpine`, misma versión que el compose) y crea `finance_test` con `psql` (un service no monta `infra/postgres/init`). El emulador se construye con buildx (caché `gha`) desde `infra/firebase-emulator/` y se arranca con `docker compose up -d --no-build --wait firebase-emulator`. Un service de Actions no puede construir imágenes.
 - Workflows con `permissions:` explícitos y actions fijadas a una versión.
