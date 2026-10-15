@@ -17,7 +17,8 @@
 #     Para verificarlos: sql_power.sh start, este script, sql_power.sh stop.
 #   - Nunca cambia ni regenera la contraseña de un usuario que ya existe. La contraseña solo se genera
 #     cuando el usuario NO existe; vive en una variable en memoria y viaja por stdin al secreto: no se
-#     imprime, no se escribe en disco ni queda en el historial.
+#     imprime, no queda en el historial ni en el log de archivo de gcloud (ver provision_user) y el
+#     script se niega a correr con xtrace.
 #   - Nunca lee el valor del secreto (solo sus metadatos y la lista de versiones).
 #
 # Una instancia creada desde cero queda ENCENDIDA (así lo hace la creación): al final se avisa para que
@@ -27,6 +28,7 @@
 set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
+refuse_xtrace
 source "$(dirname "$0")/../env/staging.env"
 source "$(dirname "$0")/lib_sql.sh"
 
@@ -132,6 +134,18 @@ store_password_in_secret() {
 # Crea el usuario de la app con su contraseña y la guarda en el secreto. Solo se llama cuando el
 # usuario NO existe. Primero el secreto y después el usuario: si algo falla entre los dos, la
 # siguiente corrida ve "usuario ausente", genera otra contraseña y deja todo consistente.
+#
+# La contraseña en disco y en argumentos:
+#   - El secreto la recibe por stdin (printf es un comando interno y --data-file=- solo lleva un guion en
+#     los argumentos), así que no figura en ninguna línea de comandos.
+#   - sql users create solo acepta --password (sin archivo, stdin ni petición interactiva), así que va
+#     en los argumentos. gcloud guarda los argumentos de cada comando en su log de archivo
+#     (~/.config/gcloud/logs), de modo que ESE comando corre con CLOUDSDK_CORE_DISABLE_FILE_LOGGING=1
+#     (propiedad core/disable_file_logging, verificada en el SDK 589). Sin eso la contraseña quedaría en
+#     texto plano en disco.
+#   - Riesgo residual aceptado: durante los segundos que dura ese comando los argumentos son visibles
+#     en `ps` de la misma máquina. Es una máquina de un solo usuario y solo ocurre al crear el usuario
+#     desde cero (no en las corridas normales, donde el usuario ya existe).
 provision_user() {
   if is_dry; then
     if (( SECRET_EXISTS )); then
@@ -139,7 +153,7 @@ provision_user() {
     else
       printf '[dry-run] %s\n' "printf '%s' <contraseña generada> | gcloud secrets create ${DB_PASSWORD_SECRET} --project=${GCP_PROJECT_ID} --replication-policy=user-managed --locations=${GCP_REGION} --labels=env=${ENV_LABEL} --secret-type=${DB_SECRET_TYPE} --data-file=-"
     fi
-    printf '[dry-run] %s\n' "gcloud sql users create ${DB_USER} --instance=${SQL_INSTANCE} --project=${GCP_PROJECT_ID} --password=<contraseña generada>"
+    printf '[dry-run] %s\n' "CLOUDSDK_CORE_DISABLE_FILE_LOGGING=1 gcloud sql users create ${DB_USER} --instance=${SQL_INSTANCE} --project=${GCP_PROJECT_ID} --password=<contraseña generada>"
     SECRET_PLANNED=1
     return 0
   fi
@@ -154,7 +168,7 @@ provision_user() {
   store_password_in_secret || { NEW_PW=""; die "No pude guardar la contraseña en el secreto ${DB_PASSWORD_SECRET}; no se creó el usuario"; }
   SECRET_EXISTS=1
   SECRET_VERSIONS=$((SECRET_VERSIONS + 1))
-  if ! gcloud sql users create "$DB_USER" --instance="$SQL_INSTANCE" --project="$GCP_PROJECT_ID" --password="$NEW_PW" --format=none; then
+  if ! CLOUDSDK_CORE_DISABLE_FILE_LOGGING=1 gcloud sql users create "$DB_USER" --instance="$SQL_INSTANCE" --project="$GCP_PROJECT_ID" --password="$NEW_PW" --format=none; then
     NEW_PW=""
     die "La contraseña nueva ya está en el secreto, pero no pude crear el usuario ${DB_USER}. Vuelve a correr el script: generará otra y la guardará como versión nueva."
   fi
@@ -201,6 +215,7 @@ st_ok "Cuenta de servicio ${RUN_SA_EMAIL}"
 step "1/7 Instancia ${SQL_INSTANCE}"
 INSTANCE_EXISTS=0
 SIMULATED_NEW=0
+JUST_CREATED=0
 if sql_instance_exists; then
   INSTANCE_EXISTS=1
   sql_wait_pending
@@ -238,15 +253,25 @@ else
     --no-insights-config-record-client-address --no-insights-config-record-application-tags
     --enable-password-policy --password-policy-complexity="$PW_COMPLEXITY"
     --password-policy-min-length="$PW_MIN_LENGTH" --password-policy-disallow-username-substring
-    --async --format=none
+    --async
   )
-  write gcloud sql instances create "$SQL_INSTANCE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" "${create_args[@]}"
   if is_dry; then
+    write gcloud sql instances create "$SQL_INSTANCE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" "${create_args[@]}" --format='value(name)'
     SIMULATED_NEW=1
   else
-    # La creación tarda varios minutos: se espera a que termine y se lee la instancia nueva.
-    sql_wait_pending
-    sql_describe
+    ask_apply
+    create_op="$(gcloud sql instances create "$SQL_INSTANCE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" "${create_args[@]}" --format='value(name)')" \
+      || die "No pude crear la instancia ${SQL_INSTANCE}"
+    JUST_CREATED=1
+    # La creación tarda varios minutos. Se espera la operación por su id; si el id no se pudo leer, o
+    # la lista de operaciones aún no la muestra, se espera por el estado de la instancia (RUNNABLE),
+    # con límite. Así nunca se sigue con la instancia en PENDING_CREATE.
+    if [[ "$create_op" =~ ^[0-9a-f-]{20,}$ ]]; then
+      sql_wait_op "$create_op"
+    else
+      st_info "No pude leer el id de la operación de creación; se espera por el estado de la instancia"
+    fi
+    sql_wait_state RUNNABLE
     INSTANCE_EXISTS=1
   fi
   st_created "Instancia ${SQL_INSTANCE} (${SQL_DATABASE_VERSION}, ${SQL_EDITION}, ${SQL_TIER}, ${SQL_STORAGE_GB} GB ${SQL_STORAGE_TYPE}, ${GCP_REGION})"
@@ -432,7 +457,9 @@ else
   st_ok "${RUN_SA_NAME} no tiene roles de Secret Manager a nivel de proyecto (solo sobre el secreto)"
 fi
 st_info "max_connections no se lee aquí (hace falta la instancia encendida): lo imprime bash infra/scripts/sql_check.sh"
-if [[ "$POWER" == "running" ]]; then
+# El aviso sale siempre que la instancia se haya creado en esta corrida (queda encendida), aunque
+# POWER no lo refleje, y siempre que esté encendida.
+if (( JUST_CREATED )) || [[ "$POWER" == "running" ]]; then
   st_warn "La instancia ${SQL_INSTANCE} está ENCENDIDA y se cobra por hora. Cuando termines, apágala con: bash infra/scripts/sql_power.sh stop"
 fi
 

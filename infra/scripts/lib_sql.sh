@@ -61,8 +61,31 @@ sql_power_state() {
 sql_wait_op() {
   local op="$1"
   log "Esperando la operación ${op} (máximo ${SQL_WAIT_SECONDS}s)"
-  gcloud sql operations wait "$op" --project="$GCP_PROJECT_ID" --timeout="$SQL_WAIT_SECONDS" >/dev/null \
+  gcloud sql operations wait "$op" --project="$GCP_PROJECT_ID" --timeout="$SQL_WAIT_SECONDS" >/dev/null </dev/null \
     || die "La operación ${op} no terminó bien en ${SQL_WAIT_SECONDS}s. Para seguir esperando: gcloud sql operations wait ${op} --project=${GCP_PROJECT_ID} --timeout=${SQL_WAIT_SECONDS}  (también se ve en la consola de Cloud SQL)"
+}
+
+# Espera, con límite de SQL_WAIT_SECONDS, a que la instancia llegue al estado pedido (p. ej. RUNNABLE) y
+# deja el JSON actualizado en SQL_JSON. Complementa a sql_wait_op: justo tras un create --async la lista
+# de operaciones puede tardar en mostrar la nueva y la instancia aparece primero en PENDING_CREATE.
+sql_wait_state() {
+  local want="$1" waited=0 state
+  while true; do
+    sql_describe
+    state="$(jq -r '.state // ""' <<<"$SQL_JSON")"
+    if [[ "$state" == "$want" ]]; then
+      return 0
+    fi
+    if [[ "$state" == "FAILED" || "$state" == "SUSPENDED" ]]; then
+      die "La instancia ${SQL_INSTANCE} quedó en estado ${state}. Revísala en la consola de Cloud SQL."
+    fi
+    if (( waited >= SQL_WAIT_SECONDS )); then
+      die "La instancia ${SQL_INSTANCE} sigue en estado ${state:-desconocido} tras ${SQL_WAIT_SECONDS}s (se esperaba ${want}). Revísala en la consola de Cloud SQL y vuelve a correr el script."
+    fi
+    log "Estado ${state:-desconocido}; esperando ${want} (${waited}/${SQL_WAIT_SECONDS}s)"
+    sleep 15
+    waited=$((waited + 15))
+  done
 }
 
 # Espera las operaciones aún no terminadas de la instancia (evita el error por operación en curso).

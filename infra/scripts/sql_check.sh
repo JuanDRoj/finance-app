@@ -14,11 +14,13 @@
 #   SQL_PROXY_PORT=5434 bash infra/scripts/sql_check.sh   # otro puerto local
 #
 # La contraseña se lee del secreto a una variable y viaja solo en el entorno de psql: no se imprime,
-# no se escribe en disco y el script no la pasa como argumento. La conexión del proxy al servidor va
+# no se escribe en disco y el script no la pasa como argumento; se niega a correr con xtrace (bash -x)
+# porque la traza la mostraría. La conexión del proxy al servidor va
 # cifrada y con certificado de cliente (lo pone el proxy); entre psql y el proxy es local (sslmode=disable).
 set -euo pipefail
 
 source "$(dirname "$0")/lib.sh"
+refuse_xtrace
 source "$(dirname "$0")/../env/staging.env"
 source "$(dirname "$0")/lib_sql.sh"
 
@@ -38,6 +40,8 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+# Ctrl+C, kill o cierre de la terminal: salir también dispara cleanup y no deja el proxy abierto.
+trap 'exit 1' INT TERM HUP
 
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/${SQL_PROXY_PORT}") 2>/dev/null; }
 
@@ -75,8 +79,10 @@ PROXY_LOG="$(mktemp)"
 cloud-sql-proxy --port "$SQL_PROXY_PORT" "$SQL_CONNECTION_NAME" >"$PROXY_LOG" 2>&1 &
 PROXY_PID=$!
 ready=0
-for _ in $(seq 1 30); do
-  if port_in_use; then
+for i in $(seq 1 30); do
+  # El proxy imprime "ready for new connections" cuando ya acepta conexiones. Si ese texto no
+  # apareciera (otra versión del proxy), pasados 8 s se acepta que el puerto responda.
+  if grep -qi 'ready for new connections' "$PROXY_LOG" || { (( i >= 8 )) && port_in_use; }; then
     ready=1
     break
   fi
@@ -106,7 +112,7 @@ db_password=""
 IFS='|' read -r r_user r_db r_version r_max r_reserved r_sessions r_super <<<"$result"
 st_ok "Conexión por el proxy como ${r_user} a la base ${r_db} (PostgreSQL ${r_version})"
 st_info "max_connections=${r_max} · reservadas para superusuarios=${r_reserved} · sesiones abiertas ahora=${r_sessions}"
-st_info "Anota max_connections para dimensionar el pool de Cloud Run en KAN-13 (pool de 2 a 5 por instancia)"
+st_info "Anota max_connections para dimensionar el pool de Cloud Run en KAN-13 (ver la cuenta en infra/RECURSOS.md)"
 if [[ "$r_super" == "t" ]]; then
   st_info "${DB_USER} es miembro de cloudsqlsuperuser (aceptado en staging; en prod, un usuario de mínimos privilegios)"
 fi

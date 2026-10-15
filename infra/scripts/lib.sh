@@ -22,6 +22,14 @@ die() { printf '[infra] ERROR: %s\n' "$(_redact "$*")" >&2; exit 1; }
 
 is_dry() { [[ "${DRY_RUN:-0}" == "1" ]]; }
 
+# Los scripts que manejan una contraseña no deben correr con xtrace (bash -x, SHELLOPTS o BASH_ENV
+# heredados): la traza imprimiría el valor en printf, --password o PGPASSWORD. Se llama al inicio.
+refuse_xtrace() {
+  if [[ $- == *x* ]]; then
+    die "No corras este script con xtrace (bash -x / set -x): expondría la contraseña"
+  fi
+}
+
 # Ejecuta un comando; en dry-run solo lo imprime (con comillas, para poder copiarlo).
 run() {
   if is_dry; then
