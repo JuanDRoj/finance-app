@@ -127,6 +127,20 @@ try:
     cloud(P, "bash infra/scripts/70_reads_env.sh", None)  # nunca lee .env
     cloud(P, "source infra/scripts/lib.sh", None)
     cloud(P, "git commit -F - <<'EOF'\nchore: block gcloud prod access\nEOF", None)
+    # Heredocs que cat/tee copian a un archivo: texto (ej. el cuerpo de un PR)
+    cloud(P, "cat > /tmp/pr.md <<'EOF'\nUsa gcloud billing projects link (ver prod)\nEOF\ngh pr create --body-file /tmp/pr.md", None)
+    cloud(P, "tee notes.md <<'EOF'\ngcloud run services delete x\nEOF", None)
+    cloud(P, "cat <<'EOF' | bash\ngcloud run services delete x --project finance-stg-123\nEOF", "deny")
+    cloud(P, "cat > /tmp/x.sh <<'EOF'\ngcloud run services delete x --project finance-stg-123\nEOF\nbash /tmp/x.sh", "deny")
+    cloud(P, "cat > infra/scripts/z.sh <<'EOF'\ngcloud run deploy x --region r\nEOF", "deny")  # escribe un script: se revisa
+    # Heredocs que alimentan a un intérprete: código, se revisan
+    cloud(P, "python3 - <<'EOF'\nnote = 'gcloud only for prod'\nEOF", "deny")
+    cloud(P, "bash <<'EOF'\ngcloud run deploy api --project finance-other-1\nEOF", "deny")
+    # Scripts de fuera del repositorio: el hook no los lee, pregunta
+    write("/tmp/hooktest-outside.sh", "#!/usr/bin/env bash\necho hola\n")
+    cloud(P, "bash /tmp/hooktest-outside.sh", "ask")
+    cloud(P, "source /tmp/hooktest-outside.sh", "ask")
+    cloud(P, "/usr/bin/git status", None)  # un binario con ruta no es un script
     cloud(P, "git push origin HEAD:main", "deny")
     cloud(P, "git push --force origin kan-1-x", "deny")
     cloud(P, "rm -rf /", "deny")

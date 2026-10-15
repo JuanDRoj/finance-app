@@ -18,6 +18,11 @@ Además de las reglas de bloqueo y advertencia:
   - Scripts: si el comando ejecuta un script del repo (`bash x.sh`, `./x.sh`,
     `source x.sh`), revisa también su contenido y el de lo que cargue con
     `source`. Si el script tiene comandos de nube, pregunta mostrándolos.
+    Un script de fuera del repositorio (p. ej. en /tmp) no se revisa: pregunta.
+  - Heredocs: el cuerpo de los de git/gh y de los que cat/tee copian a un
+    archivo es texto (mensajes de commit, cuerpos de PR) y no se revisa,
+    salvo que el comando ejecute un script o un intérprete. Los que alimentan
+    a un intérprete (`bash <<EOF`, `python3 - <<EOF`) son código: se revisan.
 Solo usa la librería estándar de Python.
 """
 
@@ -142,6 +147,10 @@ ASK_RULES = [
 
 # Los heredocs de git/gh (mensajes de commit, cuerpos de PR) son texto, no comandos.
 GIT_OR_GH = re.compile(r"\b(git|gh)\b")
+# cat/tee solo copian el cuerpo a un archivo o a la salida: también es texto (ej. el cuerpo de un PR
+# escrito a un archivo). No cuando la misma línea lo pasa a un intérprete (`cat <<EOF | bash`).
+TEXT_SINKS = re.compile(r"\b(git|gh|cat|tee)\b")
+INTERPRETERS = re.compile(r"\b(bash|sh|zsh|dash|source|python3?|node|perl|ruby)\b|(^|[\s;&|(])\.{1,2}/")
 VAR_REF = re.compile(r"^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$")
 
 
@@ -244,10 +253,23 @@ class Checker:
 
     # --- recorrido -----------------------------------------------------------
 
+    @staticmethod
+    def strip_text_heredocs(text: str) -> str:
+        """Quita los heredocs que son texto: los de git/gh y los que cat/tee copian a un archivo.
+
+        Si el comando, ya sin esos cuerpos, ejecuta un script o un intérprete, solo se quitan los de
+        git/gh: un `cat > x.sh <<EOF … EOF && bash x.sh` ejecuta lo que acaba de escribir, y el
+        archivo aún no existe cuando el hook lo revisa.
+        """
+        stripped = strip_heredocs(text, only_if=TEXT_SINKS, unless=INTERPRETERS)
+        if INTERPRETERS.search(stripped):
+            return strip_heredocs(text, only_if=GIT_OR_GH)
+        return stripped
+
     def check_text(self, text: str, cwd: str, origin: str | None = None,
                    script_dir: str | None = None, depth: int = 0) -> None:
         """Revisa un comando (o el contenido de un script) segmento por segmento."""
-        text = strip_heredocs(text, only_if=GIT_OR_GH)
+        text = self.strip_text_heredocs(text)
         cur = cwd
         for segment in split_segments(text):
             tokens = tokenize(segment)
@@ -349,10 +371,22 @@ class Checker:
         else:
             return
         if script:
-            self.inspect_script(script, cwd, script_dir, depth)
+            # Un binario con ruta (/usr/bin/git, ~/.local/bin/x) no es un script: solo se avisa
+            # por scripts de fuera del repo cuando los ejecuta un shell, `source` o terminan en .sh.
+            is_script = name in SHELLS or name in ("source", ".") or program.endswith(".sh")
+            self.inspect_script(script, cwd, script_dir, depth, warn_outside=is_script)
 
-    def inspect_script(self, script: str, cwd: str, script_dir: str | None, depth: int) -> None:
+    def inspect_script(self, script: str, cwd: str, script_dir: str | None, depth: int,
+                       warn_outside: bool = False) -> None:
         path = self.resolve_script(script, cwd, script_dir)
+        if not path and warn_outside:
+            outside = self.outside_repo_script(script, cwd)
+            if outside:
+                self.asks.append(
+                    f"Ejecuta un script fuera del repositorio ({outside}). El hook no revisa su contenido: "
+                    "verifica que no tenga comandos de nube."
+                )
+            return
         if not path or path in self.visited:
             return
         self.visited.add(path)
@@ -384,6 +418,15 @@ class Checker:
                 continue  # nunca leer secretos
             if os.path.isfile(path):
                 return path
+        return None
+
+    def outside_repo_script(self, script: str, cwd: str) -> str | None:
+        """Ruta de un script existente fuera del repositorio (p. ej. en /tmp). None si no lo es."""
+        if re.search(r"[$`]", script):
+            return None
+        path = os.path.realpath(os.path.join(cwd, os.path.expanduser(script)))
+        if os.path.relpath(path, self.project_dir).startswith("..") and os.path.isfile(path):
+            return path
         return None
 
 
