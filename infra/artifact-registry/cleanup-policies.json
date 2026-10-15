@@ -1,0 +1,12 @@
+[
+  {
+    "name": "delete-old",
+    "action": {"type": "DELETE"},
+    "condition": {"tagState": "ANY", "olderThan": "2592000s"}
+  },
+  {
+    "name": "keep-recent",
+    "action": {"type": "KEEP"},
+    "mostRecentVersions": {"keepCount": 10}
+  }
+]

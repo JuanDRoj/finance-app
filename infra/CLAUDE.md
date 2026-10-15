@@ -24,8 +24,10 @@ infra/
 ├── RECURSOS.md            # inventario vivo de lo creado en la nube (actualizar en cada tarea)
 ├── env/
 │   └── staging.env        # IDs y nombres NO secretos (proyecto, región, servicios)
+├── artifact-registry/
+│   └── cleanup-policies.json  # políticas de limpieza del repositorio de imágenes (las aplica 10_gcp_project.sh)
 └── scripts/
-    ├── lib.sh             # funciones comunes (log, confirmación, dry-run)
+    ├── lib.sh             # funciones comunes (log, confirmación, dry-run, estados, probe/retry, enmascarado)
     ├── 10_gcp_project.sh  # numerados en el orden en que se ejecutan
     ├── 20_cloud_sql.sh
     └── ...
@@ -40,7 +42,8 @@ infra/gitleaks/            # .gitleaksignore (falsos positivos) y VERSION (image
 - Bash con `set -euo pipefail` al inicio. Cargan `infra/env/staging.env` y `infra/scripts/lib.sh`.
 - **Idempotentes:** verifican antes de crear (`describe … || create …`). Correrlos dos veces no rompe nada.
 - **`--project` y `--region` explícitos** en cada comando `gcloud`, tomados de `staging.env`. Nunca dependas de `gcloud config`.
-- **Dry-run:** con `DRY_RUN=1` el script imprime los comandos sin ejecutarlos. Úsalo para mostrar al humano qué va a pasar.
+- **Dry-run:** con `DRY_RUN=1` el script imprime los comandos de escritura sin ejecutarlos (las lecturas sí se hacen). Úsalo para mostrar al humano qué va a pasar.
+- **Hook `guard_cloud` y los scripts:** también revisa los comentarios. En una línea que nombre `gcloud` o `firebase` no uses las palabras en inglés `delete`, `remove`, `rm`, `destroy`, `prod` ni `production`, o el script se bloquea.
 - Un script por tarea INF; comentarios en español que expliquen el *por qué* de cada recurso.
 - Al terminar, actualiza **`infra/RECURSOS.md`**: recurso, tipo, proyecto, región, tarea que lo creó y costo aproximado.
 
@@ -54,6 +57,8 @@ infra/gitleaks/            # .gitleaksignore (falsos positivos) y VERSION (image
 - **Cloud SQL:** IP pública + Cloud SQL Python Connector (sin VPC en el Hito 0). Contraseña en **Secret Manager**. Pool de 2–5 conexiones por instancia de Cloud Run.
 - **Migraciones:** Cloud Run Job separado, ejecutado antes de desplegar la nueva revisión. Nunca al arrancar la app.
 - **Cloud Run:** público en el Hito 0, sin header secreto. Cuenta de servicio propia con permisos mínimos (Cloud SQL Client y acceso a sus secretos).
+- **Cuentas de servicio (KAN-9):** `run-api-stg` tiene solo `roles/cloudsql.client` a nivel de proyecto; `secretmanager.secretAccessor` se da **sobre cada secreto** (KAN-10), no a nivel de proyecto. Ninguna cuenta de servicio tiene Editor/Owner, salvo el Google APIs Service Agent (`<número>@cloudservices.gserviceaccount.com`), que administra Google; `10_gcp_project.sh` lo verifica y solo acepta esa excepción por patrón exacto.
+- **Facturación (KAN-9):** el ID de la cuenta de facturación **nunca va en el repo**: el script lo lee del proyecto vinculado o de `BILLING_ACCOUNT_ID` y lo muestra como `<oculto>`. Presupuesto `kanza-stg-budget`: USD 20/mes, solo alertas; un presupuesto existente que difiere solo se avisa, nunca se modifica solo.
 - **GitHub → GCP:** solo Workload Identity Federation, restringido a este repositorio. **Nunca llaves JSON.**
 - **CI (PR, KAN-15):** `.github/workflows/ci.yml` con cuatro jobs, cuyos `name:` son los checks requeridos: **`backend`** (ruff check + format, mypy, `alembic upgrade head` sobre BD vacía, pytest con PostgreSQL 16 y el emulador de Firebase Auth), **`frontend`** (eslint, tsc, prettier, vitest, `next build` con variables de relleno no secretas), **`api-types`** (regenera `openapi.json` y `schema.d.ts` y falla si hay diff) y **`secrets`** (gitleaks sobre los commits del PR).
 - **CD (merge a `main`):** build de imagen → Artifact Registry → job de migraciones → deploy a Cloud Run staging. Prod será promoción manual de la **misma imagen**.
