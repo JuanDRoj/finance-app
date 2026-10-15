@@ -78,21 +78,9 @@ BUDGET_CREDIT_TYPES=(
 
 # --- Utilidades del script ------------------------------------------------------------------------
 
-CONFIRMED=0
+# step, ask_apply, write y write_retry viven en lib.sh (los comparten 10_, 20_ y sql_*).
 ENABLED_APIS=""
 IAM_FLAT=""
-
-step() { printf '\n'; log "== $* =="; }
-
-# La primera escritura real pide una confirmación global; si no hay nada que escribir, nunca pregunta.
-ask_apply() {
-  if [[ "$CONFIRMED" != "1" ]]; then
-    confirm "Hay cambios por aplicar en ${GCP_PROJECT_ID}; el resto se aplica sin volver a preguntar. ¿Continuar?" || die "Cancelado"
-    CONFIRMED=1
-  fi
-}
-write() { ask_apply; run "$@"; }
-write_retry() { local n="$1" s="$2"; shift 2; ask_apply; retry "$n" "$s" run "$@"; }
 
 api_ready() { grep -Fxq -- "$1" <<<"$ENABLED_APIS"; }
 
