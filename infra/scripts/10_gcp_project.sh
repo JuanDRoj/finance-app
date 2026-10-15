@@ -42,8 +42,12 @@ REQUIRED_APIS=(
 )
 # APIs que usa el propio script. Con credenciales de usuario, gcloud manda el proyecto de --project
 # como proyecto de cuota en cada llamada, así que estas deben estar habilitadas en el proyecto.
-# billingbudgets es la única que faltaba al calibrar; cloudresourcemanager ya estaba habilitada.
+# - iam: un proyecto nuevo no la trae y ninguna API del ticket la habilita como dependencia; hace
+#   falta para crear la cuenta de servicio. Al calibrar kanza-stg no figuraba como habilitada.
+# - billingbudgets: la usa `billing budgets`; tampoco estaba habilitada al calibrar.
+# - cloudresourcemanager: la usa `projects get-iam-policy`; ya estaba habilitada.
 SUPPORT_APIS=(
+  iam.googleapis.com
   cloudresourcemanager.googleapis.com
   billingbudgets.googleapis.com
 )
@@ -123,6 +127,13 @@ log "Proyecto ${GCP_PROJECT_ID} · región ${GCP_REGION}"
 # PERMISSION_DENIED (no NOT_FOUND) cuando el proyecto no existe y no se podría distinguir de un
 # problema de permisos. El ID de un proyecto borrado no se puede reutilizar: para recrear staging
 # con otro ID hay que cambiar GCP_PROJECT_ID y FIREBASE_PROJECT_ID en staging.env.
+#
+# Ojo con el proyecto de cuota: los comandos que reciben el proyecto como argumento posicional
+# (projects create/describe/get-iam-policy, billing projects describe/link) no usan --project, así
+# que gcloud cobra la cuota al proyecto de `gcloud config` (core/project), en silencio. Si ese
+# proyecto no tiene habilitada la API del comando, fallan con SERVICE_DISABLED. No se fuerza
+# --billing-project porque, al recrear desde cero, el proyecto nuevo aún no tiene habilitadas
+# cloudresourcemanager ni cloudbilling cuando se ejecutan los pasos 1 y 2.
 
 step "1/9 Proyecto ${GCP_PROJECT_ID}"
 PROJECT_EXISTS=0
