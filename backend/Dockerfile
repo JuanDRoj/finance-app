@@ -72,8 +72,10 @@ ENV PATH=/app/.venv/bin:$PATH \
 USER 10001:10001
 EXPOSE 8080
 
-# exec: uvicorn queda como PID 1 y recibe el SIGTERM de Cloud Run (10 s para cerrar).
+# exec: uvicorn queda como PID 1 y recibe el SIGTERM de Cloud Run. Cloud Run manda SIGKILL 10 s despues
+# del SIGTERM, asi que --timeout-graceful-shutdown es 8 (8 < 10): hasta 8 s para terminar las peticiones
+# en curso y 2 s de margen para que el lifespan cierre el motor y el Connector antes del SIGKILL.
 # --proxy-headers con --forwarded-allow-ips '*': el contenedor solo es alcanzable a traves del
 # frontal de Google, que pone X-Forwarded-*. --no-access-log: el access log lo emite
 # RequestIdMiddleware (con request_id y traza).
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips '*' --log-config /app/uvicorn-log.json --no-access-log --timeout-graceful-shutdown 10"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips '*' --log-config /app/uvicorn-log.json --no-access-log --timeout-graceful-shutdown 8"]

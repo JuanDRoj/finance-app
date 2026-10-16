@@ -246,7 +246,9 @@ check_job() {
   expect "argumentos" "$(live "$JOB_JSON" '(ctr.args // []) | join(",")')" "$JOB_ARGS"
   expect "tareas" "$(live "$JOB_JSON" '.spec.template.spec.taskCount // 1 | tostring')" "1"
   expect "paralelismo" "$(live "$JOB_JSON" '.spec.template.spec.parallelism // 1 | tostring')" "1"
-  expect "reintentos máximos" "$(live "$JOB_JSON" 'tspec.maxRetries // 0 | tostring')" "$CR_JOB_MAX_RETRIES"
+  # En la API v1 de Cloud Run, un maxRetries ausente vale 3 (no 0): si el campo falta, el job reintenta
+  # hasta 3 veces, justo el desvío peligroso que este valor por defecto debe dejar a la vista.
+  expect "reintentos máximos" "$(live "$JOB_JSON" 'tspec.maxRetries // 3 | tostring')" "$CR_JOB_MAX_RETRIES"
   expect "tiempo máximo de la tarea (s)" "$(live "$JOB_JSON" 'tspec.timeoutSeconds // "" | tostring')" "$CR_JOB_TIMEOUT_SECONDS"
   expect "CPU" "$(norm_cpu "$(live "$JOB_JSON" 'ctr.resources.limits.cpu // ""')")" "$(norm_cpu "$CR_CPU")"
   expect "memoria" "$(live "$JOB_JSON" 'ctr.resources.limits.memory // ""')" "$CR_MEMORY"
@@ -275,7 +277,7 @@ check_budget() {
     literal=$(( max_inst * per_instance ))
     usable=$(( SQL_MAX_CONNECTIONS - SQL_RESERVED_CONNECTIONS - SQL_INTERNAL_CONNECTIONS - JOB_CONNECTIONS - ADMIN_CONNECTIONS ))
     worst=$(( CR_REVISIONS_IN_ROLLOUT * max_inst * per_instance ))
-    st_info "max_connections=${SQL_MAX_CONNECTIONS} - reservadas ${SQL_RESERVED_CONNECTIONS} - internas ${SQL_INTERNAL_CONNECTIONS} (estimación) - job ${JOB_CONNECTIONS} - manuales ${ADMIN_CONNECTIONS} = ${usable} para el servicio"
+    st_info "max_connections=${SQL_MAX_CONNECTIONS} - reservadas ${SQL_RESERVED_CONNECTIONS} - internas ${SQL_INTERNAL_CONNECTIONS} (medidas ${SQL_INTERNAL_MEASURED}; el resto es colchón) - job ${JOB_CONNECTIONS} - manuales ${ADMIN_CONNECTIONS} = ${usable} para el servicio"
     st_info "Servicio: ${max_inst} instancias x (pool ${pool} + overflow ${overflow}) = ${literal}; con ${CR_REVISIONS_IN_ROLLOUT} revisiones a la vez en un despliegue = ${worst}"
     if (( literal <= SQL_MAX_CONNECTIONS )); then
       st_ok "Criterio 3: ${max_inst} x ${per_instance} = ${literal} <= max_connections (${SQL_MAX_CONNECTIONS})"
@@ -302,9 +304,10 @@ sql_preflight
 [[ "$AR_REPOSITORY" == *-stg ]] || die "AR_REPOSITORY debe terminar en -stg (recibido: ${AR_REPOSITORY})"
 [[ "$DB_PASSWORD_SECRET" =~ ^[a-z][a-z0-9-]*-stg$ ]] || die "DB_PASSWORD_SECRET no válido o sin sufijo -stg: ${DB_PASSWORD_SECRET}"
 for n in CR_PORT CR_MIN_INSTANCES CR_MAX_INSTANCES CR_JOB_TIMEOUT_SECONDS CR_JOB_MAX_RETRIES CR_DB_POOL_SIZE CR_DB_MAX_OVERFLOW \
-         SQL_MAX_CONNECTIONS SQL_RESERVED_CONNECTIONS SQL_INTERNAL_CONNECTIONS JOB_CONNECTIONS ADMIN_CONNECTIONS CR_REVISIONS_IN_ROLLOUT; do
+         SQL_MAX_CONNECTIONS SQL_RESERVED_CONNECTIONS SQL_INTERNAL_MEASURED SQL_INTERNAL_CONNECTIONS JOB_CONNECTIONS ADMIN_CONNECTIONS CR_REVISIONS_IN_ROLLOUT; do
   [[ "${!n}" =~ ^[0-9]+$ ]] || die "${n} debe ser un entero (recibido: ${!n})"
 done
+(( SQL_INTERNAL_CONNECTIONS >= SQL_INTERNAL_MEASURED )) || die "SQL_INTERNAL_CONNECTIONS (${SQL_INTERNAL_CONNECTIONS}) no puede ser menor que lo medido (${SQL_INTERNAL_MEASURED}): el presupuesto de conexiones quedaría optimista"
 (( CR_MIN_INSTANCES == 0 )) || die "CR_MIN_INSTANCES debe ser 0 en staging (costo mínimo): hoy vale ${CR_MIN_INSTANCES}"
 (( CR_MAX_INSTANCES >= 1 )) || die "CR_MAX_INSTANCES debe ser al menos 1"
 (( CR_DB_POOL_SIZE >= 1 )) || die "CR_DB_POOL_SIZE debe ser al menos 1"
