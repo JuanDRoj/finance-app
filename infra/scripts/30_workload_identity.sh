@@ -246,6 +246,14 @@ if probe gcloud iam service-accounts describe "$DEPLOYER_EMAIL" --project="$GCP_
     write gcloud iam service-accounts update "$DEPLOYER_EMAIL" --description="$DEPLOYER_SA_DESCRIPTION" --project="$GCP_PROJECT_ID"
     st_fixed "Descripción de ${DEPLOYER_EMAIL}"
   fi
+  # Una cuenta deshabilitada se avisa, NUNCA se habilita sola: deshabilitar la cuenta es la palanca de
+  # respuesta ante un incidente (corta de golpe todo acceso del CD); re-habilitarla desde un script la
+  # anularía sin que el humano lo decida.
+  if [[ "$(jq -r '.disabled // false' <<<"$PROBE_OUT")" == "true" ]]; then
+    st_fail "${DEPLOYER_EMAIL} está deshabilitada: el CD no podrá autenticarse; habilitarla lo decide el humano (consola: IAM > Cuentas de servicio)"
+  else
+    st_ok "${DEPLOYER_SA_NAME} habilitada"
+  fi
 else
   write gcloud iam service-accounts create "$DEPLOYER_SA_NAME" --display-name="$DEPLOYER_SA_NAME" --description="$DEPLOYER_SA_DESCRIPTION" --project="$GCP_PROJECT_ID"
   st_created "Cuenta de servicio ${DEPLOYER_EMAIL}"
@@ -382,7 +390,13 @@ sync_var() {
     run gh variable set "$name" --repo "$GITHUB_REPO" --body "$want"
     st_created "Variable ${name}"
   else
-    if [[ -n "$have" ]]; then state_txt="distinta de la esperada"; else state_txt="sin configurar"; fi
+    if (( ! GH_OK )); then
+      state_txt="no verificada (gh sin sesión o sin acceso)"
+    elif [[ -n "$have" ]]; then
+      state_txt="distinta de la esperada"
+    else
+      state_txt="sin configurar"
+    fi
     st_warn "Variable ${name} ${state_txt}. Para escribirla: SET_GH_VARS=1 bash infra/scripts/30_workload_identity.sh (o: gh variable set ${name} --repo ${GITHUB_REPO} --body ${want})"
   fi
 }

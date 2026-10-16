@@ -60,15 +60,13 @@ jobs:
         run: echo "ref=${GITHUB_REF} expected authentication=${EXPECT_AUTH}"
 
       # Sin las variables, un rechazo fuera de main sería un falso positivo (fallaría por otra razón).
+      # La condición `if:` se evalúa en la expresión (no pasa el valor por env:), así el nombre del
+      # provider, que lleva el número de proyecto, no se repite en el log.
       - name: Check repo variables are set
-        env:
-          WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
-          DEPLOYER_SA: ${{ vars.GCP_DEPLOYER_SA }}
+        if: ${{ vars.GCP_WIF_PROVIDER == '' || vars.GCP_DEPLOYER_SA == '' }}
         run: |
-          if [[ -z "${WIF_PROVIDER}" || -z "${DEPLOYER_SA}" ]]; then
-            echo "::error::Repo variables GCP_WIF_PROVIDER and GCP_DEPLOYER_SA must be set (infra/scripts/30_workload_identity.sh with SET_GH_VARS=1)."
-            exit 1
-          fi
+          echo "::error::Repo variables GCP_WIF_PROVIDER and GCP_DEPLOYER_SA must be set (infra/scripts/30_workload_identity.sh with SET_GH_VARS=1)."
+          exit 1
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -128,9 +126,13 @@ jobs:
           fi
           echo "OK: credential type is external_account (no key file)."
 
-      - name: Show the authenticated identity (main)
+      # Fuerza el intercambio con STS e IAM Credentials y falla si no se obtiene token. El token nunca
+      # se imprime (stdout a /dev/null).
+      - name: Assert an access token can be issued (main)
         if: ${{ github.ref == 'refs/heads/main' }}
-        run: gcloud auth list --filter=status:ACTIVE --format='value(account)'
+        run: |
+          gcloud auth print-access-token --project="${GCP_PROJECT_ID}" >/dev/null
+          echo "OK: STS and IAM Credentials issued an access token for the deployer service account."
 
       # Lecturas que ejercitan los roles del deployer (artifactregistry.writer y run.admin).
       - name: Read Artifact Registry repository (main)
