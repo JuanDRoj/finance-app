@@ -1,0 +1,105 @@
+# Prueba de humo de Workload Identity Federation GitHub -> GCP (KAN-12).
+#
+# Se comprueba a sí misma en las dos direcciones, según la rama desde la que corre:
+#   - Desde `main`: la autenticación DEBE funcionar y las lecturas de Artifact Registry y Cloud Run
+#     deben responder (prueba que los roles de github-deployer-stg están bien).
+#   - Desde cualquier otra ref (rama, PR, tag): la autenticación DEBE ser rechazada por la condición
+#     del provider. Si en cambio funciona, el job falla: la restricción a `main` está rota.
+# Un job en verde significa "se comportó como se esperaba" en ambos casos.
+#
+# Triggers:
+#   - workflow_dispatch: manual. `gh workflow run wif-smoke.yml --ref main` prueba el caso positivo;
+#     con `--ref <otra-rama>` (el archivo debe existir en esa rama) prueba el negativo.
+#   - pull_request solo cuando el PR toca este archivo: ahí el ref es refs/pull/N/merge, así que el
+#     PR que modifica el workflow demuestra el caso negativo antes de mergear. No es un check requerido.
+#
+# Las variables GCP_WIF_PROVIDER y GCP_DEPLOYER_SA son variables de repo (no secretos): las escribe
+# infra/scripts/30_workload_identity.sh con SET_GH_VARS=1.
+name: WIF smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/wif-smoke.yml"
+
+# id-token: write es lo mínimo para pedir el token OIDC; contents: read para no heredar más.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: wif-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: kanza-stg
+  GCP_REGION: southamerica-east1
+  AR_REPOSITORY: finance-stg
+
+jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      EXPECT_AUTH: ${{ github.ref == 'refs/heads/main' && 'allow' || 'deny' }}
+    steps:
+      - name: Expected result
+        run: echo "ref=${GITHUB_REF} expected authentication=${EXPECT_AUTH}"
+
+      # Sin las variables, un rechazo fuera de main sería un falso positivo (fallaría por otra razón).
+      - name: Check repo variables are set
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          DEPLOYER_SA: ${{ vars.GCP_DEPLOYER_SA }}
+        run: |
+          if [[ -z "${WIF_PROVIDER}" || -z "${DEPLOYER_SA}" ]]; then
+            echo "::error::Repo variables GCP_WIF_PROVIDER and GCP_DEPLOYER_SA must be set (infra/scripts/30_workload_identity.sh with SET_GH_VARS=1)."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        # Fuera de main el rechazo es lo esperado: no debe poner el job en rojo por sí solo.
+        continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      # Fuera de main: la autenticación tiene que haber fallado.
+      - name: Assert authentication was rejected (not main)
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          if [[ "${{ steps.auth.outcome }}" != "failure" ]]; then
+            echo "::error::Authentication outcome was '${{ steps.auth.outcome }}' outside main; the provider condition is not restricting refs."
+            exit 1
+          fi
+          echo "OK: authentication was rejected outside main, as expected."
+
+      # En main: las credenciales deben ser de federación (external_account), nunca una llave de cuenta de servicio.
+      - name: Assert federated credentials (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          cred_type="$(jq -r '.type' "${GOOGLE_GHA_CREDS_PATH}")"
+          if [[ "${cred_type}" != "external_account" ]]; then
+            echo "::error::Credential file type is '${cred_type}', expected external_account."
+            exit 1
+          fi
+          echo "OK: credential type is external_account (no key file)."
+
+      - name: Show the authenticated identity (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: gcloud auth list --filter=status:ACTIVE --format='value(account)'
+
+      # Lecturas que ejercitan los roles del deployer (artifactregistry.writer y run.admin).
+      - name: Read Artifact Registry repository (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: gcloud artifacts repositories describe "${AR_REPOSITORY}" --location="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --format='value(name)'
+
+      - name: List Cloud Run services (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: gcloud run services list --region="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --format='value(metadata.name)'
