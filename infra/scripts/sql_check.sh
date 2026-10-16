@@ -100,18 +100,27 @@ step "3/4 Consulta como ${DB_USER}"
 db_password="$(gcloud secrets versions access latest --secret="$DB_PASSWORD_SECRET" --project="$GCP_PROJECT_ID")" \
   || die "No pude leer el secreto ${DB_PASSWORD_SECRET}"
 redact_add "$db_password"
-query="select current_user, current_database(), current_setting('server_version'), current_setting('max_connections'),
-  current_setting('superuser_reserved_connections'), (select count(*) from pg_stat_activity),
-  pg_has_role(current_user, 'cloudsqlsuperuser', 'member')"
+# Solo cuentan para max_connections las conexiones de cliente (backend_type = 'client backend'). Los
+# procesos de fondo de PostgreSQL (autovacuum launcher, checkpointer, walwriter, bgwriter, replicación
+# lógica...) también salen en pg_stat_activity pero NO consumen conexiones, así que se excluyen. De las
+# de cliente se separan las de usuarios internos de Cloud SQL (cloudsqladmin y similares) de las demás
+# (incluida esta misma). Una sola consulta.
+query="select current_user, current_database(), current_setting('server_version'),
+  current_setting('max_connections'), current_setting('superuser_reserved_connections'),
+  count(*) filter (where backend_type = 'client backend'),
+  count(*) filter (where backend_type = 'client backend' and coalesce(usename, '') like 'cloudsql%'),
+  count(*) filter (where backend_type = 'client backend' and coalesce(usename, '') not like 'cloudsql%'),
+  pg_has_role(current_user, 'cloudsqlsuperuser', 'member')
+  from pg_stat_activity"
 if ! result="$(PGPASSWORD="$db_password" PGCONNECT_TIMEOUT=15 psql -X -A -t -F '|' -c "$query" \
       "host=127.0.0.1 port=${SQL_PROXY_PORT} dbname=${DB_NAME} user=${DB_USER} sslmode=disable" 2>&1)"; then
   db_password=""
   die "psql no pudo consultar: ${result:0:400}"
 fi
 db_password=""
-IFS='|' read -r r_user r_db r_version r_max r_reserved r_sessions r_super <<<"$result"
+IFS='|' read -r r_user r_db r_version r_max r_reserved r_clients r_internal r_others r_super <<<"$result"
 st_ok "Conexión por el proxy como ${r_user} a la base ${r_db} (PostgreSQL ${r_version})"
-st_info "max_connections=${r_max} · reservadas para superusuarios=${r_reserved} · sesiones abiertas ahora=${r_sessions}"
+st_info "max_connections=${r_max} · reservadas=${r_reserved} · clientes totales=${r_clients} · internas de Cloud SQL=${r_internal} · otras=${r_others} (solo conexiones de cliente: los procesos de fondo no consumen max_connections)"
 st_info "Anota max_connections para dimensionar el pool de Cloud Run en KAN-13 (ver la cuenta en infra/RECURSOS.md)"
 if [[ "$r_super" == "t" ]]; then
   st_info "${DB_USER} es miembro de cloudsqlsuperuser (aceptado en staging; en prod, un usuario de mínimos privilegios)"
