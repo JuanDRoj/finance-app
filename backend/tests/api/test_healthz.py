@@ -2,8 +2,52 @@ import io
 import json
 import logging
 
+import pytest
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from httpx import AsyncClient
+
+from app.health import router as health_router
+
+# Cloud Run reserves some paths ending in `z` (its frontend answers /healthz before the app
+# sees the request), so /health is the one to use there; /healthz stays for local use.
+HEALTH_PATHS = ["/health", "/healthz"]
+
+
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+async def test_health_returns_200_with_status_ok(client: AsyncClient, path: str) -> None:
+    response = await client.get(path)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+async def test_health_does_not_require_auth_or_a_session_cookie(
+    client: AsyncClient, path: str
+) -> None:
+    response = await client.get(path)  # no cookie, no Authorization header
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("path", HEALTH_PATHS)
+async def test_health_carries_and_echoes_the_request_id(client: AsyncClient, path: str) -> None:
+    generated = await client.get(path)
+    assert generated.status_code == 200
+    assert len(generated.headers["x-request-id"]) > 0
+
+    echoed = await client.get(path, headers={"X-Request-ID": "probe-1.A_b"})
+    assert echoed.headers["x-request-id"] == "probe-1.A_b"
+
+
+def test_health_routes_have_no_dependencies() -> None:
+    # No DbSession, no CurrentUser, no Firebase: a health probe must answer even if they are down.
+    # (FastAPI 0.142 nests included routers lazily, so the router itself is inspected.)
+    routes = {route.path: route for route in health_router.routes if isinstance(route, APIRoute)}
+
+    assert sorted(routes) == sorted(HEALTH_PATHS)
+    for path, route in routes.items():
+        assert route.dependant.dependencies == [], path
+        assert route.methods == {"GET"}, path
 
 
 async def test_healthz_returns_200_with_status_ok(client: AsyncClient) -> None:

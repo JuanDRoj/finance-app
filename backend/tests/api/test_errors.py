@@ -164,8 +164,9 @@ async def test_unknown_route_returns_the_single_error_format(client: AsyncClient
     assert response.json() == {"detail": "Not Found", "code": "not_found"}
 
 
-async def test_method_not_allowed_keeps_the_allow_header(client: AsyncClient) -> None:
-    response = await client.post("/healthz")
+@pytest.mark.parametrize("path", ["/health", "/healthz"])
+async def test_method_not_allowed_keeps_the_allow_header(client: AsyncClient, path: str) -> None:
+    response = await client.post(path)
 
     assert response.status_code == 405
     assert response.json() == {"detail": "Method Not Allowed", "code": "method_not_allowed"}

@@ -1,0 +1,28 @@
+# Contexto de build de la imagen del backend (el contexto es backend/). Solo debe entrar lo que
+# el Dockerfile copia; esto evita ademas que secretos o artefactos locales lleguen a la imagen.
+
+# Secretos y entorno local (incluye .env.example: la imagen no lo necesita)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Entornos y cachés de Python
+.venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+*.egg-info
+
+# No se ejecuta en produccion
+tests
+openapi.json
+*.md
+
+# El propio build
+Dockerfile
+.dockerignore

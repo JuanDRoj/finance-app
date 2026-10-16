@@ -69,6 +69,7 @@ backend/
 - **Tiempo:** momentos como `timestamptz` en UTC; la fecha de una transacción como `date` local del usuario. La zona horaria vive en `spaces.timezone`.
 - **Nombres:** tablas en plural y snake_case; JSON en snake_case; URLs con guiones (`/recurring-templates`).
 - **Rutas de espacio:** `/spaces/{space_id}/...` con `require_space_member` declarada en el `APIRouter` (`dependencies=[...]`), no endpoint por endpoint. No miembro → **404** (no revelar que existe).
+- **Rutas sin `z` final:** Cloud Run reserva algunas rutas que terminan en `z` y recomienda evitarlas todas (su frontend responde con un 404 propio sin que la petición llegue a la app). La ruta de salud es `GET /health`; `/healthz` se conserva solo para local y se eliminará. `tests/api/test_routing.py` falla si aparece otra ruta que termine en `z`.
 - **Acciones de negocio** como endpoints explícitos: `POST .../confirm`, `/skip`, `/cancel`, `/archive`.
 - **Crear por intención:** el cliente manda "gasto de 1550 en Comida desde Itaú"; el backend arma los `entries`.
 - **Editar** = rehacer los entries. **Borrar** = `deleted_at` (borrado suave).
