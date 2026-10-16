@@ -466,7 +466,7 @@ fi
 # --- 5. Presupuesto de conexiones (criterio 3) ----------------------------------------------------
 # Máximo de instancias x tamaño del pool tiene que caber en max_connections. La cuenta completa está en
 # infra/RECURSOS.md: de las 25 conexiones se descuentan las reservadas para superusuarios, las internas
-# de Cloud SQL (estimación hasta medirlas con sql_check.sh), la del job y las manuales; lo que queda
+# de Cloud SQL (medidas con sql_check.sh, más un colchón), la del job y las manuales; lo que queda
 # se reparte entre las revisiones que pueden convivir en un despliegue. Se usan los valores VIVOS del
 # servicio si existe, y si no los declarados.
 
