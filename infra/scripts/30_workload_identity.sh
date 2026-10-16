@@ -70,9 +70,12 @@ MAPPING_JSON="$(printf '%s\n' "${MAPPING_PAIRS[@]}" | jq -Rn '[inputs | split("=
 # Condición del provider (CEL). Es la barrera principal del lado de Google:
 #   - repository_id y repository_owner_id: solo este repo; un fork o un repo homónimo tienen otro id.
 #   - ref: solo la rama main (ramas, tags y PRs quedan fuera; en un PR el ref es refs/pull/N/merge).
-#   - event_name: cierra un hueco conocido, pull_request_target corre con ref=refs/heads/main aunque
-#     lo dispare un PR externo. No limita push, workflow_dispatch ni schedule.
-ATTRIBUTE_CONDITION="assertion.repository_id == '${GITHUB_REPO_ID}' && assertion.repository_owner_id == '${GITHUB_OWNER_ID}' && assertion.ref == 'refs/heads/main' && assertion.event_name != 'pull_request_target'"
+#   - event_name: lista blanca. Solo push (el CD de KAN-16 al mergear a main) y workflow_dispatch (el
+#     smoke manual) necesitan credenciales. Otros eventos pueden correr con ref=refs/heads/main sin
+#     que el código lo haya revisado un humano (pull_request_target disparado por un PR externo,
+#     issue_comment, workflow_run, schedule...): quedan cerrados por defecto. Un workflow de CD que
+#     use otro evento (p. ej. workflow_run tras el CI) será rechazado hasta ampliar esta lista.
+ATTRIBUTE_CONDITION="assertion.repository_id == '${GITHUB_REPO_ID}' && assertion.repository_owner_id == '${GITHUB_OWNER_ID}' && assertion.ref == 'refs/heads/main' && assertion.event_name in ['push', 'workflow_dispatch']"
 
 # Roles de la cuenta deployer.
 DEPLOYER_PROJECT_ROLE="roles/run.admin"
