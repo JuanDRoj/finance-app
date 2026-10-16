@@ -430,7 +430,7 @@ else
        <<<"$(sed -n '/^{/,$p' <<<"$PROBE_OUT")" >/dev/null; then
     st_ok "allUsers tiene ${INVOKER_ROLE} sobre el servicio (público)"
   else
-    st_fail "El servicio no es público (falta allUsers con ${INVOKER_ROLE}). En la Consola: Seguridad > Autenticación > Permitir acceso público; o gcloud run services add-iam-policy-binding ${CR_SERVICE} --project=${GCP_PROJECT_ID} --region=${GCP_REGION} --member=allUsers --role=${INVOKER_ROLE}"
+    st_fail "El servicio no es público: no tiene desactivada la verificación de IAM del invocador ni a allUsers con ${INVOKER_ROLE}. Ábrelo en la Consola: Seguridad > Autenticación > Permitir acceso público (ver infra/CLAUDE.md, Cloud Run KAN-13)"
   fi
 fi
 
