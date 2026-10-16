@@ -96,10 +96,15 @@ env_arg() {
 }
 
 # Filtros de jq comunes. El servicio y el job tienen formas distintas: en el job, el contenedor y sus
-# opciones cuelgan de spec.template.spec.template.spec.
+# opciones cuelgan de spec.template.spec.template.spec. La Consola escribe el escalado a nivel de SERVICIO
+# (metadata.annotations["run.googleapis.com/minScale"] y maxScale). El despliegue por línea de comandos
+# lo escribe en la plantilla (autoscaling.knative.dev/...). scale() lee primero lo del servicio y, si
+# falta, lo de la plantilla.
+# shellcheck disable=SC2016  # $k es una variable de jq, no de bash
 JQ_DEFS='
   def ctr: ((.spec.template.spec.containers // .spec.template.spec.template.spec.containers // [])[0] // {});
   def tspec: (if .kind == "Job" then .spec.template.spec.template.spec else .spec.template.spec end);
+  def scale($k): (.metadata.annotations["run.googleapis.com/" + $k] // .spec.template.metadata.annotations["autoscaling.knative.dev/" + $k] // "");
 '
 # Variables del contenedor como líneas KEY=valor; un secreto se muestra como KEY=secret:<nombre>:<versión>.
 JQ_ENV='ctr | (.env // []) | map(
@@ -160,18 +165,62 @@ report_drift() { # etiqueta del recurso
   DRIFT=()
 }
 
+# Resuelve el digest de una etiqueta en Artifact Registry (solo lectura) y lo deja en EXPECTED_DIGEST.
+# Queda vacío si la etiqueta no existe. Se resuelve una sola vez por corrida.
+EXPECTED_DIGEST=""
+EXPECTED_DIGEST_DONE=0
+resolve_expected_digest() {
+  (( EXPECTED_DIGEST_DONE )) && return 0
+  EXPECTED_DIGEST_DONE=1
+  if probe gcloud artifacts docker images describe "${IMAGE_PATH}:${IMAGE_TAG}" --project="$GCP_PROJECT_ID" --format='value(image_summary.digest)'; then
+    EXPECTED_DIGEST="$PROBE_OUT"
+  fi
+}
+
+# Compara la imagen de un recurso con la esperada. OJO: la Consola guarda la imagen por DIGEST
+# (.../finance-api@sha256:...) aunque se haya elegido una etiqueta, mientras que `deploy --image` con
+# etiqueta la deja por etiqueta. Se aceptan las dos formas:
+#   - la ruta (sin etiqueta ni digest) tiene que ser siempre la de nuestro repositorio;
+#   - con IMAGE_TAG: si la imagen va por etiqueta se compara la etiqueta; si va por digest, se resuelve
+#     el digest de IMAGE_TAG en Artifact Registry y se comparan los digests;
+#   - sin IMAGE_TAG: solo se compara la ruta (la imagen cambia en cada despliegue).
+image_drift() { # imagen leída del recurso
+  local got="$1" got_path got_digest got_tag
+  got_path="$(sed -E 's/@sha256:[0-9a-f]+$//; s/:[^/:]+$//' <<<"$got")"
+  expect "ruta de la imagen" "$got_path" "$IMAGE_PATH"
+  if [[ "$got" == *@sha256:* ]]; then
+    got_digest="sha256:${got##*@sha256:}"
+    if [[ -z "$IMAGE_TAG" ]]; then
+      st_info "La imagen va fijada por digest (${got_digest:0:19}...): sin IMAGE_TAG no se compara con ninguna etiqueta"
+    else
+      resolve_expected_digest
+      if [[ -z "$EXPECTED_DIGEST" ]]; then
+        DRIFT+=("la etiqueta ${IMAGE_TAG} no existe en Artifact Registry, no puedo comparar el digest ${got_digest:0:19}...")
+      else
+        expect "digest de la imagen (etiqueta ${IMAGE_TAG})" "$got_digest" "$EXPECTED_DIGEST"
+      fi
+    fi
+  elif [[ -n "$IMAGE_TAG" ]]; then
+    got_tag="latest"
+    if [[ "${got##*/}" == *:* ]]; then got_tag="${got##*:}"; fi
+    expect "etiqueta de la imagen" "$got_tag" "$IMAGE_TAG"
+  fi
+}
+
 # Comparaciones con lo declarado. Son funciones (y no código suelto) para poder probarlas sin la nube,
 # con un JSON de ejemplo en SERVICE_JSON / JOB_JSON.
 
 check_service() {
-  local got_image got_image_path ingress
-  got_image="$(live "$SERVICE_JSON" 'ctr.image // ""')"
-  # Sin etiqueta ni digest: la imagen cambia en cada despliegue, la ruta no.
-  got_image_path="$(sed -E 's/@sha256:[0-9a-f]+$//; s/:[^/:]+$//' <<<"$got_image")"
-  expect "ruta de la imagen" "$got_image_path" "$IMAGE_PATH"
+  local ingress min_live labelv
+  image_drift "$(live "$SERVICE_JSON" 'ctr.image // ""')"
   expect "cuenta de servicio" "$(live "$SERVICE_JSON" 'tspec.serviceAccountName // ""')" "$RUN_SA_EMAIL"
-  expect "mínimo de instancias" "$(live "$SERVICE_JSON" '.spec.template.metadata.annotations["autoscaling.knative.dev/minScale"] // "0"')" "$CR_MIN_INSTANCES"
-  expect "máximo de instancias" "$(live "$SERVICE_JSON" '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // ""')" "$CR_MAX_INSTANCES"
+  # Un mínimo mayor que 0 deja una instancia siempre encendida, que se factura aunque no haya tráfico
+  # (del orden de USD 10 a 13 al mes por 1 CPU y 512 MiB, estimación): es una decisión fija de costo mínimo.
+  min_live="$(live "$SERVICE_JSON" 'scale("minScale") | if . == "" then "0" else . end')"
+  if [[ "$min_live" != "$CR_MIN_INSTANCES" ]]; then
+    st_fail "Servicio ${CR_SERVICE}: mínimo de instancias=${min_live} (esperado ${CR_MIN_INSTANCES}): una instancia siempre encendida cuesta dinero sin tráfico. Corrígelo en la Consola (Escalado: mínimo 0) o con: gcloud run services update ${CR_SERVICE} --project=${GCP_PROJECT_ID} --region=${GCP_REGION} --min-instances=${CR_MIN_INSTANCES}"
+  fi
+  expect "máximo de instancias" "$(live "$SERVICE_JSON" 'scale("maxScale")')" "$CR_MAX_INSTANCES"
   expect "CPU" "$(norm_cpu "$(live "$SERVICE_JSON" 'ctr.resources.limits.cpu // ""')")" "$(norm_cpu "$CR_CPU")"
   expect "memoria" "$(live "$SERVICE_JSON" 'ctr.resources.limits.memory // ""')" "$CR_MEMORY"
   expect "puerto" "$(live "$SERVICE_JSON" '(ctr.ports // [])[0].containerPort // 8080')" "$CR_PORT"
@@ -179,7 +228,9 @@ check_service() {
   expect "argumentos (deben ser los de la imagen)" "$(live "$SERVICE_JSON" '(ctr.args // []) | join(" ")')" ""
   ingress="$(live "$SERVICE_JSON" '.metadata.annotations["run.googleapis.com/ingress"] // ""')"
   if [[ -n "$ingress" ]]; then expect "entrada (ingress)" "$ingress" "all"; fi
-  expect "etiqueta env" "$(live "$SERVICE_JSON" '.metadata.labels.env // ""')" "$ENV_LABEL"
+  # La etiqueta env es cosmética (el proyecto entero es de staging) y la Consola no la pone: solo se informa.
+  labelv="$(live "$SERVICE_JSON" '.metadata.labels.env // ""')"
+  if [[ "$labelv" != "$ENV_LABEL" ]]; then st_info "El servicio no tiene la etiqueta env=${ENV_LABEL} (cosmético)"; fi
   compare_env "$SERVICE_JSON" service "El servicio ${CR_SERVICE}"
   # También tras crearlo: si lo recién creado difiere de lo declarado, hay que saberlo.
   report_drift "Servicio ${CR_SERVICE}"
@@ -188,10 +239,8 @@ check_service() {
 }
 
 check_job() {
-  local got_image got_image_path
-  got_image="$(live "$JOB_JSON" 'ctr.image // ""')"
-  got_image_path="$(sed -E 's/@sha256:[0-9a-f]+$//; s/:[^/:]+$//' <<<"$got_image")"
-  expect "ruta de la imagen" "$got_image_path" "$IMAGE_PATH"
+  local labelv
+  image_drift "$(live "$JOB_JSON" 'ctr.image // ""')"
   expect "cuenta de servicio" "$(live "$JOB_JSON" 'tspec.serviceAccountName // ""')" "$RUN_SA_EMAIL"
   expect "comando" "$(live "$JOB_JSON" '(ctr.command // []) | join(" ")')" "$JOB_COMMAND"
   expect "argumentos" "$(live "$JOB_JSON" '(ctr.args // []) | join(",")')" "$JOB_ARGS"
@@ -201,7 +250,8 @@ check_job() {
   expect "tiempo máximo de la tarea (s)" "$(live "$JOB_JSON" 'tspec.timeoutSeconds // "" | tostring')" "$CR_JOB_TIMEOUT_SECONDS"
   expect "CPU" "$(norm_cpu "$(live "$JOB_JSON" 'ctr.resources.limits.cpu // ""')")" "$(norm_cpu "$CR_CPU")"
   expect "memoria" "$(live "$JOB_JSON" 'ctr.resources.limits.memory // ""')" "$CR_MEMORY"
-  expect "etiqueta env" "$(live "$JOB_JSON" '.metadata.labels.env // ""')" "$ENV_LABEL"
+  labelv="$(live "$JOB_JSON" '.metadata.labels.env // ""')"
+  if [[ "$labelv" != "$ENV_LABEL" ]]; then st_info "El job no tiene la etiqueta env=${ENV_LABEL} (cosmético)"; fi
   compare_env "$JOB_JSON" job "El job ${CR_JOB}"
   report_drift "Job ${CR_JOB}"
 }
@@ -212,7 +262,7 @@ check_budget() {
   local max_inst="$CR_MAX_INSTANCES" pool="$CR_DB_POOL_SIZE" overflow="$CR_DB_MAX_OVERFLOW"
   local per_instance literal usable worst
   if [[ -n "$SERVICE_JSON" ]]; then
-    max_inst="$(live "$SERVICE_JSON" '.spec.template.metadata.annotations["autoscaling.knative.dev/maxScale"] // ""')"
+    max_inst="$(live "$SERVICE_JSON" 'scale("maxScale")')"
     pool="$(live "$SERVICE_JSON" '(ctr.env // []) | map(select(.name == "DB_POOL_SIZE") | .value) | first // empty')"
     overflow="$(live "$SERVICE_JSON" '(ctr.env // []) | map(select(.name == "DB_MAX_OVERFLOW") | .value) | first // empty')"
     pool="${pool:-$APP_DEFAULT_POOL_SIZE}"
@@ -361,13 +411,18 @@ if [[ -n "$SERVICE_JSON" ]]; then
 fi
 
 # --- 3. Acceso público ----------------------------------------------------------------------------
-# allUsers con roles/run.invoker: cualquiera puede llamar al servicio (decisión del Hito 0). Lo abre
-# --allow-unauthenticated al crear. Si el servicio ya existía y no es público, es [FALLO] (el criterio 1
-# no se cumpliría): no se cambia solo.
+# Cualquiera puede llamar al servicio (decisión del Hito 0). Hay dos formas equivalentes de lograrlo y
+# se aceptan las dos: (a) allUsers con roles/run.invoker, que es lo que deja --allow-unauthenticated al
+# crear desde la línea de comandos, y (b) la verificación de IAM del invocador desactivada
+# (anotación run.googleapis.com/invoker-iam-disabled), que es lo que deja la Consola con "Permitir
+# acceso público". Si el servicio ya existía y no es público de ninguna de las dos formas, es [FALLO] (el
+# criterio 1 no se cumpliría): no se cambia solo.
 
 step "3/7 Acceso público de ${CR_SERVICE}"
 if [[ -z "$SERVICE_JSON" ]]; then
   st_info "El servicio se crearía con --allow-unauthenticated (acceso público)"
+elif [[ "$(live "$SERVICE_JSON" '.metadata.annotations["run.googleapis.com/invoker-iam-disabled"] // ""')" == "true" ]]; then
+  st_ok "Público: la verificación de IAM del invocador está desactivada (lo que deja la Consola con \"Permitir acceso público\")"
 else
   probe gcloud run services get-iam-policy "$CR_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format=json \
     || die "No pude leer la política IAM del servicio"

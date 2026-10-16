@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Prueba de Cloud Run de staging (KAN-13, INF-07): deja evidencia repetible de los criterios del ticket.
 #
-#   Criterio 1  /healthz responde 200 en la URL del servicio.
+#   Criterio 1  /health responde 200 en la URL del servicio. NO se usa /healthz: en Cloud Run las rutas
+#               que terminan en "z" están reservadas por Google (su frontal responde con un 404 HTML y la
+#               petición nunca llega a la app). /healthz sigue existiendo en la app para uso local.
 #   Criterio 4  /docs, /redoc y /openapi.json responden 404 (solo existen con ENV=local).
 #   Criterio 2  (con RUN_JOB=1) el job de migraciones termina con código 0. Es la primera prueba REAL
-#               del Cloud SQL Connector: /healthz no toca la BD, así que sin el job no queda probado.
+#               del Cloud SQL Connector: /health no toca la BD, así que sin el job no queda probado.
 #   Criterio 3  no se mide aquí: lo calcula 40_cloud_run.sh (paso 5) y lo contrasta con sql_check.sh.
 #
 # Uso:
@@ -69,16 +71,26 @@ SERVICE_URL="$(jq -r --arg n "$CR_SERVICE" '[.[]? | select(.metadata.name == $n)
 [[ "$SERVICE_URL" == https://* ]] || die "La URL del servicio no es https: ${SERVICE_URL}"
 st_ok "Servicio ${CR_SERVICE}: ${SERVICE_URL}"
 
-step "1/4 Criterio 1: /healthz responde 200"
-code="$(http_status /healthz)"
+step "1/4 Criterio 1: /health responde 200"
+code="$(http_status /health)"
 if [[ "$code" == "200" ]]; then
   if [[ "$(jq -c . "$BODY_FILE" 2>/dev/null || true)" == '{"status":"ok"}' ]]; then
-    st_ok "GET /healthz -> 200 {\"status\":\"ok\"}"
+    st_ok "GET /health -> 200 {\"status\":\"ok\"}"
   else
-    st_fail "GET /healthz -> 200, pero el cuerpo no es {\"status\":\"ok\"}: $(head -c 200 "$BODY_FILE")"
+    # El criterio es el 200; un cuerpo distinto solo se avisa (la forma de la respuesta es de la app).
+    st_ok "GET /health -> 200"
+    st_warn "El cuerpo de /health no es {\"status\":\"ok\"}: $(head -c 200 "$BODY_FILE")"
   fi
 else
-  st_fail "GET /healthz -> ${code} (se esperaba 200). Mira los logs: gcloud run services logs read ${CR_SERVICE} --project=${GCP_PROJECT_ID} --region=${GCP_REGION} --limit=30"
+  st_fail "GET /health -> ${code} (se esperaba 200). Mira los logs: gcloud run services logs read ${CR_SERVICE} --project=${GCP_PROJECT_ID} --region=${GCP_REGION} --limit=30"
+fi
+# Solo informativo y nunca un fallo: /healthz es una ruta reservada de Cloud Run (termina en "z"), así que
+# se espera el 404 HTML de Google y no la respuesta de la app. Deja constancia de por qué no es el criterio.
+code="$(http_status /healthz)"
+if grep -qi '<html' "$BODY_FILE" 2>/dev/null; then
+  st_info "GET /healthz -> ${code} con HTML de Google: ruta reservada de Cloud Run (termina en z), no llega a la app; por eso el criterio usa /health"
+else
+  st_info "GET /healthz -> ${code} (informativo): en Cloud Run no se usan rutas que terminen en z; el criterio es /health"
 fi
 
 step "2/4 Criterio 4: /docs, /redoc y /openapi.json responden 404"
@@ -86,6 +98,11 @@ for path in /docs /redoc /openapi.json; do
   code="$(http_status "$path")"
   if [[ "$code" == "404" ]]; then
     st_ok "GET ${path} -> 404"
+    # El 404 de la app es JSON con code=not_found; uno distinto (p. ej. HTML de Google) significa que la
+    # petición no llegó a la app y el 404 no demuestra que los docs estén apagados.
+    if [[ "$(jq -r '.code // empty' "$BODY_FILE" 2>/dev/null || true)" != "not_found" ]]; then
+      st_warn "El 404 de ${path} no es el de la app (cuerpo: $(head -c 120 "$BODY_FILE" | tr -d '\n')): ¿la petición llegó a la app?"
+    fi
   else
     st_fail "GET ${path} -> ${code} (se esperaba 404): ¿falta ENV=staging en el servicio?"
   fi
