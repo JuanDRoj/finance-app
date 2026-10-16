@@ -22,6 +22,14 @@ die() { printf '[infra] ERROR: %s\n' "$(_redact "$*")" >&2; exit 1; }
 
 is_dry() { [[ "${DRY_RUN:-0}" == "1" ]]; }
 
+# Los scripts que manejan una contraseña no deben correr con xtrace (bash -x, SHELLOPTS o BASH_ENV
+# heredados): la traza imprimiría el valor en printf, --password o PGPASSWORD. Se llama al inicio.
+refuse_xtrace() {
+  if [[ $- == *x* ]]; then
+    die "No corras este script con xtrace (bash -x / set -x): expondría la contraseña"
+  fi
+}
+
 # Ejecuta un comando; en dry-run solo lo imprime (con comillas, para poder copiarlo).
 run() {
   if is_dry; then
@@ -32,10 +40,11 @@ run() {
 }
 
 # Pide confirmación antes de una acción externa. En dry-run no pregunta.
+# El texto pasa por _redact, igual que log y die.
 confirm() {
   is_dry && return 0
   local answer
-  read -r -p "[infra] $1 [s/N] " answer
+  read -r -p "[infra] $(_redact "$1") [s/N] " answer
   [[ "$answer" == "s" || "$answer" == "S" ]]
 }
 
@@ -111,4 +120,29 @@ probe() {
     return 1
   fi
   die "No pude comprobar: $* -- ${err:0:600}"
+}
+
+# --- Estructura de los scripts de recursos (compartida por 10_, 20_ y sql_*) ---
+
+step() { printf '\n'; log "== $* =="; }
+
+# La primera escritura real pide una confirmación global; si no hay nada que escribir, nunca pregunta.
+# Un script que ya preguntó algo más específico puede dejar CONFIRMED=1 para no repetir la pregunta.
+CONFIRMED=0
+ask_apply() {
+  if [[ "$CONFIRMED" != "1" ]]; then
+    confirm "Hay cambios por aplicar en ${GCP_PROJECT_ID}; el resto se aplica sin volver a preguntar. ¿Continuar?" || die "Cancelado"
+    CONFIRMED=1
+  fi
+}
+
+write() { ask_apply; run "$@"; }
+
+# write_retry <intentos> <segundos> cmd...: como write, pero reintenta; si agota los intentos se detiene.
+write_retry() {
+  local n="$1" s="$2" cmd
+  shift 2
+  cmd="$*"
+  ask_apply
+  retry "$n" "$s" run "$@" || die "El comando falló tras ${n} intentos: ${cmd:0:300}"
 }

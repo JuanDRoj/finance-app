@@ -27,9 +27,12 @@ infra/
 ├── artifact-registry/
 │   └── cleanup-policies.json  # políticas de limpieza del repositorio de imágenes (las aplica 10_gcp_project.sh)
 └── scripts/
-    ├── lib.sh             # funciones comunes (log, confirmación, dry-run, estados, probe/retry, enmascarado)
+    ├── lib.sh             # funciones comunes (log, confirmación, dry-run, estados, probe/retry, enmascarado, step/write)
+    ├── lib_sql.sh         # funciones comunes de Cloud SQL (existencia, describe, estado de energía, esperas)
     ├── 10_gcp_project.sh  # numerados en el orden en que se ejecutan
-    ├── 20_cloud_sql.sh
+    ├── 20_cloud_sql.sh    # instancia, BD, usuario, secreto de la contraseña e IAM sobre el secreto
+    ├── sql_power.sh       # start | stop | status de la instancia de Cloud SQL (herramienta operativa, sin número)
+    ├── sql_check.sh       # prueba de conexión por el proxy + max_connections (solo la corre el humano)
     └── ...
 docker-compose.yml         # en la raíz del repo (entorno local)
 infra/firebase-emulator/   # Dockerfile + firebase.json del emulador de Auth (imagen propia)
@@ -55,6 +58,7 @@ infra/gitleaks/            # .gitleaksignore (falsos positivos) y VERSION (image
 ## Decisiones fijas
 - **Costos mínimos:** Cloud SQL en la instancia más pequeña, apagable cuando no se usa (`--activation-policy=NEVER`); Cloud Run con mínimo 0 instancias; **alerta de presupuesto** en el proyecto de staging.
 - **Cloud SQL:** IP pública + Cloud SQL Python Connector (sin VPC en el Hito 0). Contraseña en **Secret Manager**. Pool de 2–5 conexiones por instancia de Cloud Run.
+- **Cloud SQL (KAN-10):** `finance-db-stg` (nombre de conexión `kanza-stg:southamerica-east1:finance-db-stg`), BD `finance`, usuario `finance_app`, secreto `finance-db-password-stg`. Sin redes autorizadas y con `sslMode=TRUSTED_CLIENT_CERTIFICATE_REQUIRED`: solo entra el conector o el proxy (un `psql` directo falla por diseño; en local, `cloud-sql-proxy --port 5433 <nombre de conexión>`). Está **apagada** por defecto: enciéndela con `sql_power.sh start` (tarda varios minutos) y apágala al terminar con `sql_power.sh stop`; sin encender, el backend y las migraciones de staging no tienen BD. `max_connections` vale 25: el pool de Cloud Run debe quedar muy por debajo (ver `RECURSOS.md`). `20_cloud_sql.sh` solo **compara** una instancia existente, nunca la modifica ni cambia la contraseña de un usuario que ya existe; BD y usuario solo se pueden verificar con la instancia encendida.
 - **Migraciones:** Cloud Run Job separado, ejecutado antes de desplegar la nueva revisión. Nunca al arrancar la app.
 - **Cloud Run:** público en el Hito 0, sin header secreto. Cuenta de servicio propia con permisos mínimos (Cloud SQL Client y acceso a sus secretos).
 - **Cuentas de servicio (KAN-9):** `run-api-stg` tiene solo `roles/cloudsql.client` a nivel de proyecto; `secretmanager.secretAccessor` se da **sobre cada secreto** (KAN-10), no a nivel de proyecto. Ninguna cuenta de servicio tiene Editor/Owner, salvo el Google APIs Service Agent (`<número>@cloudservices.gserviceaccount.com`), que administra Google; `10_gcp_project.sh` lo verifica y solo acepta esa excepción por patrón exacto.
