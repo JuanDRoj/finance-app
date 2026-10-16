@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
     if settings.ENV != "local" and not settings.GOOGLE_CLOUD_PROJECT:
         logger.warning("gcp_project_not_set")  # logs cannot be linked to Cloud Run requests
-    # The engine opens no connection here, so the app starts (and /healthz answers) even
+    # The engine opens no connection here, so the app starts (and /health answers) even
     # if the database is down.
     app.state.db = await Database.create(settings)
     try:

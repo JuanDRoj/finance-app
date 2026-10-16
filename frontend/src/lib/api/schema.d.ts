@@ -35,6 +35,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Liveness probe: no database or external dependencies. Use this one on Cloud Run.
+         */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -44,7 +64,10 @@ export interface paths {
         };
         /**
          * Healthz
-         * @description Liveness probe: no database or external dependencies.
+         * @description Same as /health, kept for local use only.
+         *
+         *     Do not use it on Cloud Run: paths ending in `z` are reserved there and the platform answers
+         *     them with its own 404 before the request reaches the app. Use /health instead.
          */
         get: operations["healthz_healthz_get"];
         put?: never;
@@ -280,6 +303,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
         };

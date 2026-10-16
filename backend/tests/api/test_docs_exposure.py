@@ -44,7 +44,7 @@ async def test_the_api_keeps_working_when_the_docs_are_hidden(
 ) -> None:
     monkeypatch.setenv("ENV", "prod")
 
-    assert (await _status_codes(["/healthz"])) == {"/healthz": 200}
+    assert (await _status_codes(["/health", "/healthz"])) == {"/health": 200, "/healthz": 200}
 
 
 def test_the_exported_schema_does_not_depend_on_env(monkeypatch: pytest.MonkeyPatch) -> None:

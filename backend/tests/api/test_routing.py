@@ -36,6 +36,24 @@ def test_no_route_of_the_api_ends_with_a_trailing_slash() -> None:
     assert [path for path in paths if path != "/" and path.endswith("/")] == []
 
 
+# Cloud Run reserves some paths ending in `z` (its frontend answers them before the app sees the
+# request), and recommends avoiding all of them. `/healthz` predates that finding and is kept for
+# local use only: the health route to use on Cloud Run is `/health`.
+PATHS_ENDING_IN_Z_ALLOWED = {"/healthz"}
+
+
+def test_no_route_of_the_api_ends_in_z_except_the_known_legacy_one() -> None:
+    app = create_app()
+    _add_things_router(app)
+
+    paths = app.openapi()["paths"]
+
+    assert "/health" in paths  # the Cloud Run safe health route must exist
+    assert [
+        path for path in paths if path.endswith("z") and path not in PATHS_ENDING_IN_Z_ALLOWED
+    ] == []
+
+
 async def test_collection_route_is_served_without_trailing_slash(
     app: FastAPI, client: AsyncClient
 ) -> None:
@@ -52,7 +70,7 @@ async def test_trailing_slash_gives_404_and_not_a_307_redirect(
 ) -> None:
     _add_things_router(app)
 
-    for path in ("/things/", "/things/3/", "/healthz/"):
+    for path in ("/things/", "/things/3/", "/health/", "/healthz/"):
         response = await client.get(path)
         assert response.status_code == 404, path
         assert "location" not in response.headers
