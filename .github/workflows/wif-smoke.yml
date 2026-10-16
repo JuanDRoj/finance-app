@@ -1,0 +1,175 @@
+# Prueba de humo de Workload Identity Federation GitHub -> GCP (KAN-12).
+#
+# Se comprueba a sí misma en las dos direcciones, según la ref desde la que corre.
+#
+# Cómo funciona la action `google-github-actions/auth` (v3.0.0, verificado en su código y en la
+# práctica): pide el token OIDC a GitHub (audiencia `https://iam.googleapis.com/<provider>`) y lo
+# canjea ella misma en STS (POST https://sts.googleapis.com/v1/token). Si la condición del provider
+# rechaza el token, el propio step `auth` FALLA con
+#   {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."}
+# Es decir, la action no sirve para la prueba negativa: no distingue "rechazado por la condición" de
+# otros fallos, y un step fallido no es una evidencia verde. Por eso:
+#
+#   - Desde `main`: se usa la action. VERDE = `auth` bien, credenciales external_account, gcloud
+#     emite un token y las lecturas de Artifact Registry y Cloud Run responden (la condición deja
+#     pasar a main y los roles de github-deployer-stg están bien). ROJO = cualquier fallo.
+#   - Desde cualquier otra ref (rama, PR, tag): NO se usa la action. Un step propio pide el token OIDC
+#     a GitHub con la misma audiencia y llama a STS directamente (mismos campos que la action).
+#     VERDE = STS responde `unauthorized_client` con "attribute condition" (rechazo exacto por la
+#     condición). ROJO = (a) STS emitió un token (la condición no restringe refs; el cuerpo, que
+#     contiene el token, no se imprime) o (b) no se pudo probar: falta el token OIDC (p. ej. PR de un
+#     fork, que no recibe id-token), GitHub o STS fallaron, o STS respondió otra cosa. Nunca hay verde
+#     sin haber visto el rechazo exacto, y ningún token ni JWT se imprime (se enmascaran).
+#
+# Triggers:
+#   - workflow_dispatch: manual. `gh workflow run wif-smoke.yml --ref main` prueba el caso positivo;
+#     con `--ref <otra-rama>` (el archivo debe existir en esa rama) prueba el negativo.
+#   - pull_request solo cuando el PR toca este archivo: ahí el ref es refs/pull/N/merge, así que el
+#     PR que modifica el workflow demuestra el caso negativo antes de mergear. No es un check requerido.
+#
+# Las variables GCP_WIF_PROVIDER y GCP_DEPLOYER_SA son variables de repo (no secretos): las escribe
+# infra/scripts/30_workload_identity.sh con SET_GH_VARS=1.
+name: WIF smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/wif-smoke.yml"
+
+# id-token: write es lo mínimo para pedir el token OIDC; contents: read para no heredar más.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: wif-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GCP_PROJECT_ID: kanza-stg
+  GCP_REGION: southamerica-east1
+  AR_REPOSITORY: finance-stg
+
+jobs:
+  smoke:
+    name: smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      EXPECT_AUTH: ${{ github.ref == 'refs/heads/main' && 'allow' || 'deny' }}
+    steps:
+      - name: Expected result
+        run: echo "ref=${GITHUB_REF} expected exchange=${EXPECT_AUTH}"
+
+      # Sin las variables, un rechazo fuera de main sería un falso positivo (fallaría por otra razón).
+      # La condición `if:` se evalúa en la expresión (no pasa el valor por env:), así el nombre del
+      # provider, que lleva el número de proyecto, no se repite en el log.
+      - name: Check repo variables are set
+        if: ${{ vars.GCP_WIF_PROVIDER == '' || vars.GCP_DEPLOYER_SA == '' }}
+        run: |
+          echo "::error::Repo variables GCP_WIF_PROVIDER and GCP_DEPLOYER_SA must be set (infra/scripts/30_workload_identity.sh with SET_GH_VARS=1)."
+          exit 1
+
+      # --- Caso positivo: solo en main ---
+
+      - name: Authenticate to Google Cloud (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      # Las credenciales deben ser de federación (external_account), nunca una llave de cuenta de servicio.
+      - name: Assert federated credentials (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          cred_type="$(jq -r '.type' "${GOOGLE_GHA_CREDS_PATH}")"
+          if [[ "${cred_type}" != "external_account" ]]; then
+            echo "::error::Credential file type is '${cred_type}', expected external_account."
+            exit 1
+          fi
+          echo "OK: credential type is external_account (no key file)."
+
+      # Fuerza el intercambio con STS e IAM Credentials y falla si no se obtiene token. El token nunca
+      # se imprime (stdout a /dev/null).
+      - name: Assert an access token can be issued (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          gcloud auth print-access-token --project="${GCP_PROJECT_ID}" >/dev/null
+          echo "OK: STS and IAM Credentials issued an access token for the deployer service account."
+
+      # Lecturas que ejercitan los roles del deployer (artifactregistry.writer y run.admin).
+      - name: Read Artifact Registry repository (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: gcloud artifacts repositories describe "${AR_REPOSITORY}" --location="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --format='value(name)'
+
+      - name: List Cloud Run services (main)
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: gcloud run services list --region="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --format='value(metadata.name)'
+
+      # --- Caso negativo: fuera de main, sin la action ---
+
+      # 1) Pide el token OIDC a GitHub con la audiencia que usa la action por defecto
+      #    (`https://iam.googleapis.com/<provider>`). 2) Lo envía a STS con los mismos campos que la
+      #    action (audience, grantType, requestedTokenType, scope, subjectTokenType, subjectToken).
+      # El JWT se enmascara; el cuerpo de la respuesta de STS solo se muestra si NO es 2xx (sin token).
+      - name: Assert STS rejects the exchange by the attribute condition (not main)
+        if: ${{ github.ref != 'refs/heads/main' }}
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            fail "Could not test: no GitHub OIDC token available (forks do not receive id-token)."
+          fi
+          echo "::add-mask::${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"
+
+          oidc_file="${RUNNER_TEMP}/oidc-response.json"
+          code="$(curl -sS --retry 3 --retry-all-errors -o "${oidc_file}" -w '%{http_code}' \
+            -G -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            --data-urlencode "audience=https://iam.googleapis.com/${WIF_PROVIDER}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}")" || fail "Could not test: the request for the GitHub OIDC token failed."
+          if [[ "${code}" != "200" ]]; then
+            fail "Could not test: GitHub OIDC token endpoint answered HTTP ${code}."
+          fi
+          JWT="$(jq -r '.value // empty' "${oidc_file}")"
+          rm -f "${oidc_file}"
+          if [[ -z "${JWT}" ]]; then
+            fail "Could not test: the GitHub OIDC response had no token."
+          fi
+          echo "::add-mask::${JWT}"
+          export JWT
+
+          req_file="${RUNNER_TEMP}/sts-request.json"
+          resp_file="${RUNNER_TEMP}/sts-response.json"
+          jq -n --arg aud "//iam.googleapis.com/${WIF_PROVIDER}" '{
+            audience: $aud,
+            grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+            requestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+            scope: "https://www.googleapis.com/auth/cloud-platform",
+            subjectTokenType: "urn:ietf:params:oauth:token-type:jwt",
+            subjectToken: $ENV.JWT
+          }' > "${req_file}"
+          code="$(curl -sS --retry 3 --retry-all-errors -o "${resp_file}" -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' --data-binary @"${req_file}" \
+            https://sts.googleapis.com/v1/token)" || { rm -f "${req_file}" "${resp_file}"; fail "Could not test: the call to STS failed (network?)."; }
+          rm -f "${req_file}"
+
+          # Cualquier 2xx significa que STS emitió un token.
+          if [[ "${code}" == 2* ]]; then
+            rm -f "${resp_file}"
+            fail "A token was issued outside main (HTTP ${code}): the provider condition does not restrict refs."
+          fi
+          if jq -e '(.error == "unauthorized_client") and ((.error_description // "") | test("attribute condition"; "i"))' "${resp_file}" >/dev/null 2>&1; then
+            rm -f "${resp_file}"
+            echo "OK: STS answered HTTP ${code} unauthorized_client (rejected by the attribute condition), as expected outside main."
+          else
+            echo "::error::Could not test: STS answered HTTP ${code}, but not with the attribute-condition rejection. Response (truncated):"
+            head -c 2000 "${resp_file}"; echo
+            rm -f "${resp_file}"
+            exit 1
+          fi
