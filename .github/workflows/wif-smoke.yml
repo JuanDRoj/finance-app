@@ -1,11 +1,21 @@
 # Prueba de humo de Workload Identity Federation GitHub -> GCP (KAN-12).
 #
-# Se comprueba a sí misma en las dos direcciones, según la rama desde la que corre:
-#   - Desde `main`: la autenticación DEBE funcionar y las lecturas de Artifact Registry y Cloud Run
-#     deben responder (prueba que los roles de github-deployer-stg están bien).
-#   - Desde cualquier otra ref (rama, PR, tag): la autenticación DEBE ser rechazada por la condición
-#     del provider. Si en cambio funciona, el job falla: la restricción a `main` está rota.
-# Un job en verde significa "se comportó como se esperaba" en ambos casos.
+# Se comprueba a sí misma en las dos direcciones, según la ref desde la que corre.
+#
+# Ojo con cómo funciona la action `google-github-actions/auth` sin `token_format`: solo pide el token
+# OIDC a GitHub y escribe un archivo de credenciales external_account; NO llama a STS ni a IAM
+# Credentials. El intercambio real ocurre cuando gcloud usa esas credenciales. Por eso el rechazo por
+# la condición del provider no aparece en el step `auth`, sino al pedir un token con gcloud.
+#
+#   - Desde `main`: `auth` debe terminar bien y las lecturas de Artifact Registry y Cloud Run (que sí
+#     fuerzan el intercambio) deben responder: prueba que la condición deja pasar a main y que los
+#     roles de github-deployer-stg están bien. VERDE = main se autentica y lee; ROJO = cualquier fallo.
+#   - Desde cualquier otra ref (rama, PR, tag): `auth` debe terminar bien (obtiene el token OIDC) y
+#     después `gcloud auth print-access-token` debe FALLAR con el rechazo de STS por la condición
+#     (`unauthorized_client` + "attribute condition"). VERDE = rechazo por la condición confirmado.
+#     ROJO = (a) el token se obtuvo (la condición no restringe refs) o (b) no se pudo probar: `auth`
+#     falló (p. ej. PR de un fork, que no recibe id-token) o el intercambio falló por otro motivo
+#     (red, STS caído, provider mal escrito). Nunca hay verde sin haber visto el rechazo exacto.
 #
 # Triggers:
 #   - workflow_dispatch: manual. `gh workflow run wif-smoke.yml --ref main` prueba el caso positivo;
@@ -63,22 +73,49 @@ jobs:
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
-        # Fuera de main el rechazo es lo esperado: no debe poner el job en rojo por sí solo.
+        # Sin token_format: la action solo obtiene el token OIDC de GitHub y escribe el archivo de
+        # credenciales; no llama a STS. Fuera de main el fallo de este step se evalúa a mano en el
+        # siguiente (continue-on-error evita el rojo automático para dar un mensaje preciso).
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOYER_SA }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
-      # Fuera de main: la autenticación tiene que haber fallado.
-      - name: Assert authentication was rejected (not main)
+      # Fuera de main: sin credenciales no hay prueba posible (p. ej. un PR de un fork no recibe
+      # id-token). Eso es ROJO ("no se pudo probar"), nunca verde.
+      - name: Assert credentials were produced (not main)
         if: ${{ github.ref != 'refs/heads/main' }}
+        env:
+          AUTH_OUTCOME: ${{ steps.auth.outcome }}
         run: |
-          if [[ "${{ steps.auth.outcome }}" != "failure" ]]; then
-            echo "::error::Authentication outcome was '${{ steps.auth.outcome }}' outside main; the provider condition is not restricting refs."
+          if [[ "${AUTH_OUTCOME}" != "success" ]]; then
+            echo "::error::Could not test: the auth step ended with '${AUTH_OUTCOME}' (it should only fetch the GitHub OIDC token and write the credentials file). Forks do not receive id-token."
             exit 1
           fi
-          echo "OK: authentication was rejected outside main, as expected."
+          echo "OK: credentials file written; now forcing the STS exchange."
+
+      # Fuera de main: el intercambio real (STS) ocurre aquí y DEBE ser rechazado por la condición del
+      # provider. El token nunca se imprime (stdout a /dev/null). Texto del rechazo de STS, tal como lo
+      # documentan muchos reportes públicos (no lo pude confirmar en la documentación oficial de Google):
+      #   {"error":"unauthorized_client","error_description":"The given credential is rejected by the attribute condition."}
+      # gcloud lo envuelve en su propio mensaje, así que se busca `unauthorized_client` y
+      # `attribute condition` por separado, sin distinguir mayúsculas.
+      - name: Assert STS rejects the exchange (not main)
+        if: ${{ github.ref != 'refs/heads/main' && success() }}
+        run: |
+          err_file="${RUNNER_TEMP}/sts-exchange.err"
+          if gcloud auth print-access-token --project="${GCP_PROJECT_ID}" >/dev/null 2>"${err_file}"; then
+            echo "::error::A token was issued outside main: the provider condition does not restrict refs."
+            exit 1
+          fi
+          if grep -qi 'unauthorized_client' "${err_file}" && grep -qi 'attribute condition' "${err_file}"; then
+            echo "OK: STS rejected the exchange by the attribute condition, as expected."
+          else
+            echo "::error::Could not test: the exchange failed, but not with the attribute-condition rejection (network, STS, provider name?). gcloud error follows (no tokens):"
+            head -c 2000 "${err_file}"
+            exit 1
+          fi
 
       # En main: las credenciales deben ser de federación (external_account), nunca una llave de cuenta de servicio.
       - name: Assert federated credentials (main)
