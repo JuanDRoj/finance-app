@@ -115,7 +115,7 @@ jobs:
       # 1) Pide el token OIDC a GitHub con la audiencia que usa la action por defecto
       #    (`https://iam.googleapis.com/<provider>`). 2) Lo envía a STS con los mismos campos que la
       #    action (audience, grantType, requestedTokenType, scope, subjectTokenType, subjectToken).
-      # El JWT se enmascara; el cuerpo de la respuesta de STS solo se muestra si NO es 200 (sin token).
+      # El JWT se enmascara; el cuerpo de la respuesta de STS solo se muestra si NO es 2xx (sin token).
       - name: Assert STS rejects the exchange by the attribute condition (not main)
         if: ${{ github.ref != 'refs/heads/main' }}
         env:
@@ -159,9 +159,10 @@ jobs:
             https://sts.googleapis.com/v1/token)" || { rm -f "${req_file}" "${resp_file}"; fail "Could not test: the call to STS failed (network?)."; }
           rm -f "${req_file}"
 
-          if [[ "${code}" == "200" ]]; then
+          # Cualquier 2xx significa que STS emitió un token.
+          if [[ "${code}" == 2* ]]; then
             rm -f "${resp_file}"
-            fail "A token was issued outside main (HTTP 200): the provider condition does not restrict refs."
+            fail "A token was issued outside main (HTTP ${code}): the provider condition does not restrict refs."
           fi
           if jq -e '(.error == "unauthorized_client") and ((.error_description // "") | test("attribute condition"; "i"))' "${resp_file}" >/dev/null 2>&1; then
             rm -f "${resp_file}"
