@@ -2,6 +2,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.routing import iter_route_contexts
 from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,26 +27,58 @@ def _add_things_router(app: FastAPI) -> None:
     app.include_router(router)
 
 
-def test_no_route_of_the_api_ends_with_a_trailing_slash() -> None:
-    app = create_app()
-    _add_things_router(app)
+def _route_paths(app: FastAPI) -> list[str]:
+    """Every path the app serves, also the ones hidden from the schema (`include_in_schema=False`).
 
-    paths = app.openapi()["paths"]
+    `app.openapi()["paths"]` skips hidden routes, and `app.routes` holds included routers lazily
+    (FastAPI 0.142), so `iter_route_contexts` flattens them with their effective, prefixed path.
+    """
+    return [route.path for route in iter_route_contexts(app.routes) if route.path is not None]
 
-    assert paths  # the check below must not pass vacuously
-    assert [path for path in paths if path != "/" and path.endswith("/")] == []
+
+def _paths_with_trailing_slash(app: FastAPI) -> list[str]:
+    return [path for path in _route_paths(app) if path != "/" and path.endswith("/")]
 
 
 # Cloud Run reserves some paths ending in `z` (its frontend answers them before the app sees the
 # request) and recommends avoiding all of them. No exceptions: the health route is `/health`.
+def _paths_ending_in_z(app: FastAPI) -> list[str]:
+    return [path for path in _route_paths(app) if path.endswith("z")]
+
+
+def test_no_route_of_the_api_ends_with_a_trailing_slash() -> None:
+    app = create_app()
+    _add_things_router(app)
+
+    assert _route_paths(app)  # the check below must not pass vacuously
+    assert _paths_with_trailing_slash(app) == []
+
+
 def test_no_route_of_the_api_ends_in_z() -> None:
     app = create_app()
     _add_things_router(app)
 
-    paths = app.openapi()["paths"]
+    assert "/health" in _route_paths(app)  # the Cloud Run safe health route must exist
+    assert _paths_ending_in_z(app) == []
 
-    assert "/health" in paths  # the Cloud Run safe health route must exist
-    assert [path for path in paths if path.endswith("z")] == []
+
+def test_the_path_rules_also_see_routes_hidden_from_the_schema() -> None:
+    app = create_app()  # a fresh app: nothing is left registered in the shared one
+    hidden = APIRouter(prefix="/hidden")
+
+    @hidden.get("/probez", include_in_schema=False)
+    async def ends_in_z() -> int:
+        return 1
+
+    @hidden.get("/slash/", include_in_schema=False)
+    async def ends_in_slash() -> int:
+        return 1
+
+    app.include_router(hidden)
+
+    assert "/hidden/probez" not in app.openapi()["paths"]
+    assert _paths_ending_in_z(app) == ["/hidden/probez"]
+    assert _paths_with_trailing_slash(app) == ["/hidden/slash/"]
 
 
 async def test_collection_route_is_served_without_trailing_slash(
