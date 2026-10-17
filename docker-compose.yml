@@ -1,11 +1,13 @@
 # Entorno local: PostgreSQL + emulador de Firebase Auth.
 # Backend (uv run) y frontend (npm run dev) corren fuera de compose.
-name: finance-app
+# Nombre del proyecto configurable: un segundo checkout usa otro y obtiene su propio volumen y red
+# (el volumen se llama <proyecto>_finance_pgdata). Por defecto, igual que siempre.
+name: ${COMPOSE_PROJECT_NAME:-finance-app}
 
 services:
   postgres:
     image: postgres:16.15-alpine
-    container_name: finance-postgres
+    container_name: ${POSTGRES_CONTAINER_NAME:-finance-postgres}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-finance}
@@ -29,7 +31,7 @@ services:
     build:
       context: ./infra/firebase-emulator
     image: finance-firebase-emulator:local
-    container_name: finance-firebase-emulator
+    container_name: ${FIREBASE_EMULATOR_CONTAINER_NAME:-finance-firebase-emulator}
     restart: unless-stopped
     environment:
       FIREBASE_PROJECT_ID: ${FIREBASE_EMULATOR_PROJECT_ID:-demo-finance-local}

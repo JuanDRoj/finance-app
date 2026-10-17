@@ -42,6 +42,7 @@ infra/
     └── ...
 backend/Dockerfile         # imagen del backend (dos etapas, no root); backend/.dockerignore excluye secretos y artefactos locales
 docker-compose.yml         # en la raíz del repo (entorno local)
+.gitattributes             # en la raíz: eol=lf y binarios explícitos (KAN-56)
 infra/firebase-emulator/   # Dockerfile + firebase.json del emulador de Auth (imagen propia)
 infra/postgres/init/       # SQL que corre con el volumen vacío (crea finance_test)
 .github/workflows/         # ci.yml (PR), wif-smoke.yml (prueba de humo de WIF) y cd-staging.yml (merge a main, KAN-16)
@@ -87,6 +88,8 @@ frontend/vercel.json       # (KAN-14) región de las funciones de Vercel (gru1);
 | Emulador Firebase Auth | 9099 (UI del emulador en 4000) |
 | Backend (fuera de compose, con `uv run`) | 8000 |
 | Frontend (fuera de compose, con `npm run dev`) | 3000 |
+
+**Aislamiento entre checkouts (KAN-56):** `COMPOSE_PROJECT_NAME` (por defecto `finance-app`), `POSTGRES_CONTAINER_NAME` (`finance-postgres`) y `FIREBASE_EMULATOR_CONTAINER_NAME` (`finance-firebase-emulator`) se configuran en el `.env` de la raíz. El volumen (`<proyecto>_finance_pgdata`, por defecto `finance-app_finance_pgdata`) y la red salen del nombre del proyecto, así que cambiarlo separa la BD. Un segundo checkout también debe cambiar los tres puertos del host (`POSTGRES_PORT`, `FIREBASE_AUTH_EMULATOR_PORT`, `FIREBASE_EMULATOR_UI_PORT`). La etiqueta de imagen `finance-firebase-emulator:local` es fija (la usa el CI con `--no-build`).
 
 Las variables de los servicios locales van documentadas en `.env.example` (raíz, `backend/` y `frontend/`), nunca con valores reales de staging.
 
