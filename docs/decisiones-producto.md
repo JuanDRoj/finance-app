@@ -1,6 +1,6 @@
 # Personal Finance App — Decisiones de producto
  
-Última actualización: 2026-10-06
+Última actualización: 2026-10-17
  
 ## Visión
 App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero (pensada para celular), app móvil después.
@@ -14,10 +14,11 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Cuotas | Se registra la compra una vez (monto + n.º de cuotas); la plantilla genera una cuota pendiente al mes y termina sola. Mostrar "cuotas futuras comprometidas". |
 | Cuentas | Varias (bancos, efectivo, tarjetas). Saldo global: **Disponible · Deuda tarjetas · Neto**. Tarjeta = deuda. |
 | Tipos de movimiento | Gasto, Ingreso, Transferencia, **Ajuste**. Pagar la tarjeta = transferencia (no gasto). El gasto cuenta al comprar. Ajuste = saldo inicial y cuadre con el banco; no cuenta en reportes. |
-| Moneda | Nivel 0: una moneda **por espacio**, de una lista de monedas soportadas (tabla `currencies`, con su exponente ISO 4217). Cada transacción la hereda; preparado para multimoneda. |
+| Moneda | Nivel 0: una moneda **por espacio**, de una lista de monedas soportadas (tabla `currencies`, con su exponente ISO 4217). Cada transacción la hereda; preparado para multimoneda. El primer login crea el espacio en UYU; el usuario elige la moneda (primer uso o Ajustes) solo mientras el espacio no tenga movimientos, y después queda fija. |
 | Zona horaria | Por espacio (`spaces.timezone`, ej. `America/Montevideo`). Momentos en UTC (`timestamptz`); fecha de una transacción como `date` local. |
 | Nombre de usuario | `users.display_name` es opcional. Si es `NULL`, la interfaz muestra la parte local del email (lo anterior a `@`); no se guarda un valor derivado. |
-| Categorías | Predefinidas y editables, con subcategorías (2 niveles). |
+| Categorías | Predefinidas y editables, con subcategorías (2 niveles). Cada una lleva un ícono de una lista fija (columna `icon`): las predefinidas traen el suyo y al crear una se elige. |
+| Primer uso | Sin onboarding guiado ni cuentas creadas solas: el Inicio vacío invita a crear la primera cuenta con su saldo actual (se registra como ajuste), y "+" sin cuentas lleva al mismo formulario. |
 | Espacios | Los datos pertenecen a un **espacio**; los usuarios son miembros. "Mi espacio" privado + espacios de hogar con cuentas propias. Aporte personal → hogar = gasto "Aporte al hogar" + ingreso en el hogar (enlazados). Sin división de deudas. |
 | Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. |
 | Presupuestos | Límite mensual por categoría con barra de progreso. |
@@ -30,7 +31,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 - **v1.1:** presupuestos y metas de ahorro.
 - **v2:** hogares compartidos, historial de cambios.
 - **Futuro:** multimoneda, app móvil (React Native), importar extractos, dividir compras (UI).
-Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito).
+Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito). Reparto acordado el 2026-10-17: H1 registro diario (cuentas, categorías, movimientos, dashboard A y B) · H2 pendientes y cuotas (plantillas, cron, dashboard D) · H3 tarjetas, Ajustes y producción · H4 v1.1 · H5 v2.
  
 ## Decisiones técnicas
 Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proyecto personal/de aprendizaje con miras a producto real.
