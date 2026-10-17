@@ -56,10 +56,30 @@ SUPPORT_APIS=(
 AR_DESCRIPTION="Backend Images (Staging)"
 RUN_SA_DESCRIPTION="backend id in Cloud Run (staging)"
 
-# Mínimo privilegio de la identidad de Cloud Run: solo conectarse a Cloud SQL (el Cloud SQL Python
-# Connector necesita cloudsql.instances.connect/get). El acceso al secreto de la contraseña se da
+# Mínimo privilegio de la identidad de Cloud Run: conectarse a Cloud SQL (el Cloud SQL Python
+# Connector necesita cloudsql.instances.connect/get) y, desde KAN-11, el rol personalizado de
+# sesiones de Firebase (más abajo). El acceso al secreto de la contraseña se da
 # SOBRE ESE SECRETO en KAN-10, no a nivel de proyecto (decisión: más estricto que el texto del ticket).
 RUN_SA_ROLE="roles/cloudsql.client"
+
+# Segundo rol de proyecto de la identidad de Cloud Run (KAN-11): rol personalizado con SOLO los
+# permisos que usa el backend con Firebase Admin. Sin él, POST /auth/session falla con 500
+# (INSUFFICIENT_PERMISSION en identitytoolkit createSessionCookie). Se prefiere a
+# roles/firebaseauth.admin, que además crea y borra usuarios. Ojo: el permiso de IAM se llama
+# users.createSession, aunque la operación de la API se llame createSessionCookie.
+RUN_CUSTOM_ROLE_ID="kanzaSessionCookieManager"
+RUN_CUSTOM_ROLE="projects/${GCP_PROJECT_ID}/roles/${RUN_CUSTOM_ROLE_ID}"
+RUN_CUSTOM_ROLE_TITLE="Kanza Session Cookie Manager"
+RUN_CUSTOM_ROLE_DESCRIPTION="Create and verify session cookies and revoke refresh tokens (run-api-stg)"
+RUN_CUSTOM_ROLE_STAGE="GA"
+# - createSession: crear la cookie de sesión al iniciar sesión (POST /auth/session).
+# - get: verify_session_cookie(check_revoked=True) consulta la cuenta en cada request autenticada.
+# - update: revoke_refresh_tokens (cerrar sesión en todas partes) actualiza la cuenta.
+RUN_CUSTOM_ROLE_PERMISSIONS=(
+  firebaseauth.users.createSession
+  firebaseauth.users.get
+  firebaseauth.users.update
+)
 
 # Créditos que SÍ cuentan en el presupuesto: todos menos los promocionales (PROMOTION). La API no tiene
 # "todo menos X", así que se enumeran. SIN CALIBRAR contra la consola: al escribir esto la API de
@@ -286,8 +306,8 @@ else
 fi
 
 # --- 5. Cuenta de servicio de runtime -------------------------------------------------------------
-# Identidad del backend en Cloud Run. Solo recibe el rol de Cloud SQL Client a nivel de proyecto y
-# no tiene llaves (se usa la identidad del servicio, nunca archivos JSON). No lleva logging.logWriter
+# Identidad del backend en Cloud Run. Solo recibe el rol de Cloud SQL Client y el rol personalizado de sesiones
+# de Firebase (KAN-11) a nivel de proyecto y no tiene llaves (se usa la identidad del servicio, nunca archivos JSON). No lleva logging.logWriter
 # ni artifactregistry.reader: Cloud Run escribe logs y descarga la imagen con su propio agente de
 # servicio (se confirma en KAN-13).
 
@@ -319,12 +339,55 @@ else
   if ! is_dry; then IAM_FLAT="$(iam_flat)"; fi
 fi
 
-# Mínimo privilegio: a nivel de proyecto solo ese rol. Si hay otros, se informa; no se quitan solos.
-extra_roles="$(awk -F'\t' -v m="serviceAccount:${RUN_SA_EMAIL}" -v r="$RUN_SA_ROLE" '$2 == m && $1 != r {print $1}' <<<"$IAM_FLAT")"
+# Rol personalizado (KAN-11): se crea si falta; si existe solo se compara (nunca se modifica solo).
+PERMS_WANTED="$(printf '%s\n' "${RUN_CUSTOM_ROLE_PERMISSIONS[@]}" | sort)"
+PERMS_CSV="$(IFS=,; printf '%s' "${RUN_CUSTOM_ROLE_PERMISSIONS[*]}")"
+ROLE_INACTIVE=0   # 1 = el rol existe pero está borrado o deshabilitado: no se le asigna nada
+if (( PROJECT_EXISTS )) && probe gcloud iam roles describe "$RUN_CUSTOM_ROLE_ID" --project="$GCP_PROJECT_ID" --format=json; then
+  role_json="$PROBE_OUT"
+  role_perms="$(jq -r '(.includedPermissions // [])[]' <<<"$role_json" | sort)"
+  role_stage="$(jq -r '.stage // ""' <<<"$role_json")"
+  role_inactive="$(jq -r '(.deleted // false) or (.stage == "DISABLED")' <<<"$role_json")"
+  fix_cmd="gcloud iam roles update ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} --permissions=${PERMS_CSV} --stage=${RUN_CUSTOM_ROLE_STAGE}"
+  if [[ "$role_inactive" == "true" ]]; then
+    ROLE_INACTIVE=1
+    if [[ "$(jq -r '.deleted // false' <<<"$role_json")" == "true" ]]; then
+      st_fail "Rol ${RUN_CUSTOM_ROLE_ID} borrado. Corrección sugerida (la aplica el humano): gcloud iam roles undelete ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} (o en la consola: IAM > Roles > Mostrar roles borrados)"
+    else
+      st_fail "Rol ${RUN_CUSTOM_ROLE_ID} deshabilitado. Corrección sugerida (la aplica el humano): gcloud iam roles update ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} --stage=${RUN_CUSTOM_ROLE_STAGE}"
+    fi
+  elif [[ "$role_perms" != "$PERMS_WANTED" ]]; then
+    st_fail "Rol ${RUN_CUSTOM_ROLE_ID} con permisos distintos de los esperados ($(tr '\n' ' ' <<<"$role_perms")). Corrección sugerida (la aplica el humano): ${fix_cmd}"
+  elif [[ "$role_stage" != "$RUN_CUSTOM_ROLE_STAGE" ]]; then
+    st_fail "Rol ${RUN_CUSTOM_ROLE_ID} en etapa ${role_stage}, se esperaba ${RUN_CUSTOM_ROLE_STAGE}. Corrección sugerida (la aplica el humano): ${fix_cmd}"
+  else
+    st_ok "Rol personalizado ${RUN_CUSTOM_ROLE_ID} con exactamente ${#RUN_CUSTOM_ROLE_PERMISSIONS[@]} permisos, etapa ${role_stage}"
+  fi
+else
+  write gcloud iam roles create "$RUN_CUSTOM_ROLE_ID" --project="$GCP_PROJECT_ID" \
+    --title="$RUN_CUSTOM_ROLE_TITLE" --description="$RUN_CUSTOM_ROLE_DESCRIPTION" \
+    --stage="$RUN_CUSTOM_ROLE_STAGE" --permissions="$PERMS_CSV"
+  st_created "Rol personalizado ${RUN_CUSTOM_ROLE_ID}"
+fi
+
+if has_binding "$RUN_CUSTOM_ROLE" "serviceAccount:${RUN_SA_EMAIL}"; then
+  st_ok "Rol ${RUN_CUSTOM_ROLE_ID} para ${RUN_SA_NAME}"
+elif (( ROLE_INACTIVE )); then
+  # Con el rol borrado o deshabilitado IAM rechaza el binding y write_retry agotaría los intentos.
+  st_fail "Rol ${RUN_CUSTOM_ROLE_ID} sin asignar a ${RUN_SA_NAME}: se omite porque el rol está inactivo; restáuralo y vuelve a correr el script"
+else
+  write_retry 6 10 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+    --member="serviceAccount:${RUN_SA_EMAIL}" --role="$RUN_CUSTOM_ROLE" --condition=None --format=none
+  st_created "Rol ${RUN_CUSTOM_ROLE_ID} para ${RUN_SA_NAME}"
+  if ! is_dry; then IAM_FLAT="$(iam_flat)"; fi
+fi
+
+# Mínimo privilegio: a nivel de proyecto solo esos dos roles. Si hay otros, se informa; no se quitan solos.
+extra_roles="$(awk -F'\t' -v m="serviceAccount:${RUN_SA_EMAIL}" -v r="$RUN_SA_ROLE" -v c="$RUN_CUSTOM_ROLE" '$2 == m && $1 != r && $1 != c {print $1}' <<<"$IAM_FLAT")"
 if [[ -n "$extra_roles" ]]; then
   st_fail "${RUN_SA_NAME} tiene roles de proyecto de más: $(tr '\n' ' ' <<<"$extra_roles")"
 else
-  st_ok "${RUN_SA_NAME} solo tiene ${RUN_SA_ROLE} a nivel de proyecto"
+  st_ok "${RUN_SA_NAME} solo tiene ${RUN_SA_ROLE} y ${RUN_CUSTOM_ROLE_ID} a nivel de proyecto"
 fi
 
 # Sin llaves creadas por usuarios.
