@@ -44,6 +44,11 @@ def make_project(with_env=True):
     write(f"{d}/infra/scripts/60_nested.sh", '#!/usr/bin/env bash\nbash "$(dirname "$0")/90_cleanup.sh"\n')
     write(f"{d}/.env", "SECRET_GCLOUD=gcloud run deploy x --project prod\n")
     write(f"{d}/infra/scripts/70_reads_env.sh", '#!/usr/bin/env bash\nsource ../../.env\n')
+    # `vercel` dentro de una URL o una cabecera no es la CLI (curl a producción incluido)
+    write(f"{d}/infra/scripts/80_vercel_check.sh",
+          '#!/usr/bin/env bash\nFRONTEND_URL=https://kanza-stg.vercel.app  # el alias de production\n'
+          'curl -sS -D - "$FRONTEND_URL" | grep -i x-vercel-id\nrm -f "$TMP"\n')
+    write(f"{d}/infra/scripts/81_vercel_cli.sh", '#!/usr/bin/env bash\nnpx vercel env rm BACKEND_URL preview\n')
     return d
 
 
@@ -115,6 +120,15 @@ try:
     cloud(P, "npm exec firebase deploy", "deny")
     cloud(P, "npm exec -- firebase deploy -P finance-stg-123", None)
     cloud(P, "vercel --prod", "deny")
+    cloud(P, "npx vercel remove kanza-stg", "deny")
+    cloud(P, "/usr/local/bin/vercel rm kanza-stg", "deny")
+    cloud(P, "env CI=1 vercel deploy --production", "deny")
+    # `vercel` dentro de un dominio, una cabecera o un archivo no es la CLI
+    cloud(P, "curl -sI https://kanza-stg.vercel.app/login > /tmp/production-check.txt", None)
+    cloud(P, "grep -i x-vercel-id /tmp/h.txt && rm -f /tmp/h.txt", None)
+    cloud(P, "grep -n production frontend/vercel.json", None)
+    cloud(P, "bash infra/scripts/80_vercel_check.sh", None)
+    cloud(P, "bash infra/scripts/81_vercel_cli.sh", "deny")
     cloud(P, 'bash -c "gcloud run deploy x --project finance-other"', "deny")
     cloud(P, "bash infra/scripts/20_cloud_sql.sh", "ask")
     cloud(P, "DRY_RUN=1 ./infra/scripts/20_cloud_sql.sh", "ask")
@@ -184,6 +198,10 @@ try:
     scope(P, "git -C backend add .", B, "Bash", "git -C backend add .", "deny")
     scope(P, "git branch -D foo", B, "Bash", "git branch -D foo", "deny")
     scope(P, "git switch main", B, "Bash", "git switch main", "deny")
+    scope(P, "git ls-tree (lectura)", B, "Bash", "git ls-tree -r --name-only HEAD frontend", None)
+    scope(P, "git merge-base / rev-list (lectura)", B, "Bash",
+          "git merge-base main HEAD && git rev-list --count main..HEAD", None)
+    scope(P, "git update-ref (escritura)", B, "Bash", "git update-ref refs/heads/x HEAD", "deny")
 
     print("\n=== guard_scope · qa ===")
     QA = ["backend/tests/", "frontend/e2e/", "frontend/playwright.config.ts",

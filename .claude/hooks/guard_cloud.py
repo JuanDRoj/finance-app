@@ -57,6 +57,10 @@ except Exception as exc:  # un hook que no arranca dejaría pasar todo: mejor pr
 
 # Herramientas que tocan la nube.
 CLOUD_CLIS = r"(gcloud|gsutil|bq|firebase|vercel|terraform)"
+# El nombre como palabra suelta: no dentro de un dominio (`kanza-stg.vercel.app`), una cabecera
+# (`x-vercel-id`) o un archivo (`vercel.json`). Antes puede ir una ruta (`/usr/bin/gcloud`) y después
+# un guion (`firebase-tools`, el paquete que `npx` ejecuta como la CLI).
+CLOUD_WORD = rf"(?<![\w.-]){CLOUD_CLIS}(?![\w.])"
 
 # Lista blanca de staging: CLIs que deben llevar --project y de dónde sale el ID.
 PROJECT_CLIS = {"gcloud", "firebase"}
@@ -104,7 +108,7 @@ PROD_MARKERS = [
 # Reglas de bloqueo (deny): (regex, motivo)
 DENY_RULES = [
     # --- Nube: borrar recursos ---
-    (rf"\b{CLOUD_CLIS}\b[^|;&]*\s(delete|destroy|remove|rm){END}",
+    (rf"{CLOUD_WORD}[^|;&]*\s(delete|destroy|remove|rm){END}",
      "Borrar recursos en la nube está prohibido para los agentes. Si es necesario, propónselo al humano para que lo haga él."),
     (rf"\bgsutil\b[^|;&]*\s(rm|rb){END}",
      "Borrar buckets u objetos de Cloud Storage está prohibido para los agentes."),
@@ -284,7 +288,7 @@ class Checker:
     def check_segment(self, seg: str, tokens: list[str], cwd: str, origin: str | None,
                       script_dir: str | None, depth: int) -> None:
         where = f" (en {origin})" if origin else ""
-        has_cloud = re.search(rf"\b{CLOUD_CLIS}\b", seg)
+        has_cloud = re.search(CLOUD_WORD, seg)
 
         # 1) Producción en cualquier comando de nube
         if has_cloud and any(re.search(m, seg, re.IGNORECASE) for m in PROD_MARKERS):
