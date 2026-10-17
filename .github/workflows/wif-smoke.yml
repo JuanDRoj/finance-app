@@ -101,7 +101,7 @@ jobs:
           gcloud auth print-access-token --project="${GCP_PROJECT_ID}" >/dev/null
           echo "OK: STS and IAM Credentials issued an access token for the deployer service account."
 
-      # Lecturas que ejercitan los roles del deployer (artifactregistry.writer y run.admin).
+      # Lecturas que ejercitan los roles del deployer (artifactregistry.writer y run.developer).
       - name: Read Artifact Registry repository (main)
         if: ${{ github.ref == 'refs/heads/main' }}
         run: gcloud artifacts repositories describe "${AR_REPOSITORY}" --location="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --format='value(name)'
