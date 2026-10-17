@@ -11,7 +11,7 @@ function clientAnswering(response: Response): ApiClient {
 describe("unwrap", () => {
   it("returns the typed data of a successful call", async () => {
     const api = clientAnswering(Response.json({ status: "ok" }));
-    const data = await unwrap(api.GET("/healthz"));
+    const data = await unwrap(api.GET("/health"));
     const status: string = data.status;
     expect(status).toBe("ok");
   });
@@ -37,7 +37,7 @@ describe("unwrap", () => {
 
   it("returns undefined for a response without a body", async () => {
     const api = clientAnswering(new Response(null, { status: 204 }));
-    await expect(unwrap(api.GET("/healthz"))).resolves.toBeUndefined();
+    await expect(unwrap(api.GET("/health"))).resolves.toBeUndefined();
   });
 
   it("throws on a non-OK response that has no body", async () => {

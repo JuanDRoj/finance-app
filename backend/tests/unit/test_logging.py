@@ -66,7 +66,7 @@ def test_log_outside_request_has_null_request_id() -> None:
 async def test_request_id_context_is_reset_after_request(
     client: AsyncClient,
 ) -> None:
-    await client.get("/healthz", headers={"X-Request-ID": "rid-1"})
+    await client.get("/health", headers={"X-Request-ID": "rid-1"})
     assert request_id_ctx.get() is None
 
 
@@ -179,7 +179,7 @@ async def test_logs_of_a_request_carry_the_trace_from_the_cloud_trace_header(
 async def test_trace_id_is_normalized_to_lowercase(
     app: FastAPI, client: AsyncClient, log_stream: io.StringIO
 ) -> None:
-    await client.get("/healthz", headers={"X-Cloud-Trace-Context": TRACE_ID.upper()})
+    await client.get("/health", headers={"X-Cloud-Trace-Context": TRACE_ID.upper()})
 
     completed = _completed_line(log_stream)
     assert completed[TRACE_KEY] == f"projects/test-project/traces/{TRACE_ID}"
@@ -200,7 +200,7 @@ async def test_trace_id_is_normalized_to_lowercase(
 async def test_missing_or_malformed_trace_header_adds_no_trace_field(
     client: AsyncClient, log_stream: io.StringIO, header: str
 ) -> None:
-    await client.get("/healthz", headers={"X-Cloud-Trace-Context": header})
+    await client.get("/health", headers={"X-Cloud-Trace-Context": header})
 
     assert TRACE_KEY not in _completed_line(log_stream)
 
@@ -208,13 +208,13 @@ async def test_missing_or_malformed_trace_header_adds_no_trace_field(
 async def test_request_without_trace_header_adds_no_trace_field(
     client: AsyncClient, log_stream: io.StringIO
 ) -> None:
-    await client.get("/healthz")
+    await client.get("/health")
 
     assert TRACE_KEY not in _completed_line(log_stream)
 
 
 async def test_trace_context_is_reset_after_request(client: AsyncClient) -> None:
-    await client.get("/healthz", headers={"X-Cloud-Trace-Context": f"{TRACE_ID}/1;o=1"})
+    await client.get("/health", headers={"X-Cloud-Trace-Context": f"{TRACE_ID}/1;o=1"})
     assert trace_ctx.get() is None
 
 

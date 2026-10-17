@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Prueba de Cloud Run de staging (KAN-13, INF-07): deja evidencia repetible de los criterios del ticket.
 #
-#   Criterio 1  /health responde 200 en la URL del servicio. NO se usa /healthz: en Cloud Run las rutas
-#               que terminan en "z" están reservadas por Google (su frontal responde con un 404 HTML y la
-#               petición nunca llega a la app). /healthz sigue existiendo en la app para uso local.
+#   Criterio 1  /health responde 200 en la URL del servicio. En Cloud Run las rutas que terminan en "z"
+#               están reservadas por Google (su frontal responde con un 404 HTML y la petición nunca llega
+#               a la app), así que la app no define ninguna (KAN-43).
 #   Criterio 4  /docs, /redoc y /openapi.json responden 404 (solo existen con ENV=local).
 #   Criterio 2  (con RUN_JOB=1) el job de migraciones termina con código 0. Es la primera prueba REAL
 #               del Cloud SQL Connector: /health no toca la BD, así que sin el job no queda probado.
@@ -83,14 +83,6 @@ if [[ "$code" == "200" ]]; then
   fi
 else
   st_fail "GET /health -> ${code} (se esperaba 200). Mira los logs: gcloud run services logs read ${CR_SERVICE} --project=${GCP_PROJECT_ID} --region=${GCP_REGION} --limit=30"
-fi
-# Solo informativo y nunca un fallo: /healthz es una ruta reservada de Cloud Run (termina en "z"), así que
-# se espera el 404 HTML de Google y no la respuesta de la app. Deja constancia de por qué no es el criterio.
-code="$(http_status /healthz)"
-if grep -qi '<html' "$BODY_FILE" 2>/dev/null; then
-  st_info "GET /healthz -> ${code} con HTML de Google: ruta reservada de Cloud Run (termina en z), no llega a la app; por eso el criterio usa /health"
-else
-  st_info "GET /healthz -> ${code} (informativo): en Cloud Run no se usan rutas que terminen en z; el criterio es /health"
 fi
 
 step "2/4 Criterio 4: /docs, /redoc y /openapi.json responden 404"
