@@ -8,9 +8,6 @@ from httpx import AsyncClient
 
 from app.health import router as health_router
 
-# Cloud Run reserves some paths ending in `z` (its frontend answers /healthz before the app
-# sees the request), so the probe is /health and /healthz does not exist (see test_routing.py).
-
 
 async def test_health_returns_200_with_status_ok_without_auth(client: AsyncClient) -> None:
     response = await client.get("/health")  # no cookie, no Authorization header
@@ -30,7 +27,9 @@ def test_health_route_has_no_dependencies() -> None:
 
 
 async def test_healthz_is_not_served(client: AsyncClient) -> None:
-    # Cloud Run reserves paths ending in `z`: the app must not expose one.
+    # Cloud Run reserves some paths ending in `z` (its frontend answers /healthz before the app
+    # sees the request), so the probe is /health and /healthz must not exist. The general rule is
+    # in test_routing.py.
     response = await client.get("/healthz")
 
     assert response.status_code == 404
