@@ -8,6 +8,9 @@
 #   bash infra/scripts/sql_power.sh stop              # apaga; corta las conexiones activas
 #   DRY_RUN=1 bash infra/scripts/sql_power.sh start   # solo lecturas: imprime lo que haría
 #
+# Al encender, recuerda volver a correr el CD (KAN-16): los merges hechos con la instancia apagada se
+# desplegaron sin migrar.
+#
 # Idempotente: si la instancia ya está en el estado pedido, no cambia nada ni pregunta.
 # El cambio se envía con --async y se espera con `sql operations wait`: el patch simple se
 # corta ("taking longer than expected") antes de que la instancia termine de arrancar.
@@ -96,6 +99,9 @@ case "$ACTION" in
         if set_power always; then
           st_fixed "Instancia encendida"
           st_info "Cuando termines, apágala con: bash infra/scripts/sql_power.sh stop"
+          # KAN-16: con la instancia apagada el CD omite las migraciones. Para aplicar las pendientes hay
+          # que volver a correr el CD (migra y vuelve a desplegar main; es idempotente).
+          st_info "Si hubo merges a main con la instancia apagada, hay migraciones pendientes: gh workflow run cd-staging.yml --ref main"
         else
           st_fail "La instancia no llegó a estar encendida (estado actual: $(jq -r '.state // "?"' <<<"$SQL_JSON")); revisa la consola de Cloud SQL"
         fi
