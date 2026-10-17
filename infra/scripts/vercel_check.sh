@@ -6,9 +6,8 @@
 #   Criterio 1  el alias responde: /login da 200 y / redirige (307) a /login (el proxy de rutas privadas
 #               corre). Que el alias sea ESTABLE no se prueba en una sola corrida: se corre otra vez tras
 #               el siguiente despliegue y debe responder igual (el dominio del despliegue cambia, el alias no).
-#   Criterio 2  /api/health responde 200 por el rewrite. NO se usa /api/healthz: el rewrite lo manda a
-#               /healthz de Cloud Run, que Google reserva (rutas que terminan en "z") y contesta con su 404
-#               HTML sin llegar a la app. Se prueba solo para dejar constancia, como informativo.
+#   Criterio 2  /api/health responde 200 por el rewrite. Cloud Run reserva las rutas que terminan en "z"
+#               (contesta con su 404 HTML sin llegar a la app), así que la app no define ninguna (KAN-43).
 #   Criterio 3  el Set-Cookie del backend llega por el rewrite. Ningun endpoint que abre sesion se puede
 #               probar sin un token real de Firebase, asi que se usa DELETE /api/auth/session SIN cookie:
 #               el backend responde 204 y emite la cookie de cierre (vacia, Max-Age=0) sin tocar la BD, sin
@@ -197,13 +196,6 @@ if [[ "$CODE" == "200" ]]; then
   fi
 else
   st_fail "GET /api/health -> ${CODE} (se esperaba 200). Revisa BACKEND_URL en Vercel (sin barra final) y que el servicio de Cloud Run este desplegado"
-fi
-# Solo informativo y nunca un fallo: /healthz es una ruta reservada de Cloud Run (termina en "z").
-request GET /api/healthz
-if grep -qi '<html' "$BODY_FILE" 2>/dev/null; then
-  st_info "GET /api/healthz -> ${CODE} con HTML de Google: ruta reservada de Cloud Run, no llega a la app; por eso el criterio usa /api/health"
-else
-  st_info "GET /api/healthz -> ${CODE} (informativo): en Cloud Run no se usan rutas que terminen en z; el criterio es /api/health"
 fi
 
 # --- Criterio 3 ---------------------------------------------------------------------------------------
