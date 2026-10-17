@@ -196,24 +196,37 @@ CAND_URL=""
 if is_dry; then
   st_info "DRY_RUN=1: no se lee la revisión candidata porque no se desplegó"
 else
-  # La etiqueta puede tardar unos segundos en aparecer en la lectura del servicio.
+  # La etiqueta puede tardar unos segundos en aparecer en la lectura del servicio, y en apuntar a la
+  # revisión recién creada. Tiene que apuntar a la que acaba de crear este despliegue (o, si la plantilla
+  # no cambió y no hubo revisión nueva, a la última creada); si no, el smoke probaría algo distinto de lo
+  # que se va a servir. Se reintenta mientras falte la etiqueta o apunte a otra revisión.
+  latest_created=""
   for attempt in 1 2 3 4 5 6; do
     probe gcloud run services describe "$CR_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format=json \
       || die "No pude leer el servicio ${CR_SERVICE}"
     SERVICE_JSON="$PROBE_OUT"
     CAND_REV="$(jq -r --arg t "$CANDIDATE_TAG" '[.status.traffic[]? | select(.tag == $t) | .revisionName] | first // ""' <<<"$SERVICE_JSON")"
     CAND_URL="$(jq -r --arg t "$CANDIDATE_TAG" '[.status.traffic[]? | select(.tag == $t) | .url] | first // ""' <<<"$SERVICE_JSON")"
-    if [[ -n "$CAND_REV" && -n "$CAND_URL" ]]; then break; fi
-    log "La etiqueta ${CANDIDATE_TAG} aún no aparece; reviso otra vez en 5 s (${attempt}/6)"
+    latest_created="$(jq -r '.status.latestCreatedRevisionName // ""' <<<"$SERVICE_JSON")"
+    if [[ -n "$CAND_REV" && -n "$CAND_URL" && "$CAND_REV" == "$latest_created" ]]; then break; fi
+    log "La etiqueta ${CANDIDATE_TAG} aún no apunta a la última revisión creada (etiqueta: ${CAND_REV:-ninguna}, última: ${latest_created:-?}); reviso otra vez en 5 s (${attempt}/6)"
     sleep 5
   done
-  [[ -n "$CAND_REV" && -n "$CAND_URL" ]] || die "No encuentro la etiqueta ${CANDIDATE_TAG} en ${CR_SERVICE} tras el despliegue"
-  # La etiqueta tiene que apuntar a la revisión que acaba de crear este despliegue (o, si la plantilla no
-  # cambió y no hubo revisión nueva, a la última creada). Si no coincide, la etiqueta es de otra revisión
-  # y el smoke probaría algo distinto de lo que se va a servir.
-  latest_created="$(jq -r '.status.latestCreatedRevisionName // ""' <<<"$SERVICE_JSON")"
+
+  # Qué pasó con el tráfico, para no afirmar nada sin comprobarlo. Con --no-traffic la revisión anterior
+  # debe seguir con el 100 %; si fuera de otro modo (p. ej. una versión de la CLI que mantiene
+  # "latestRevision"), no hay forma de proteger la revisión anterior desde aquí: se detiene y se dice cómo volver.
+  prev_pct="$(jq -r --arg r "$PREV_REV" '[.status.traffic[]? | select(.revisionName == $r) | .percent // 0] | add // 0' <<<"$SERVICE_JSON")"
+  if [[ "$prev_pct" == "100" ]]; then
+    traffic_msg="El tráfico no se movió: la revisión ${PREV_REV} sigue sirviendo."
+  else
+    traffic_msg="El tráfico se movió sin permiso (la revisión ${PREV_REV} tiene ${prev_pct} %). Para volver: gcloud run services update-traffic ${CR_SERVICE} --to-revisions=${PREV_REV}=100 --project=${GCP_PROJECT_ID} --region=${GCP_REGION}"
+  fi
+
+  [[ -n "$CAND_REV" && -n "$CAND_URL" ]] || die "No encuentro la etiqueta ${CANDIDATE_TAG} en ${CR_SERVICE} tras el despliegue. ${traffic_msg}"
   [[ "$CAND_REV" == "$latest_created" ]] \
-    || die "La etiqueta ${CANDIDATE_TAG} apunta a ${CAND_REV}, pero la última revisión creada es ${latest_created:-desconocida}; no se continúa. El tráfico no se movió."
+    || die "La etiqueta ${CANDIDATE_TAG} apunta a ${CAND_REV}, pero la última revisión creada es ${latest_created:-desconocida}; no se continúa. ${traffic_msg}"
+  [[ "$prev_pct" == "100" ]] || die "$traffic_msg"
 
   probe gcloud run revisions describe "$CAND_REV" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format=json \
     || die "No pude leer la revisión ${CAND_REV}"
@@ -221,13 +234,6 @@ else
   [[ "$cand_image" == "$IMAGE" ]] || die "La revisión ${CAND_REV} usa otra imagen (${cand_image}); se esperaba ${IMAGE}"
   st_ok "Revisión candidata ${CAND_REV} con la imagen del commit"
 
-  # La garantía del diseño: el tráfico no se movió. Si fuera de otro modo (p. ej. una versión de gcloud
-  # que mantiene "latestRevision" con --no-traffic), no hay forma de proteger la revisión anterior desde
-  # aquí: se detiene y se dice cómo volver.
-  prev_pct="$(jq -r --arg r "$PREV_REV" '[.status.traffic[]? | select(.revisionName == $r) | .percent // 0] | add // 0' <<<"$SERVICE_JSON")"
-  if [[ "$prev_pct" != "100" ]]; then
-    die "El tráfico se movió sin permiso (la revisión ${PREV_REV} tiene ${prev_pct} %). Para volver: gcloud run services update-traffic ${CR_SERVICE} --to-revisions=${PREV_REV}=100 --project=${GCP_PROJECT_ID} --region=${GCP_REGION}"
-  fi
   st_ok "La revisión anterior (${PREV_REV}) sigue con el 100 % del tráfico"
 fi
 
