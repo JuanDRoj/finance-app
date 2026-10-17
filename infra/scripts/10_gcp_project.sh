@@ -56,8 +56,9 @@ SUPPORT_APIS=(
 AR_DESCRIPTION="Backend Images (Staging)"
 RUN_SA_DESCRIPTION="backend id in Cloud Run (staging)"
 
-# Mínimo privilegio de la identidad de Cloud Run: solo conectarse a Cloud SQL (el Cloud SQL Python
-# Connector necesita cloudsql.instances.connect/get). El acceso al secreto de la contraseña se da
+# Mínimo privilegio de la identidad de Cloud Run: conectarse a Cloud SQL (el Cloud SQL Python
+# Connector necesita cloudsql.instances.connect/get) y, desde KAN-11, el rol personalizado de
+# sesiones de Firebase (más abajo). El acceso al secreto de la contraseña se da
 # SOBRE ESE SECRETO en KAN-10, no a nivel de proyecto (decisión: más estricto que el texto del ticket).
 RUN_SA_ROLE="roles/cloudsql.client"
 
@@ -341,6 +342,7 @@ fi
 # Rol personalizado (KAN-11): se crea si falta; si existe solo se compara (nunca se modifica solo).
 PERMS_WANTED="$(printf '%s\n' "${RUN_CUSTOM_ROLE_PERMISSIONS[@]}" | sort)"
 PERMS_CSV="$(IFS=,; printf '%s' "${RUN_CUSTOM_ROLE_PERMISSIONS[*]}")"
+ROLE_INACTIVE=0   # 1 = el rol existe pero está borrado o deshabilitado: no se le asigna nada
 if (( PROJECT_EXISTS )) && probe gcloud iam roles describe "$RUN_CUSTOM_ROLE_ID" --project="$GCP_PROJECT_ID" --format=json; then
   role_json="$PROBE_OUT"
   role_perms="$(jq -r '(.includedPermissions // [])[]' <<<"$role_json" | sort)"
@@ -348,7 +350,12 @@ if (( PROJECT_EXISTS )) && probe gcloud iam roles describe "$RUN_CUSTOM_ROLE_ID"
   role_inactive="$(jq -r '(.deleted // false) or (.stage == "DISABLED")' <<<"$role_json")"
   fix_cmd="gcloud iam roles update ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} --permissions=${PERMS_CSV} --stage=${RUN_CUSTOM_ROLE_STAGE}"
   if [[ "$role_inactive" == "true" ]]; then
-    st_fail "Rol ${RUN_CUSTOM_ROLE_ID} borrado o deshabilitado; hay que restaurarlo a mano en la consola"
+    ROLE_INACTIVE=1
+    if [[ "$(jq -r '.deleted // false' <<<"$role_json")" == "true" ]]; then
+      st_fail "Rol ${RUN_CUSTOM_ROLE_ID} borrado. Corrección sugerida (la aplica el humano): gcloud iam roles undelete ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} (o en la consola: IAM > Roles > Mostrar roles borrados)"
+    else
+      st_fail "Rol ${RUN_CUSTOM_ROLE_ID} deshabilitado. Corrección sugerida (la aplica el humano): gcloud iam roles update ${RUN_CUSTOM_ROLE_ID} --project=${GCP_PROJECT_ID} --stage=${RUN_CUSTOM_ROLE_STAGE}"
+    fi
   elif [[ "$role_perms" != "$PERMS_WANTED" ]]; then
     st_fail "Rol ${RUN_CUSTOM_ROLE_ID} con permisos distintos de los esperados ($(tr '\n' ' ' <<<"$role_perms")). Corrección sugerida (la aplica el humano): ${fix_cmd}"
   elif [[ "$role_stage" != "$RUN_CUSTOM_ROLE_STAGE" ]]; then
@@ -365,6 +372,9 @@ fi
 
 if has_binding "$RUN_CUSTOM_ROLE" "serviceAccount:${RUN_SA_EMAIL}"; then
   st_ok "Rol ${RUN_CUSTOM_ROLE_ID} para ${RUN_SA_NAME}"
+elif (( ROLE_INACTIVE )); then
+  # Con el rol borrado o deshabilitado IAM rechaza el binding y write_retry agotaría los intentos.
+  st_fail "Rol ${RUN_CUSTOM_ROLE_ID} sin asignar a ${RUN_SA_NAME}: se omite porque el rol está inactivo; restáuralo y vuelve a correr el script"
 else
   write_retry 6 10 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
     --member="serviceAccount:${RUN_SA_EMAIL}" --role="$RUN_CUSTOM_ROLE" --condition=None --format=none
