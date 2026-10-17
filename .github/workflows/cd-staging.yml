@@ -24,6 +24,7 @@ on:
       - "infra/scripts/cd_deploy.sh"
       - "infra/env/staging.env"
       - "infra/scripts/lib.sh"
+      - "infra/scripts/lib_sql.sh"
   workflow_dispatch:
 
 # id-token: write es lo mínimo para pedir el token OIDC; contents: read para el checkout.

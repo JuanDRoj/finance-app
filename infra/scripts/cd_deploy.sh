@@ -115,26 +115,26 @@ st_ok "Revisión que sirve hoy: ${PREV_REV}"
 # --- 1. Estado de Cloud SQL --------------------------------------------------------------------------
 step "1/6 Estado de la instancia ${SQL_INSTANCE}"
 sql_describe
-power="$(sql_power_state)"
 state="$(jq -r '.state // "?"' <<<"$SQL_JSON")"
 policy="$(jq -r '.settings.activationPolicy // "?"' <<<"$SQL_JSON")"
 MIGRATE=0
-case "$power" in
-  running)
-    MIGRATE=1
-    st_ok "Cloud SQL encendida (${state}/${policy}): se ejecutarán las migraciones"
-    ;;
-  stopped)
-    st_warn "Cloud SQL apagada (${state}/${policy}): se OMITEN las migraciones; el despliegue sigue (/health no usa la BD)"
-    gh_warning "Migraciones omitidas: Cloud SQL esta apagada. Al encenderla (sql_power.sh start), ejecuta: gh workflow run cd-staging.yml --ref main"
-    note "### Migraciones omitidas"
-    note "Cloud SQL estaba apagada (${state}/${policy}), así que el job \`${CR_JOB}\` no se ejecutó. La revisión nueva puede tener un esquema más nuevo que la BD."
-    note "Al encenderla con \`sql_power.sh start\`, corre \`gh workflow run cd-staging.yml --ref main\` para aplicar las migraciones pendientes."
-    ;;
-  *)
-    die "Cloud SQL está en un estado intermedio o inesperado (${state}/${policy}); no se despliega. Espera a que termine y vuelve a correr."
-    ;;
-esac
+# Solo hay dos estados estables: RUNNABLE/ALWAYS (encendida: migra) y STOPPED/NEVER (apagada: omite).
+# Cualquier otro, por ejemplo STOPPED/ALWAYS mientras sql_power.sh start la está encendiendo, es una
+# transición: no se sabe si la BD estará disponible, así que se detiene en rojo en vez de omitir.
+if [[ "$state" == "RUNNABLE" && "$policy" == "ALWAYS" ]]; then
+  MIGRATE=1
+  st_ok "Cloud SQL encendida (${state}/${policy}): se ejecutarán las migraciones"
+elif [[ "$state" == "STOPPED" && "$policy" == "NEVER" ]]; then
+  st_warn "Cloud SQL apagada (${state}/${policy}): se OMITEN las migraciones; el despliegue sigue (/health no usa la BD)"
+  gh_warning "Migraciones omitidas: Cloud SQL esta apagada. Al encenderla (sql_power.sh start), ejecuta: gh workflow run cd-staging.yml --ref main"
+  note "### Migraciones omitidas"
+  note "Cloud SQL estaba apagada (${state}/${policy}), así que el job \`${CR_JOB}\` no se ejecutó. La revisión nueva puede tener un esquema más nuevo que la BD."
+  note "Al encenderla con \`sql_power.sh start\`, corre \`gh workflow run cd-staging.yml --ref main\` para aplicar las migraciones pendientes."
+else
+  note "### Despliegue detenido"
+  note "Cloud SQL está en transición (${state}/${policy}); no se desplegó nada. Espera a que termine y vuelve a correr el CD."
+  die "Cloud SQL en transición (${state}/${policy}): no se despliega. Espera a que termine y re-ejecuta el CD (gh workflow run cd-staging.yml --ref main)."
+fi
 
 # --- 2. Job de migraciones: imagen -------------------------------------------------------------------
 # `gcloud run jobs execute` corre la imagen que el job YA tiene configurada, por eso primero se actualiza
@@ -208,6 +208,12 @@ else
     sleep 5
   done
   [[ -n "$CAND_REV" && -n "$CAND_URL" ]] || die "No encuentro la etiqueta ${CANDIDATE_TAG} en ${CR_SERVICE} tras el despliegue"
+  # La etiqueta tiene que apuntar a la revisión que acaba de crear este despliegue (o, si la plantilla no
+  # cambió y no hubo revisión nueva, a la última creada). Si no coincide, la etiqueta es de otra revisión
+  # y el smoke probaría algo distinto de lo que se va a servir.
+  latest_created="$(jq -r '.status.latestCreatedRevisionName // ""' <<<"$SERVICE_JSON")"
+  [[ "$CAND_REV" == "$latest_created" ]] \
+    || die "La etiqueta ${CANDIDATE_TAG} apunta a ${CAND_REV}, pero la última revisión creada es ${latest_created:-desconocida}; no se continúa. El tráfico no se movió."
 
   probe gcloud run revisions describe "$CAND_REV" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --format=json \
     || die "No pude leer la revisión ${CAND_REV}"
@@ -283,9 +289,11 @@ else
   fi
   st_ok "El servicio público responde en ${SMOKE_PATH}"
   note "### Despliegue a staging"
+  note "- Commit: \`${GIT_SHA:-no informado}\`"
   note "- Imagen: \`${IMAGE}\`"
   note "- Revisión nueva: \`${CAND_REV}\` (antes \`${PREV_REV}\`)"
   if (( MIGRATE == 1 )); then note "- Migraciones: ejecutadas"; else note "- Migraciones: **omitidas** (Cloud SQL apagada)"; fi
 fi
 
+st_info "Commit: ${GIT_SHA:-no informado}"
 summary_check
