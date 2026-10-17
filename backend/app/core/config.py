@@ -72,10 +72,10 @@ def _normalise_origin(origin: str) -> str:
 
 
 def _is_blank(value: str | SecretStr | None) -> bool:
-    """None or an empty string (an empty SecretStr counts too): an unset variable in practice."""
+    """None, empty or whitespace-only (a SecretStr counts too): an unset variable in practice."""
     if isinstance(value, SecretStr):
         value = value.get_secret_value()
-    return not value
+    return value is None or not value.strip()
 
 
 class Settings(BaseSettings):

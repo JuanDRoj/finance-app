@@ -153,6 +153,25 @@ def test_connector_treats_empty_user_password_and_name_as_missing(
         _settings()
 
 
+@pytest.mark.parametrize("name", ["DB_USER", "DB_PASSWORD", "DB_NAME"])
+@pytest.mark.parametrize("blank", [" ", "   ", "\t", " \n "])
+def test_connector_treats_whitespace_only_user_password_and_name_as_missing(
+    monkeypatch: pytest.MonkeyPatch, name: str, blank: str
+) -> None:
+    _set_connector_env(monkeypatch)
+    monkeypatch.setenv(name, blank)
+    with pytest.raises(ValidationError, match=name):
+        _settings()
+
+
+def test_connector_does_not_strip_values_that_have_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_connector_env(monkeypatch)
+    monkeypatch.setenv("DB_USER", " app ")
+    assert _settings().DB_USER == " app "
+
+
 @pytest.mark.parametrize("name", ["finance-db", "project:instance", "a b:c:d", "a:b:c:d:e"])
 def test_instance_connection_name_rejects_bad_format(
     monkeypatch: pytest.MonkeyPatch, name: str
