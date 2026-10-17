@@ -8,8 +8,8 @@
 #   - Pool + provider OIDC de GitHub, con una condición que solo deja pasar a ESTE repositorio,
 #     desde refs/heads/main.
 #   - Cuenta de servicio github-deployer-stg con permisos mínimos:
-#       roles/run.admin                  a nivel de proyecto (desplegar servicios y jobs de Cloud Run);
-#                                        roles/run.developer también se acepta (ver el paso 4)
+#       roles/run.developer              a nivel de proyecto (desplegar servicios y ejecutar jobs de Cloud Run);
+#                                        roles/run.admin se acepta con un aviso (más de lo necesario, ver el paso 4)
 #       roles/cloudsql.viewer            a nivel de proyecto (KAN-16: leer el estado de Cloud SQL; solo lectura)
 #       roles/artifactregistry.writer    solo sobre el repositorio de imágenes
 #       roles/iam.serviceAccountUser     solo sobre la cuenta de runtime (actuar como ella al desplegar)
@@ -80,9 +80,11 @@ MAPPING_JSON="$(printf '%s\n' "${MAPPING_PAIRS[@]}" | jq -Rn '[inputs | split("=
 ATTRIBUTE_CONDITION="assertion.repository_id == '${GITHUB_REPO_ID}' && assertion.repository_owner_id == '${GITHUB_OWNER_ID}' && assertion.ref == 'refs/heads/main' && assertion.event_name in ['push', 'workflow_dispatch']"
 
 # Roles de la cuenta deployer.
-DEPLOYER_PROJECT_ROLE="roles/run.admin"
-# Alternativa aceptada (KAN-16): tras la primera corrida verde del CD se baja de run.admin a este rol.
-DEPLOYER_PROJECT_ROLE_ALT="roles/run.developer"
+# Rol de Cloud Run que crea el script (KAN-16/D3): el mínimo para que el CD despliegue servicios y ejecute jobs.
+DEPLOYER_PROJECT_ROLE="roles/run.developer"
+# Alternativa aceptada con aviso: run.admin era el rol inicial (KAN-12) y añade administrar el acceso
+# público del servicio, que el CD no necesita. Se acepta para no fallar mientras se baja de uno al otro.
+DEPLOYER_PROJECT_ROLE_ALT="roles/run.admin"
 # KAN-16: el CD lee el estado de Cloud SQL (encendida o apagada) para decidir si ejecuta las migraciones.
 DEPLOYER_SQL_ROLE="roles/cloudsql.viewer"
 DEPLOYER_AR_ROLE="roles/artifactregistry.writer"
@@ -267,25 +269,26 @@ else
 fi
 
 # --- 4. Rol de proyecto ---------------------------------------------------------------------------
-# Cloud Run a nivel de proyecto: run.admin (texto del ticket) hace falta para crear el servicio y los jobs.
-# Más de lo necesario para el CD: roles/run.developer basta para desplegar y ejecutar jobs; solo run.admin
-# añade administrar el acceso público (--allow-unauthenticated). KAN-16 documenta bajarlo tras la primera
-# corrida verde del CD, así que el script acepta cualquiera de los dos: si no hay ninguno, crea run.admin.
-# Si están los dos (transición: se agrega developer antes de quitar admin), avisa y no falla.
+# Cloud Run a nivel de proyecto: roles/run.developer basta para que el CD despliegue servicios y ejecute
+# jobs; solo run.admin añade administrar el acceso público (--allow-unauthenticated), que el CD no usa
+# (la configuración del servicio se cambia a propósito en la Consola o en 40_cloud_run.sh). Desde KAN-16
+# (D3) el script crea run.developer si no hay ningún rol de Cloud Run. Sigue aceptando run.admin (el rol
+# inicial de KAN-12) pero con aviso, sin [FALLO]. Si están los dos (transición), avisa que hay que quitar
+# run.admin. Crear el servicio y el job por primera vez lo hace el humano en la Consola con su propia cuenta.
 # KAN-16 agrega roles/cloudsql.viewer (solo lectura: ve el estado de la instancia, no se conecta ni la
 # enciende). Ningún otro rol de proyecto: ni serviceAccountUser (se da sobre la cuenta de runtime), ni Editor.
 
 step "4/10 Roles de proyecto de ${DEPLOYER_SA_NAME}"
 IAM_FLAT="$(iam_flat)"
-HAS_RUN_ADMIN=0; HAS_RUN_DEV=0
-if has_binding "$DEPLOYER_PROJECT_ROLE" "$DEPLOYER_MEMBER"; then HAS_RUN_ADMIN=1; fi
-if has_binding "$DEPLOYER_PROJECT_ROLE_ALT" "$DEPLOYER_MEMBER"; then HAS_RUN_DEV=1; fi
-if (( HAS_RUN_ADMIN && HAS_RUN_DEV )); then
-  st_warn "${DEPLOYER_SA_NAME} tiene ${DEPLOYER_PROJECT_ROLE} y ${DEPLOYER_PROJECT_ROLE_ALT}: es la transición; quita ${DEPLOYER_PROJECT_ROLE} en la Consola cuando el CD funcione con el segundo"
-elif (( HAS_RUN_ADMIN )); then
-  st_ok "Rol ${DEPLOYER_PROJECT_ROLE} para ${DEPLOYER_SA_NAME}"
+HAS_RUN_DEV=0; HAS_RUN_ADMIN=0
+if has_binding "$DEPLOYER_PROJECT_ROLE" "$DEPLOYER_MEMBER"; then HAS_RUN_DEV=1; fi
+if has_binding "$DEPLOYER_PROJECT_ROLE_ALT" "$DEPLOYER_MEMBER"; then HAS_RUN_ADMIN=1; fi
+if (( HAS_RUN_DEV && HAS_RUN_ADMIN )); then
+  st_warn "${DEPLOYER_SA_NAME} tiene ${DEPLOYER_PROJECT_ROLE} y ${DEPLOYER_PROJECT_ROLE_ALT}: es la transición; quita ${DEPLOYER_PROJECT_ROLE_ALT} en la Consola (más de lo necesario)"
 elif (( HAS_RUN_DEV )); then
-  st_ok "Rol ${DEPLOYER_PROJECT_ROLE_ALT} para ${DEPLOYER_SA_NAME} (el mínimo para el CD)"
+  st_ok "Rol ${DEPLOYER_PROJECT_ROLE} para ${DEPLOYER_SA_NAME} (el mínimo para el CD)"
+elif (( HAS_RUN_ADMIN )); then
+  st_warn "${DEPLOYER_SA_NAME} tiene ${DEPLOYER_PROJECT_ROLE_ALT}, más de lo necesario: ${DEPLOYER_PROJECT_ROLE} basta para el CD; cámbialo en la Consola"
 else
   # Recién creada la cuenta, IAM tarda unos segundos en verla: se reintenta.
   write_retry 6 10 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
