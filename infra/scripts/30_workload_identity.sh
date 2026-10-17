@@ -8,7 +8,9 @@
 #   - Pool + provider OIDC de GitHub, con una condición que solo deja pasar a ESTE repositorio,
 #     desde refs/heads/main.
 #   - Cuenta de servicio github-deployer-stg con permisos mínimos:
-#       roles/run.admin                  a nivel de proyecto (desplegar servicios y jobs de Cloud Run)
+#       roles/run.admin                  a nivel de proyecto (desplegar servicios y jobs de Cloud Run);
+#                                        roles/run.developer también se acepta (ver el paso 4)
+#       roles/cloudsql.viewer            a nivel de proyecto (KAN-16: leer el estado de Cloud SQL; solo lectura)
 #       roles/artifactregistry.writer    solo sobre el repositorio de imágenes
 #       roles/iam.serviceAccountUser     solo sobre la cuenta de runtime (actuar como ella al desplegar)
 #   - roles/iam.workloadIdentityUser sobre la cuenta deployer para el principalSet del repositorio
@@ -79,6 +81,10 @@ ATTRIBUTE_CONDITION="assertion.repository_id == '${GITHUB_REPO_ID}' && assertion
 
 # Roles de la cuenta deployer.
 DEPLOYER_PROJECT_ROLE="roles/run.admin"
+# Alternativa aceptada (KAN-16): tras la primera corrida verde del CD se baja de run.admin a este rol.
+DEPLOYER_PROJECT_ROLE_ALT="roles/run.developer"
+# KAN-16: el CD lee el estado de Cloud SQL (encendida o apagada) para decidir si ejecuta las migraciones.
+DEPLOYER_SQL_ROLE="roles/cloudsql.viewer"
 DEPLOYER_AR_ROLE="roles/artifactregistry.writer"
 DEPLOYER_ACTAS_ROLE="roles/iam.serviceAccountUser"
 WIF_USER_ROLE="roles/iam.workloadIdentityUser"
@@ -261,15 +267,25 @@ else
 fi
 
 # --- 4. Rol de proyecto ---------------------------------------------------------------------------
-# run.admin a nivel de proyecto (texto del ticket): hace falta para crear el servicio y los jobs de
-# Cloud Run. Más de lo necesario: roles/run.developer basta para desplegar y ejecutar jobs; solo
-# run.admin añade administrar el acceso público (--allow-unauthenticated). Se revisa en KAN-13/16.
-# Ningún otro rol de proyecto: ni serviceAccountUser (se da sobre la cuenta de runtime), ni Editor.
+# Cloud Run a nivel de proyecto: run.admin (texto del ticket) hace falta para crear el servicio y los jobs.
+# Más de lo necesario para el CD: roles/run.developer basta para desplegar y ejecutar jobs; solo run.admin
+# añade administrar el acceso público (--allow-unauthenticated). KAN-16 documenta bajarlo tras la primera
+# corrida verde del CD, así que el script acepta cualquiera de los dos: si no hay ninguno, crea run.admin.
+# Si están los dos (transición: se agrega developer antes de quitar admin), avisa y no falla.
+# KAN-16 agrega roles/cloudsql.viewer (solo lectura: ve el estado de la instancia, no se conecta ni la
+# enciende). Ningún otro rol de proyecto: ni serviceAccountUser (se da sobre la cuenta de runtime), ni Editor.
 
-step "4/10 Rol de proyecto de ${DEPLOYER_SA_NAME}"
+step "4/10 Roles de proyecto de ${DEPLOYER_SA_NAME}"
 IAM_FLAT="$(iam_flat)"
-if has_binding "$DEPLOYER_PROJECT_ROLE" "$DEPLOYER_MEMBER"; then
+HAS_RUN_ADMIN=0; HAS_RUN_DEV=0
+if has_binding "$DEPLOYER_PROJECT_ROLE" "$DEPLOYER_MEMBER"; then HAS_RUN_ADMIN=1; fi
+if has_binding "$DEPLOYER_PROJECT_ROLE_ALT" "$DEPLOYER_MEMBER"; then HAS_RUN_DEV=1; fi
+if (( HAS_RUN_ADMIN && HAS_RUN_DEV )); then
+  st_warn "${DEPLOYER_SA_NAME} tiene ${DEPLOYER_PROJECT_ROLE} y ${DEPLOYER_PROJECT_ROLE_ALT}: es la transición; quita ${DEPLOYER_PROJECT_ROLE} en la Consola cuando el CD funcione con el segundo"
+elif (( HAS_RUN_ADMIN )); then
   st_ok "Rol ${DEPLOYER_PROJECT_ROLE} para ${DEPLOYER_SA_NAME}"
+elif (( HAS_RUN_DEV )); then
+  st_ok "Rol ${DEPLOYER_PROJECT_ROLE_ALT} para ${DEPLOYER_SA_NAME} (el mínimo para el CD)"
 else
   # Recién creada la cuenta, IAM tarda unos segundos en verla: se reintenta.
   write_retry 6 10 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
@@ -277,11 +293,19 @@ else
   st_created "Rol ${DEPLOYER_PROJECT_ROLE} para ${DEPLOYER_SA_NAME}"
   if ! is_dry; then IAM_FLAT="$(iam_flat)"; fi
 fi
-extra_roles="$(awk -F'\t' -v m="$DEPLOYER_MEMBER" -v r="$DEPLOYER_PROJECT_ROLE" '$2 == m && $1 != r {print $1}' <<<"$IAM_FLAT")"
+if has_binding "$DEPLOYER_SQL_ROLE" "$DEPLOYER_MEMBER"; then
+  st_ok "Rol ${DEPLOYER_SQL_ROLE} para ${DEPLOYER_SA_NAME}"
+else
+  write_retry 6 10 gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+    --member="$DEPLOYER_MEMBER" --role="$DEPLOYER_SQL_ROLE" --condition=None --format=none
+  st_created "Rol ${DEPLOYER_SQL_ROLE} para ${DEPLOYER_SA_NAME}"
+  if ! is_dry; then IAM_FLAT="$(iam_flat)"; fi
+fi
+extra_roles="$(awk -F'\t' -v m="$DEPLOYER_MEMBER" -v a="$DEPLOYER_PROJECT_ROLE" -v d="$DEPLOYER_PROJECT_ROLE_ALT" -v q="$DEPLOYER_SQL_ROLE" '$2 == m && $1 != a && $1 != d && $1 != q {print $1}' <<<"$IAM_FLAT")"
 if [[ -n "$extra_roles" ]]; then
   st_fail "${DEPLOYER_SA_NAME} tiene roles de proyecto de más: $(tr '\n' ' ' <<<"$extra_roles")"
 else
-  st_ok "${DEPLOYER_SA_NAME} solo tiene ${DEPLOYER_PROJECT_ROLE} a nivel de proyecto"
+  st_ok "${DEPLOYER_SA_NAME} solo tiene roles de proyecto esperados (Cloud Run y ${DEPLOYER_SQL_ROLE})"
 fi
 
 # --- 5. Artifact Registry -------------------------------------------------------------------------
