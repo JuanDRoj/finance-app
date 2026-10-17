@@ -283,7 +283,7 @@
     },
     "/health": {
       "get": {
-        "description": "Liveness probe: no database or external dependencies. Use this one on Cloud Run.",
+        "description": "Liveness probe: no database or external dependencies.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -298,28 +298,6 @@
           }
         },
         "summary": "Health",
-        "tags": [
-          "health"
-        ]
-      }
-    },
-    "/healthz": {
-      "get": {
-        "description": "Same as /health, kept for local use only.\n\nDo not use it on Cloud Run: paths ending in `z` are reserved there and the platform answers\nthem with its own 404 before the request reaches the app. Use /health instead.",
-        "operationId": "healthz_healthz_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Healthz",
         "tags": [
           "health"
         ]

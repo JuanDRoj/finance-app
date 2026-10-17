@@ -10,8 +10,8 @@ from httpx import AsyncClient
 from app.health import router as health_router
 
 # Cloud Run reserves some paths ending in `z` (its frontend answers /healthz before the app
-# sees the request), so /health is the one to use there; /healthz stays for local use.
-HEALTH_PATHS = ["/health", "/healthz"]
+# sees the request), so the probe is /health and /healthz does not exist (see test_routing.py).
+HEALTH_PATHS = ["/health"]
 
 
 @pytest.mark.parametrize("path", HEALTH_PATHS)
@@ -50,24 +50,32 @@ def test_health_routes_have_no_dependencies() -> None:
         assert route.methods == {"GET"}, path
 
 
-async def test_healthz_returns_200_with_status_ok(client: AsyncClient) -> None:
+async def test_healthz_is_not_served(client: AsyncClient) -> None:
+    # Cloud Run reserves paths ending in `z`: the app must not expose one.
     response = await client.get("/healthz")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Not Found", "code": "not_found"}
+
+
+async def test_health_endpoint_returns_200_with_status_ok(client: AsyncClient) -> None:
+    response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-async def test_healthz_does_not_require_auth(client: AsyncClient) -> None:
-    response = await client.get("/healthz")  # no Authorization header
+async def test_health_endpoint_does_not_require_auth(client: AsyncClient) -> None:
+    response = await client.get("/health")  # no Authorization header
     assert response.status_code == 200
 
 
-async def test_healthz_response_carries_request_id_header(client: AsyncClient) -> None:
-    response = await client.get("/healthz")
+async def test_health_endpoint_response_carries_request_id_header(client: AsyncClient) -> None:
+    response = await client.get("/health")
     assert len(response.headers["x-request-id"]) > 0
 
 
 async def test_request_id_from_header_is_echoed_back(client: AsyncClient) -> None:
-    response = await client.get("/healthz", headers={"X-Request-ID": "abc-123.X_y"})
+    response = await client.get("/health", headers={"X-Request-ID": "abc-123.X_y"})
     assert response.headers["x-request-id"] == "abc-123.X_y"
 
 
@@ -75,7 +83,7 @@ async def test_invalid_request_id_header_is_replaced_by_generated_one(
     client: AsyncClient,
 ) -> None:
     for bad in ["has space", "a" * 65, "semi;colon", "tab\there"]:
-        response = await client.get("/healthz", headers={"X-Request-ID": bad})
+        response = await client.get("/health", headers={"X-Request-ID": bad})
         assert response.headers["x-request-id"] != bad
         assert len(response.headers["x-request-id"]) > 0
 
@@ -83,8 +91,8 @@ async def test_invalid_request_id_header_is_replaced_by_generated_one(
 async def test_each_request_without_header_gets_distinct_request_id(
     client: AsyncClient,
 ) -> None:
-    first = await client.get("/healthz")
-    second = await client.get("/healthz")
+    first = await client.get("/health")
+    second = await client.get("/health")
     assert first.headers["x-request-id"] != second.headers["x-request-id"]
 
 
