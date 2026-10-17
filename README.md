@@ -20,7 +20,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 | Frontend | 3000 |
 
 ### Pasos
-1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Backend: `cp backend/.env.example backend/.env` es opcional (el backend funciona con los valores por defecto). Frontend: `cp frontend/.env.example frontend/.env.local` es **obligatorio** (sin él, `npm run dev` y `npm run build` fallan listando las variables que faltan).
+1. (Opcional) `cp .env.example .env` en la raíz para cambiar puertos o credenciales locales; el compose funciona sin él. Backend: `cp backend/.env.example backend/.env` es opcional (el backend funciona con los valores por defecto). Frontend: `cp frontend/.env.example frontend/.env.local` es **obligatorio** (sin él, `npm run dev` y `npm run build` fallan listando las variables que faltan). Este paso lo hace el humano: los agentes de Claude Code no pueden crear archivos `.env*` (reglas `deny` de `.claude/settings.json`).
 2. PostgreSQL y emulador de Firebase Auth: `docker compose up -d` desde la raíz (la primera vez construye la imagen del emulador). Comprueba con `docker compose ps` que ambos estén `healthy`.
    - UI del emulador: <http://localhost:4000> · Auth en `localhost:9099`.
    - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
@@ -44,6 +44,7 @@ El desarrollo lo hace un equipo de agentes de Claude Code coordinado con la skil
 ### Requisitos para trabajar en una máquina nueva
 - **Claude Code** reciente (probado con 2.1.289), iniciado **en la terminal** desde la raíz del repo. La extensión de VS Code no lee el `defaultMode` del proyecto.
 - **Aceptar el diálogo de confianza** al abrir el repo. Sin eso, los hooks de los subagentes (`guard_scope`) no corren; el hook `check_trust` avisa al iniciar si falta.
+- **`frontend/.env.local`** copiado a mano (paso 1 de "Levantar todo en local"): los agentes no pueden crearlo y sin él el frontend no levanta ni compila. El hook `check_trust` avisa al iniciar si falta (solo comprueba que exista, no lo lee).
 - **python3** en el `PATH`: los hooks de `.claude/hooks/` lo usan.
 - **Identidad de git**: `git config --global user.name` y `user.email`.
 - **GitHub CLI** autenticado (`gh auth login`), para los PRs y `/cierre`.

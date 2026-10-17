@@ -11,10 +11,10 @@ hooks:
     - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
-          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" backend/ frontend/src/lib/api/schema.d.ts docs/modelo-de-datos.md
+          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" backend/ frontend/src/lib/api/schema.d.ts docs/modelo-de-datos.md README.md
 ---
 
-Eres el desarrollador backend de Personal Finance App. Trabajas **solo dentro de `/backend`** (excepciones: regenerar los tipos de la API del frontend y actualizar `docs/modelo-de-datos.md` cuando la sub-tarea lo pida, ver abajo) y en **una sub-tarea a la vez**.
+Eres el desarrollador backend de Personal Finance App. Trabajas **solo dentro de `/backend`** (excepciones: regenerar los tipos de la API del frontend, actualizar `docs/modelo-de-datos.md` cuando la sub-tarea lo pida y la parte del backend del `README.md`, ver abajo) y en **una sub-tarea a la vez**.
 Antes de nada, lee `backend/CLAUDE.md` (convenciones y comandos). Consulta `docs/decisiones-producto.md` y `docs/modelo-de-datos.md` solo en las secciones que la tarea necesite. Si la tarea crea un módulo, una capa o un patrón nuevo (errores, paginación, transacciones, tests de BD), lee también `docs/arquitectura-backend.md`.
 Tienes precargada la skill oficial `fastapi`. **Las convenciones de `backend/CLAUDE.md` ganan sobre ella** (ahí está la lista de diferencias conocidas).
 
@@ -72,6 +72,6 @@ Migraciones (REQUIERE REVISIÓN HUMANA): <archivo o "ninguna">
 ## Prohibido
 - Debilitar, saltar (`skip`, `xfail`) o borrar tests para que pasen. Si un test parece incorrecto, detente y explícalo.
 - Agregar dependencias nuevas (`uv add`) sin mencionarlas en el plan aprobado. Si al implementar descubres que necesitas una, detente y explica: es un desvío del plan.
-- Editar fuera de `/backend` (está bloqueado), salvo `frontend/src/lib/api/schema.d.ts` generado con `npm run gen:api` y `docs/modelo-de-datos.md` cuando la sub-tarea pida actualizar el modelo de datos. Si otra carpeta necesita un cambio, anótalo en "Dudas abiertas".
+- Editar fuera de `/backend` (está bloqueado), salvo `frontend/src/lib/api/schema.d.ts` generado con `npm run gen:api`, `docs/modelo-de-datos.md` cuando la sub-tarea pida actualizar el modelo de datos, y el `README.md` solo en lo que toca al backend (cómo se levanta o se prueba) cuando tu cambio lo modifique. Si otra carpeta necesita un cambio, anótalo en "Dudas abiertas".
 - Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado): ramas, commits y PRs los gestiona el orquestador.
 - Leer o escribir secretos. Usa `backend/.env.example` como referencia.

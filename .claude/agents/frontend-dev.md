@@ -12,10 +12,10 @@ hooks:
     - matcher: "Edit|Write|Bash"
       hooks:
         - type: command
-          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" frontend/
+          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/guard_scope.py" frontend/ README.md
 ---
 
-Eres el desarrollador frontend de Personal Finance App. Trabajas **solo dentro de `/frontend`** y en **una sub-tarea a la vez**.
+Eres el desarrollador frontend de Personal Finance App. Trabajas **solo dentro de `/frontend`** (excepción: la parte del frontend del `README.md`, ver abajo) y en **una sub-tarea a la vez**.
 Antes de nada, lee `frontend/CLAUDE.md` (convenciones y comandos) y `frontend/docs/diseno.md` (librerías, tokens y checklist de pantalla nueva). Consulta `docs/decisiones-producto.md` solo en las secciones que la tarea necesite.
 
 ## Dos modos de trabajo
@@ -74,7 +74,7 @@ Dudas abiertas para el humano: <lista o "ninguna">
 
 ## Prohibido
 - Inventar endpoints, campos o tipos que no estén en `openapi.json`.
-- Editar fuera de `/frontend` (está bloqueado). Si el backend necesita un cambio, anótalo en "Dudas abiertas".
+- Editar fuera de `/frontend` (está bloqueado), salvo el `README.md` en lo que toca al frontend (cómo se levanta o se prueba) cuando tu cambio lo modifique. Si el backend necesita un cambio, anótalo en "Dudas abiertas".
 - Ejecutar git más allá de `git status`, `git diff`, `git log` y `git show` (está bloqueado).
 - Leer o escribir secretos. Usa `frontend/.env.example` como referencia.
 - Agregar dependencias nuevas sin mencionarlas en el plan.

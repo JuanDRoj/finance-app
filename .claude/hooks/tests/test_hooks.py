@@ -248,6 +248,27 @@ try:
                              capture_output=True, text=True, env=env)
         got = "warn" if out.stdout.strip() and "systemMessage" in json.loads(out.stdout) else None
         expect(label, got, expected, out.stdout or out.stderr)
+
+    print("\n=== check_trust: frontend/.env.local ===")
+    write(f"{P}/frontend/.env.example", "BACKEND_URL=http://localhost:8000\n")
+    for label, trusted, with_local, expected in [
+        ("plantilla sin .env.local → aviso del .env.local", True, False, "env"),
+        ("plantilla con .env.local → silencio", True, True, None),
+        ("sin confianza y sin .env.local → los dos avisos", False, False, "trust+env"),
+    ]:
+        write(f"{config_dir}/.claude.json", json.dumps({"projects": {P: {"hasTrustDialogAccepted": trusted}}}))
+        local = f"{P}/frontend/.env.local"
+        if with_local:
+            write(local, "NO_SE_LEE=1\n")
+        elif os.path.exists(local):
+            os.remove(local)
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=P, CLAUDE_CONFIG_DIR=config_dir)
+        out = subprocess.run(["python3", os.path.join(HOOKS, "check_trust.py")],
+                             input=json.dumps({"hook_event_name": "SessionStart", "source": "startup", "cwd": P}),
+                             capture_output=True, text=True, env=env)
+        message = json.loads(out.stdout)["systemMessage"] if out.stdout.strip() else ""
+        tags = [tag for tag, needle in (("trust", "confiable"), ("env", ".env.local")) if needle in message]
+        expect(label, "+".join(tags) or None, expected, out.stdout or out.stderr)
     shutil.rmtree(config_dir)
 finally:
     shutil.rmtree(P)
