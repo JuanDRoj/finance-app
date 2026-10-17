@@ -12,7 +12,7 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
 - Node.js 24 con npm (fijado en `frontend/.nvmrc`; con nvm o fnm: `nvm use` dentro de `frontend/`).
 
 ### Puertos
-| Servicio | Puerto |
+| Servicio | Puerto (por defecto) |
 |---|---|
 | PostgreSQL | 5432 |
 | Emulador Firebase Auth | 9099 (UI en 4000) |
@@ -26,7 +26,9 @@ App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `
    - PostgreSQL 16 en `localhost:5432` (usuario `finance`, contraseña de desarrollo del `.env.example`). Crea la BD `finance` y `finance_test` (para los tests del backend).
    - `finance_test` solo se crea con el volumen vacío. Si ya existía el volumen: `docker compose exec postgres createdb -U finance finance_test`.
    - Los tests del backend migran `finance_test` una vez por corrida y la dejan migrada. Si cambias a una rama con migraciones más viejas, la suite se detiene pidiendo recrearla: `docker compose exec postgres dropdb -U finance finance_test && docker compose exec postgres createdb -U finance finance_test`.
-   - Los datos de PostgreSQL persisten en el volumen `finance_pgdata`; `docker compose down` los conserva y `docker compose down -v` los borra. Los usuarios del emulador no persisten.
+   - **Segundo checkout en la misma máquina:** en su `.env` cambia `COMPOSE_PROJECT_NAME`, `POSTGRES_CONTAINER_NAME`, `FIREBASE_EMULATOR_CONTAINER_NAME` y los tres puertos (`POSTGRES_PORT`, `FIREBASE_AUTH_EMULATOR_PORT`, `FIREBASE_EMULATOR_UI_PORT`). Así tiene su propia BD y no choca con el primero. En `backend/.env` ajusta `DATABASE_URL`, `TEST_DATABASE_URL` y `FIREBASE_AUTH_EMULATOR_HOST`; en `frontend/.env.local`, `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST`.
+   - Si corres el backend o el frontend de las dos copias a la vez, usa otro puerto en la segunda (por ejemplo `uv run fastapi dev app/main.py --port 8001` y `npm run dev -- --port 3001`) y ajusta `BACKEND_URL` en `frontend/.env.local`. Con el frontend en el 3001, el backend de esa copia necesita `ALLOWED_ORIGINS=http://localhost:3001` en `backend/.env` (por defecto solo acepta `http://localhost:3000` y el login daría 403 `origin_not_allowed`).
+   - Los datos de PostgreSQL persisten en el volumen `<proyecto>_finance_pgdata` (por defecto `finance-app_finance_pgdata`); `docker compose down` los conserva y `docker compose down -v` los borra. Los usuarios del emulador no persisten.
 3. Backend en el puerto 8000: `cd backend && uv sync && uv run alembic upgrade head && uv run fastapi dev app/main.py` (Python 3.14; uv lo descarga si falta). `alembic upgrade head` aplica las migraciones a la BD `finance`; repítelo cada vez que llegue una migración nueva. Comprueba con `curl localhost:8000/health`.
 4. Frontend en el puerto 3000: `cd frontend && npm ci && npm run dev` (requiere el `.env.local` del paso 1). Abre <http://localhost:3000>.
 

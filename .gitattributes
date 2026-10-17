@@ -1,0 +1,16 @@
+# Finales de línea: LF siempre (scripts y Dockerfiles fallan con CRLF en Linux/contenedores).
+* text=auto eol=lf
+*.sh text eol=lf
+
+# Binarios: nunca se convierten.
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
