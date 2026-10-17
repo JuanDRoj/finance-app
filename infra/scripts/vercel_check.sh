@@ -130,8 +130,11 @@ if [[ "$CODE" == "307" && "$location" == */login ]]; then
 else
   st_fail "GET / -> ${CODE}${location:+ a ${location}} (se esperaba 307 a /login)"
 fi
-# Informativo: la region de la funcion que atendio / (x-vercel-id = <borde>::<funcion>::<id>) y el
-# despliegue que sirvio la respuesta. Cambia con cada despliegue; el alias no.
+# Informativo, nunca un fallo: la cabecera de id es <borde>::<id> y solo lleva un segmento extra con la
+# region de la funcion (<borde>::<funcion>::<id>) cuando una funcion atendio el pedido. Ninguna ruta
+# publica pasa por una funcion: /login es estatica y / sin cookie la contesta el proxy de rutas privadas
+# con su redireccion, asi que lo normal aqui es ver solo la region del BORDE. La region de las funciones
+# se confirma en el dashboard (Settings > Functions), no con este script.
 vid="$(header x-vercel-id)"
 if [[ "$vid" == *::*::* ]]; then
   rest="${vid#*::}"
@@ -139,13 +142,19 @@ if [[ "$vid" == *::*::* ]]; then
   if [[ "$fn_region" == "$VERCEL_REGION" ]]; then
     st_ok "Region de la funcion (x-vercel-id): ${fn_region}"
   else
-    st_warn "Region de la funcion (x-vercel-id): ${fn_region}, se esperaba ${VERCEL_REGION}. Es indicativo: hasta que el despliegue de KAN-14 llegue a main puede seguir la region por defecto. Confirma en el dashboard (Settings > Functions)"
+    st_warn "Region de la funcion (x-vercel-id): ${fn_region}, se esperaba ${VERCEL_REGION}. Hasta que el despliegue de KAN-14 llegue a main puede seguir la region por defecto. Confirma en el dashboard (Settings > Functions)"
   fi
+elif [[ -n "$vid" ]]; then
+  st_info "x-vercel-id=${vid}: solo trae la region del borde (${vid%%::*}); no hay segmento de funcion porque este pedido no la invoco. No dice nada de la region de las funciones: se confirma en Settings > Functions"
 else
-  st_info "x-vercel-id sin region de funcion (${vid:-<ausente>}): la respuesta no paso por una funcion"
+  st_info "La respuesta no trae x-vercel-id: la region de las funciones se confirma en Settings > Functions"
 fi
 dep="$(header x-vercel-deployment-url)"
-st_info "Despliegue que sirvio la respuesta: ${dep:-<cabecera ausente>} (cambia con cada despliegue; el alias debe seguir respondiendo)"
+if [[ -n "$dep" ]]; then
+  st_info "Despliegue que sirvio la respuesta: ${dep} (cambia con cada despliegue; el alias debe seguir respondiendo)"
+else
+  st_info "La respuesta no trae la cabecera del despliegue: la estabilidad del alias se confirma en Settings > Domains y repitiendo este script tras el siguiente despliegue"
+fi
 
 # --- Criterio 2 ---------------------------------------------------------------------------------------
 step "2/5 Criterio 2: /api/health responde 200 por el rewrite"
@@ -227,5 +236,5 @@ done
 # --- Resumen ------------------------------------------------------------------------------------------
 step "5/5 Resumen"
 st_info "Pendiente a mano: criterio 4 (el build falla con NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST en Vercel) y criterio 5 (la preview del PR compila): ver infra/RECURSOS.md"
-st_info "Pendiente a mano: en el dashboard, el alias en Settings > Domains y la region en Settings > Functions"
+st_info "Pendiente a mano: en el dashboard, el alias en Settings > Domains y la region de las funciones en Settings > Functions (desde fuera no se mide: ninguna ruta publica invoca una funcion)"
 summary
