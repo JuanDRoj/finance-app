@@ -5,7 +5,7 @@ Despliegue: Vercel (funciones en `gru1`). Diseño **web responsive**: se diseña
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
-> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`), **KAN-40 [FE-09]** (identidad Kanza), **KAN-28 [FE-05]** (home y cookie de sesión del servidor), **KAN-27 [FE-04]** (proxy de rutas privadas y cierre de sesión), **KAN-41 [FE-10]** (`AppShell` responsive: barra lateral y menú del avatar) y **KAN-42 [FE-11]** (fuentes locales, build sin red): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
+> **Nota:** los comandos y la estructura de abajo son la convención acordada. Los fijaron **KAN-24 [FE-01]** (setup), **KAN-25 [FE-02]** (cliente API), **KAN-33 [FE-07]** (tokens, tema y base), **KAN-34 [FE-08]** (componentes base y catálogo), **KAN-26 [FE-03]** (login, `lib/firebase.ts`, `TextField`), **KAN-40 [FE-09]** (identidad Kanza), **KAN-28 [FE-05]** (home y cookie de sesión del servidor), **KAN-27 [FE-04]** (proxy de rutas privadas y cierre de sesión), **KAN-41 [FE-10]** (`AppShell` responsive: barra lateral y menú del avatar), **KAN-42 [FE-11]** (fuentes locales, build sin red) y **KAN-14 [INF-08]** (`vercel.json`, región de las funciones): si tareas posteriores los cambian, **actualiza este archivo en la misma tarea**. Lo marcado _(pendiente)_ aún no existe.
 
 ## Versiones
 Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** y ESLint **9**. TypeScript se queda en 5.9 porque `openapi-typescript` (FE-02) pide `^5.x` y `typescript-eslint` solo llega a `<6.1` (TS 7 no está soportado); ESLint no pasa de 9 porque `eslint-config-next` 16 se rompe con ESLint 10 (`eslint-plugin-react`). Súbelos cuando esos paquetes lo soporten. Next, React y `eslint-config-next` van con versión exacta: cámbialos juntos. Vitest 5 usa Vite 8: el alias `@/` se resuelve con `resolve.tsconfigPaths` (no hace falta `vite-tsconfig-paths`).
@@ -91,6 +91,7 @@ frontend/
 ├── .nvmrc                      # versión de Node
 ├── eslint.config.mjs           # ESLint (flat config): prohíbe `process.env` fuera de lib/env/, el import raíz de Phosphor, `next/font/google` y lo que core no puede importar
 ├── .prettierrc.json            # Prettier (printWidth 100; el resto sale de ../.editorconfig)
+├── vercel.json                 # (KAN-14) solo la región de las funciones (`gru1`); la mantiene infra. El rewrite NO va aquí: vive en `next.config.ts`
 └── next.config.ts              # valida el entorno; rewrite /api/* → backend; optimizePackageImports de Phosphor; `pageExtensions` por fase (el catálogo `*.dev.tsx` solo en `next dev`)
 ```
 

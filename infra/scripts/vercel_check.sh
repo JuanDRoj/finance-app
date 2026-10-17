@@ -18,7 +18,8 @@
 #               not_found): solo existen con ENV=local.
 #   Criterios 4 y 5  no se miden aqui: son del dashboard de Vercel y de GitHub (ver infra/RECURSOS.md).
 #
-# Ninguna prueba necesita la instancia de Cloud SQL encendida. El script no envia nunca una cookie.
+# Ninguna prueba necesita la instancia de Cloud SQL encendida. El script no envia nunca una cookie (ni
+# siquiera una que viniera de ~/.curlrc: curl se llama con -q) y nunca imprime una cookie.
 #
 # Uso:
 #   bash infra/scripts/vercel_check.sh                      # contra FRONTEND_URL de staging.env
@@ -49,26 +50,50 @@ OTHER_ORIGIN="https://evil.invalid"           # un origen que nunca estara permi
 
 HDR_FILE=""
 BODY_FILE=""
+ERR_FILE=""
 CODE="000"
 cleanup() {
   if [[ -n "$HDR_FILE" ]]; then rm -f "$HDR_FILE"; fi
   if [[ -n "$BODY_FILE" ]]; then rm -f "$BODY_FILE"; fi
+  if [[ -n "$ERR_FILE" ]]; then rm -f "$ERR_FILE"; fi
 }
 trap cleanup EXIT
 trap 'exit 1' INT TERM HUP
 
+# curl_cause <codigo de salida de curl>: la causa de que no haya (o llegue incompleta) una respuesta.
+curl_cause() {
+  case "$1" in
+    6) printf 'DNS: no se pudo resolver el nombre del dominio' ;;
+    7) printf 'conexion: rechazada o sin ruta al servidor' ;;
+    28) printf 'timeout: la conexion tarda mas de 10 s o el pedido mas de %s s' "$HTTP_TIMEOUT" ;;
+    35 | 51 | 58 | 59 | 60 | 77 | 82 | 83 | 90 | 91) printf 'TLS: fallo del saludo o del certificado' ;;
+    *) printf 'curl termino con el codigo %s' "$1" ;;
+  esac
+}
+
 # request <metodo> <ruta> [cabecera...]: deja el codigo en $CODE (000 si no hubo respuesta), las cabeceras
 # en $HDR_FILE y el cuerpo en $BODY_FILE. Sin redirecciones automaticas y solo por https.
+# - `-q` va PRIMERO a proposito (curl solo lo respeta como primer argumento): asi no lee ~/.curlrc, donde un
+#   `-b` mandaria una cookie y romperia la promesa de que este script no envia nunca una.
+# - El stderr de curl va a $ERR_FILE y no a la pantalla. Sin -v no lleva cabeceras ni cookies; si no hubo
+#   respuesta (000) se muestra solo su primera linea, junto con la causa (DNS, TLS, timeout...).
 request() {
-  local method="$1" path="$2" h
+  local method="$1" path="$2" h rc=0 detail
   local args=()
   shift 2
   for h in "$@"; do args+=(-H "$h"); done
   : >"$HDR_FILE"
   : >"$BODY_FILE"
-  CODE="$(curl -sS --proto '=https' --max-time "$HTTP_TIMEOUT" -X "$method" "${args[@]+"${args[@]}"}" \
-    -D "$HDR_FILE" -o "$BODY_FILE" -w '%{http_code}' "${FRONTEND_URL}${path}" 2>/dev/null)" || true
+  : >"$ERR_FILE"
+  CODE="$(curl -q -sS --proto '=https' --connect-timeout 10 --max-time "$HTTP_TIMEOUT" -X "$method" "${args[@]+"${args[@]}"}" \
+    -D "$HDR_FILE" -o "$BODY_FILE" -w '%{http_code}' "${FRONTEND_URL}${path}" 2>"$ERR_FILE")" || rc=$?
   CODE="${CODE:-000}"
+  detail="$(head -n 1 "$ERR_FILE" | tr -d '\r' | cut -c1-200)"
+  if [[ "$CODE" == "000" ]]; then
+    st_info "Sin respuesta para ${method} ${path} (curl ${rc}) - $(curl_cause "$rc")${detail:+. curl dijo: ${detail}}"
+  elif [[ "$rc" != "0" ]]; then
+    st_warn "La respuesta de ${method} ${path} (${CODE}) llego incompleta (curl ${rc}) - $(curl_cause "$rc"): los resultados de abajo pueden no ser fiables"
+  fi
 }
 
 # header <nombre>: valor de esa cabecera de respuesta (sin CR; si se repite, la ultima). Vacio si no esta.
@@ -99,16 +124,19 @@ FRONTEND_URL="${URL_OVERRIDE:-$FRONTEND_URL}"
 [[ "$VERCEL_REGION" =~ ^[a-z]{3}[0-9]$ ]] || die "VERCEL_REGION no es una region valida: ${VERCEL_REGION}"
 
 # El Origin que el backend acepta: el primero de STAGING_ALLOWED_ORIGINS (o el que se pida a mano).
-ALLOWED_ORIGIN="${ORIGIN_OVERRIDE:-${STAGING_ALLOWED_ORIGINS%%,*}}"
+FIRST_ALLOWED_ORIGIN="${STAGING_ALLOWED_ORIGINS%%,*}"
+ALLOWED_ORIGIN="${ORIGIN_OVERRIDE:-$FIRST_ALLOWED_ORIGIN}"
 [[ "$ALLOWED_ORIGIN" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] \
   || die "El Origin del criterio 3 no es un origen valido (https://host): ${ALLOWED_ORIGIN}"
 [[ "$ALLOWED_ORIGIN" != "$OTHER_ORIGIN" ]] || die "ALLOWED_ORIGIN no puede ser el origen de la prueba negativa (${OTHER_ORIGIN})"
 
 HDR_FILE="$(mktemp)"
 BODY_FILE="$(mktemp)"
+ERR_FILE="$(mktemp)"
 log "Frontend: ${FRONTEND_URL} · Origin permitido para la prueba: ${ALLOWED_ORIGIN} · region esperada: ${VERCEL_REGION}"
-if [[ "$STAGING_ALLOWED_ORIGINS" != "$STAGING_FRONTEND_URL" ]]; then
-  st_warn "STAGING_ALLOWED_ORIGINS (${STAGING_ALLOWED_ORIGINS}) no es FRONTEND_URL de staging.env (${STAGING_FRONTEND_URL}): alguno de los dos quedo desactualizado"
+# Solo el primer origen: la lista puede llegar a tener varios y los demas no son el alias de staging.
+if [[ "$FIRST_ALLOWED_ORIGIN" != "$STAGING_FRONTEND_URL" ]]; then
+  st_warn "El primer origen de STAGING_ALLOWED_ORIGINS (${FIRST_ALLOWED_ORIGIN}) no es FRONTEND_URL de staging.env (${STAGING_FRONTEND_URL}): alguno de los dos quedo desactualizado"
 fi
 if [[ "$FRONTEND_URL" != "$STAGING_FRONTEND_URL" ]]; then
   st_info "Se prueba ${FRONTEND_URL}, que no es el alias de staging (${STAGING_FRONTEND_URL}): no sirve como evidencia del criterio 1"
