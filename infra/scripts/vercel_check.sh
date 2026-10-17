@@ -162,7 +162,8 @@ fi
 # region de la funcion (<borde>::<funcion>::<id>) cuando una funcion atendio el pedido. Ninguna ruta
 # publica pasa por una funcion: /login es estatica y / sin cookie la contesta el proxy de rutas privadas
 # con su redireccion, asi que lo normal aqui es ver solo la region del BORDE. La region de las funciones
-# se confirma en el dashboard (Settings > Functions), no con este script.
+# se confirma en la pagina del despliegue (dashboard), no con este script. Settings > Functions no sirve:
+# muestra la region por defecto del proyecto (iad1) y vercel.json la sobrescribe en cada despliegue.
 vid="$(header x-vercel-id)"
 if [[ "$vid" == *::*::* ]]; then
   rest="${vid#*::}"
@@ -170,12 +171,12 @@ if [[ "$vid" == *::*::* ]]; then
   if [[ "$fn_region" == "$VERCEL_REGION" ]]; then
     st_ok "Region de la funcion (x-vercel-id): ${fn_region}"
   else
-    st_warn "Region de la funcion (x-vercel-id): ${fn_region}, se esperaba ${VERCEL_REGION}. Hasta que el despliegue de KAN-14 llegue a main puede seguir la region por defecto. Confirma en el dashboard (Settings > Functions)"
+    st_warn "Region de la funcion (x-vercel-id): ${fn_region}, se esperaba ${VERCEL_REGION}. Confirma la region efectiva en la pagina del despliegue (dashboard)"
   fi
 elif [[ -n "$vid" ]]; then
-  st_info "x-vercel-id=${vid}: solo trae la region del borde (${vid%%::*}); no hay segmento de funcion porque este pedido no la invoco. No dice nada de la region de las funciones: se confirma en Settings > Functions"
+  st_info "x-vercel-id=${vid}: solo trae la region del borde (${vid%%::*}); no hay segmento de funcion porque este pedido no la invoco. No dice nada de la region de las funciones: se confirma en la pagina del despliegue (dashboard)"
 else
-  st_info "La respuesta no trae x-vercel-id: la region de las funciones se confirma en Settings > Functions"
+  st_info "La respuesta no trae x-vercel-id: la region de las funciones se confirma en la pagina del despliegue (dashboard)"
 fi
 dep="$(header x-vercel-deployment-url)"
 if [[ -n "$dep" ]]; then
@@ -263,6 +264,6 @@ done
 
 # --- Resumen ------------------------------------------------------------------------------------------
 step "5/5 Resumen"
-st_info "Pendiente a mano: criterio 4 (el build falla con NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST en Vercel) y criterio 5 (la preview del PR compila): ver infra/RECURSOS.md"
-st_info "Pendiente a mano: en el dashboard, el alias en Settings > Domains y la region de las funciones en Settings > Functions (desde fuera no se mide: ninguna ruta publica invoca una funcion)"
-summary
+st_info "No se mide aqui: criterio 4 (el build falla con NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST en Vercel) y criterio 5 (la preview del PR compila): son del dashboard de Vercel y de GitHub, ver infra/RECURSOS.md"
+st_info "No se mide aqui: el alias en Settings > Domains y la region efectiva de las funciones, que se ve en la pagina del despliegue (Settings > Functions muestra la region por defecto del proyecto, no la efectiva; desde fuera no se mide: ninguna ruta publica invoca una funcion)"
+summary_check

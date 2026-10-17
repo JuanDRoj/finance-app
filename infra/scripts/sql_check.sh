@@ -70,7 +70,7 @@ if is_dry; then
   log "Se abriría: cloud-sql-proxy --port ${SQL_PROXY_PORT} ${SQL_CONNECTION_NAME}"
   log "Se consultaría como ${DB_USER} a ${DB_NAME} con la contraseña del secreto ${DB_PASSWORD_SECRET} (sin mostrarla)"
   step "4/4 Resumen"
-  summary
+  summary_check
   exit 0
 fi
 
@@ -127,4 +127,4 @@ if [[ "$r_super" == "t" ]]; then
 fi
 
 step "4/4 Resumen"
-summary
+summary_check

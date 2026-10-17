@@ -196,4 +196,4 @@ step "4/4 Resumen"
 if [[ "$RUN_JOB" == "1" ]]; then
   st_info "Cuando termines, apaga la instancia: bash infra/scripts/sql_power.sh stop"
 fi
-summary
+summary_check

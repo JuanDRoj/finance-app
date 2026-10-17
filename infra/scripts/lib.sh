@@ -51,6 +51,8 @@ confirm() {
 # --- Estado por recurso y resumen final ---
 # Cada recurso se reporta con una etiqueta: ya existía, creado, corregido, aviso o fallo.
 # En dry-run, "creado" y "corregido" pasan a "se crearía" y "se corregiría".
+# Dos resúmenes: `summary` para los scripts que crean o corrigen recursos y `summary_check` para los que
+# solo verifican (no crean ni corrigen nada: cuentan comprobaciones que pasan).
 N_OK=0; N_CREATED=0; N_FIXED=0; N_WARN=0; N_FAIL=0
 
 st_ok()      { N_OK=$((N_OK + 1)); log "[ok] $*"; }
@@ -69,6 +71,22 @@ summary() {
   fi
   if (( N_CREATED == 0 && N_FIXED == 0 )); then
     log "Nada que crear ni corregir."
+  fi
+  return 0
+}
+
+# Resumen de los scripts que solo verifican (cloud_run_check, sql_check, vercel_check): no crean ni
+# corrigen nada, así que cuentan comprobaciones que pasan. Devuelve 1 si hubo algún fallo.
+summary_check() {
+  log "RESUMEN: pasan=${N_OK} avisos=${N_WARN} fallos=${N_FAIL}"
+  if (( N_FAIL > 0 )); then
+    log "Hay fallos: revisa las líneas [FALLO] de arriba."
+    return 1
+  fi
+  if (( N_WARN > 0 )); then
+    log "Sin fallos, pero revisa las líneas [AVISO] de arriba."
+  else
+    log "Todo en verde."
   fi
   return 0
 }

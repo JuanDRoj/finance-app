@@ -57,7 +57,8 @@ FILE_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 
 # git de solo lectura que un subagente puede usar.
 READ_ONLY_GIT = {"status", "diff", "log", "show", "blame", "ls-files", "rev-parse", "grep",
-                 "describe", "shortlog", "cat-file"}
+                 "describe", "shortlog", "cat-file", "ls-tree", "rev-list", "merge-base",
+                 "for-each-ref", "show-ref"}
 BRANCH_WRITE_FLAGS = {"-d", "-D", "-m", "-M", "-c", "-C", "-f", "--delete", "--move", "--copy",
                       "--force", "-u", "--set-upstream-to", "--unset-upstream"}
 BRANCH_LIST_FLAGS = {"--list", "-l", "--show-current", "--contains", "--merged", "--no-merged"}
