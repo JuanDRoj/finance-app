@@ -404,7 +404,7 @@ Cada fila se identifica por el comienzo de su texto. **"Verificado a ojo"** quie
 
 | Fila de §4 | Qué sigue abierto | Por qué |
 |---|---|---|
-| "Glass: CSS generado …" (hardware y media query) | Safari 16.4-17 real, Android de gama baja y `prefers-reduced-transparency: reduce` | B1 y B4 NO VERIFICABLE: no hay dispositivos con iOS 16.4-17 ni Android de gama baja. **A9 NO EJECUTADO** por decisión del humano (requiere emulación de DevTools). B3 (reducir transparencia en el sistema) no se ejecutó. De esta fila no se actualiza nada: sigue tal cual. |
+| "Glass: CSS generado …" (hardware y media query) | Safari 16.4-17 real, Android de gama baja y `prefers-reduced-transparency: reduce` | B1 y B4 NO VERIFICABLE: no hay dispositivos con iOS 16.4-17 ni Android de gama baja. **A9 NO EJECUTADO** por decisión del humano (requiere emulación de DevTools). B3 (reducir transparencia en el sistema) no se ejecutó. Su estado no cambia; en §4 solo se anota por qué KAN-62 no pudo verificarlo (B1, B4, A9). |
 | "Blur de `card-surface` …" | Confirmar el desenfoque de 20 px en un dispositivo real | El humano no respondió la decisión. No depende de la versión de iOS: se puede responder viendo el Inicio de staging en el iPhone 17 Pro o el Pixel 10. |
 | "Identidad Kanza (KAN-40) …" | **Carga de Bricolage sin salto visible** (A12) | **A12 NO EJECUTADO** por decisión del humano (requiere throttling de DevTools). |
 | "`AppShell` responsive … contra el lienzo" | **Inicio a 360 px exactos** (A13) | **A13 NO EJECUTADO:** requiere sesión en staging y Cloud SQL no se encendió. Solo lo cubre KAN-30 en un Pixel 10 y un iPhone 17 Pro de unos 400 px CSS (7.1): no escribir «a 360 px» en §4 como verificado. |
