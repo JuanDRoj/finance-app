@@ -45,6 +45,12 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     title: "La contraseña es muy débil",
     message: "Elige una más larga y difícil de adivinar.",
   },
+  // The project's password policy (staging: required, minimum 8) rejected the password. Keep the
+  // text in sync with `PASSWORD_MIN_LENGTH` in schemas/auth.ts.
+  "auth/password-does-not-meet-requirements": {
+    title: "La contraseña no cumple los requisitos",
+    message: "Usa al menos 8 caracteres e inténtalo de nuevo.",
+  },
   "auth/operation-not-allowed": {
     title: "Este método de acceso no está disponible",
     message: `Prueba con otro método o inténtalo más tarde. ${SAFE}`,

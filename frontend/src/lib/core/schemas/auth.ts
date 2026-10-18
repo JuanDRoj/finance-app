@@ -8,7 +8,11 @@ import { z } from "zod";
  * Messages are the Spanish text shown under each field.
  */
 
-/** Firebase's own minimum is 6; creating an account asks for a bit more. */
+/**
+ * Matches the Firebase password policy of the staging project (required, minimum 8): the form
+ * rejects what Firebase would. Keep them in sync, and the text of
+ * `auth/password-does-not-meet-requirements` in lib/core/firebase-errors.ts.
+ */
 export const PASSWORD_MIN_LENGTH = 8;
 
 const EMAIL_REQUIRED = "Escribe tu correo.";
