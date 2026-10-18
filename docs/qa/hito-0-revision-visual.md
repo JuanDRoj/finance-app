@@ -188,6 +188,8 @@ Esperados de "Contenido" (la columna de contenido, `main`). Del lienzo: celular,
 | A3-7 | 1280 | visible | 1140 px | OK (a ojo) | no se pide |
 | A3-8 | 1440 | visible | 1300 px | OK (a ojo) | OK (a ojo) |
 
+Las celdas Claro/Oscuro reflejan lo que pedía el paso, no una confirmación por celda: el humano confirmó "a ojo, varios anchos, claro y oscuro" (ver nota de la sección 2).
+
 En cada fila además: **Scroll horizontal "no"**, y las tres listas ("Controles menores de 44 px", "Elementos que se salen de la pantalla", "Botones y enlaces con el texto recortado") en **0**. Si aparece algo, anota la línea textual del panel: un control real menor de 44 px, un desborde o un texto recortado es FALLA.
 
 **Diferencia conocida en A3-5 y A4 (768 px):** qa calculó del código que `main` mide **608 px**, no 640: `AppShell` fija `max-w-160` (640 px) en el mismo elemento que lleva el padding de 16 px por lado, y con `box-sizing: border-box` el contenido queda en 608 px. El lienzo dice 640 px de contenido. Se había previsto como FALLA de severidad Baja si el panel leía 608; el humano decidió **anotarla en `diseno.md` §4, sin tarea**. Es una diferencia conocida por código, **no medida**, y **no es un bug abierto**. Lo mismo vale para cualquier ancho desde 640 hasta 1023 px: el envoltorio mide `min(ancho, 640)` con el padding incluido, así que el contenido es `min(ancho, 640) − 32` y llega a 608 px en cuanto el ancho alcanza 640 px (el lienzo solo tiene artboard de 768 px). Los demás esperados salen del código y coinciden con el lienzo (360 px: gutters de 16 px; escritorio: ancho menos 140 px).
@@ -212,6 +214,8 @@ Valores que el humano debe encontrar (todos del lienzo, confirmados contra `dise
 | A6 | 1440 (artboards "Inicio en escritorio" claro y oscuro) | Barra en x=16; contenido en x=116 con **1300 px**, que termina a 24 px del borde derecho. `h1` de 30 px. Colores de barra y globo de la lista de arriba. | Coincide con los artboards. Nota del artboard: el encabezado del lienzo tiene 4 px de padding lateral y un margen extra de 40 px sobre el primer bloque (por el grillo asomado de Inicio, que es de Hito 1); si ves 4 px de diferencia en el borde del título o del avatar, anótala como observación, no como FALLA. | Pantalla completa a 1440 px, con el globo "Inicio" abierto. | OK (a ojo) | OK (a ojo) | |
 | A7 | **1920** | Con 1920 px de ancho (DevTools "Desktop"), el grupo barra + contenido mide como máximo 1440 px y queda **centrado**: barra en x=256, contenido en x=356 con 1300 px, que termina en x=1656. | Unos 240 px de aire a cada lado; nada estirado hasta los bordes; la barra no queda pegada al borde izquierdo. Con el panel Auditoría: Contenido 1300 px. | Pantalla completa a 1920 px. | OK (a ojo) | opcional, no consta | |
 
+Las celdas Claro/Oscuro reflejan lo que pedía el paso, no una confirmación por celda: el humano confirmó "a ojo, varios anchos, claro y oscuro" (ver nota de la sección 2).
+
 ### 2.4 `Toaster` abajo a la derecha a 1280 px
 
 Referencia: `diseno.md` D8 y D17. Ancho 1280 px, tipo "Desktop". Sección **"Avisos con Deshacer"** del catálogo.
@@ -219,6 +223,8 @@ Referencia: `diseno.md` D8 y D17. Ancho 1280 px, tipo "Desktop". Sección **"Avi
 | N.º | Acción | OK es | Captura | Claro | Oscuro | Nota |
 |---|---|---|---|---|---|---|
 | A8 | (1) Pulsa "Eliminar «Café»". (2) Pega S5. (3) Pulsa "Deshacer" en el toast. (4) Pulsa "Toast de error". (5) Cambia el ancho a 1023 px y pulsa "Eliminar «Café»" otra vez. | (1) Un toast "Eliminaste «Café»" con el botón "Deshacer" (44 px de alto), **abajo a la derecha**, a unos 24 px del borde derecho y del inferior, sin tocar la barra lateral (que está a la izquierda); desaparece solo a los 6 s. (2) S5 imprime `right bottom`. (3) Aparece "Restauraste «Café»". (4) El toast de error se apila junto al anterior. (5) A 1023 px el toast sale **abajo y centrado**, con 16 px de margen lateral. | Un toast abierto a 1280 px. | OK (a ojo) | OK (a ojo) | |
+
+Las celdas Claro/Oscuro reflejan lo que pedía el paso, no una confirmación por celda: el humano confirmó "a ojo, varios anchos, claro y oscuro" (ver nota de la sección 2).
 
 ### 2.5 `prefers-reduced-transparency: reduce` (emulado en Chrome)
 
@@ -257,6 +263,8 @@ No están en la descripción de Jira; se incluyeron a propósito porque cuestan 
 | E1 | **Tab por la barra lateral.** Pulsa Tab una vez desde el inicio de la página. | El foco cae en el ícono de Inicio de la barra: anillo de foco menta visible y el globo "Inicio" aparece (invertido respecto a la página); Escape lo cierra. | Barra con foco y globo. | OK (a ojo) | OK (a ojo) | |
 | E2 | **Menú del avatar con teclado.** Con Tab llega al botón "Menú de la cuenta"; Enter abre; flechas arriba y abajo mueven; Escape cierra. **No pulses "Cerrar sesión"** en el catálogo. | El menú abre con nombre y correo (largos: se parten en varias líneas sin salir de la pantalla) y "Cerrar sesión"; las flechas mueven el resaltado con anillo de foco; Escape cierra y devuelve el foco al avatar. No hay salto de diseño al abrir. | Menú abierto. | OK (a ojo) | OK (a ojo) | |
 | E3 | **Contraste a ojo.** Recorre el catálogo entero. | Todo el texto se lee sin esfuerzo: texto secundario sobre tarjetas de vidrio, placeholders, mensajes de error de los campos, el monto de deuda (ámbar), bordes de los campos y anillos de foco, en ambos temas. | Dos capturas: una por tema. | OK (a ojo) | OK (a ojo) | |
+
+Las celdas Claro/Oscuro reflejan lo que pedía el paso, no una confirmación por celda: el humano confirmó "a ojo, varios anchos, claro y oscuro" (ver nota de la sección 2).
 
 ## 3. Parte 3: hardware
 
