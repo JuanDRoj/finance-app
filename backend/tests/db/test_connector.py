@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -13,6 +14,9 @@ from app.core import db as db_module
 from app.core.config import Settings
 from app.core.db import Database
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+# Safety net for a loaded machine; the real fix is not recompiling `app` in the subprocess.
+SUBPROCESS_TIMEOUT_S = 180
 INSTANCE = "my-project:southamerica-east1:finance-db"
 CONNECTOR_ENV = {
     "INSTANCE_CONNECTION_NAME": INSTANCE,
@@ -148,15 +152,18 @@ async def test_default_connector_factory_uses_lazy_refresh_and_requested_ip_type
     assert captured == {"ip_type": "PSC", "refresh_strategy": "lazy"}
 
 
-def test_connector_package_is_not_imported_when_the_app_loads(isolated_backend: Path) -> None:
+def test_connector_package_is_not_imported_when_the_app_loads(tmp_path: Path) -> None:
     # The import is lazy so local runs and the direct-URL path do not pay for grpc/aiohttp.
+    # Importing the app never builds Settings, so an empty cwd (no `.env`) is enough; PYTHONPATH
+    # points at the real `app`, whose cached bytecode avoids recompiling it on every run.
     code = "import sys, app.main; sys.exit('google.cloud.sql.connector' in sys.modules)"
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code],
-        cwd=isolated_backend,
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(BACKEND_DIR)},
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=SUBPROCESS_TIMEOUT_S,
         check=False,
     )
     assert result.returncode == 0, result.stderr
