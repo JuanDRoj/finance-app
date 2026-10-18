@@ -28,6 +28,7 @@ const TRANSLATED_CODES = [
   "auth/too-many-requests",
   "auth/email-already-in-use",
   "auth/weak-password",
+  "auth/password-does-not-meet-requirements",
   "auth/operation-not-allowed",
   "auth/account-exists-with-different-credential",
   "auth/popup-blocked",
@@ -72,6 +73,20 @@ describe("describeFirebaseAuthError", () => {
     );
     expect(title).toBe("Ya existe una cuenta con ese correo");
     expect(message).toContain("Inicia sesión");
+  });
+
+  it("explains in Spanish that the password does not meet the policy, without Firebase's English", () => {
+    const error = new FirebaseError(
+      "auth/password-does-not-meet-requirements",
+      "Firebase: Password does not meet requirements. (auth/password-does-not-meet-requirements).",
+    );
+    // Literal on purpose: the exact text the person sees. If the minimum changes, this fails and
+    // forces a check of the Firebase password policy.
+    expect(describeFirebaseAuthError(error)).toEqual({
+      title: "La contraseña no cumple los requisitos",
+      message: "Usa al menos 8 caracteres e inténtalo de nuevo.",
+    });
+    expect(describeLoginError(error)).toEqual(describeFirebaseAuthError(error));
   });
 
   it("falls back to the generic message for a code it does not know", () => {
