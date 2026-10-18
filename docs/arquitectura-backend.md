@@ -1,8 +1,8 @@
 # Arquitectura del backend
 
-Última actualización: 2026-10-05
+Última actualización: 2026-10-18
 
-Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQL), con su porqué. Las reglas cortas que se aplican en cada tarea viven en `backend/CLAUDE.md`; este documento explica las razones y trae un esqueleto de módulo. **Léelo al crear un módulo, una capa o un patrón nuevo** (errores, paginación, transacciones, tests de BD).
+Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQL), con su porqué. Las reglas cortas que se aplican en cada tarea viven en `backend/CLAUDE.md`; este documento explica las razones y apunta al módulo de referencia (`accounts`, §11). **Léelo al crear un módulo, una capa o un patrón nuevo** (errores, paginación, transacciones, tests de BD).
 
 Fuentes: el artículo *FastAPI Best Practices and Design Patterns* (SOLID, DAO, Service Layer), el repo `Aavache/fastapi-designs`, la documentación oficial (FastAPI 0.142, SQLAlchemy 2.1, Python 3.14, Cloud Run) y pruebas propias contra PostgreSQL. Lo que se descartó de las fuentes está al final, con el motivo.
 
@@ -86,8 +86,9 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 
 ## 5. Schemas y validación
 
-- **Un schema por uso:** `AccountCreate`, `AccountUpdate` (PATCH: todo opcional, se aplica con `model_dump(exclude_unset=True)`) y `AccountRead`.
-- Bases comunes (`app/core/schemas.py`): `InputModel` con `extra="forbid"` (un campo desconocido da 422, lo que atrapa errores del cliente) y `ReadModel` con `from_attributes=True`.
+- **Un schema por uso:** `AccountCreate`, `AccountUpdate` (PATCH: se aplica con `model_dump(exclude_unset=True)`) y `AccountRead`.
+- Bases comunes (`app/core/schemas.py`): `InputModel` con `extra="forbid"` (un campo desconocido da 422, lo que atrapa errores del cliente), `ReadModel` con `from_attributes=True` y `PatchModel` para los PATCH.
+- **PATCH (`PatchModel`, KAN-64):** cada campo se declara `Tipo = unset()`, sin `| None`. Así OpenAPI y los tipos TS dicen `name?: string` (no `string | null`), y un `null` explícito da 422 `null_not_allowed` con el `loc` del campo; un campo que sí se puede vaciar se declara `Tipo | None = None`. `unset()` devuelve `Any` porque el plugin `pydantic.mypy` rechaza `default=None` en un campo no nullable: por eso un PATCH se lee **solo** con `model_dump(exclude_unset=True)`, nunca con atributos sueltos. En un `PatchModel` no se usa `validate_default=True`; las reglas entre campos o que dependen de lo guardado van en el service. Se descartó `SkipJsonSchema[None]`: convierte el campo en una unión y el 422 sale con `loc` `["body", "name", "constrained-str"]` más un error `none_required` espurio. `tests/unit/test_patch_model.py` vigila todas las subclases.
 - **Dinero:** un tipo común `Amount = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]` (`app/core/schemas.py`), expresado en la **unidad menor de la moneda del espacio** (ISO 4217: valor × 10^exponente, no siempre centavos). El exponente sale de la tabla `currencies`, que el API expone junto a `currency` (KAN-22).
   - `strict` rechaza `"1550"`, `15.0` y `true` (verificado con Pydantic 2.13).
   - El tope es `Number.MAX_SAFE_INTEGER`: JavaScript pierde precisión por encima, aunque `bigint` admita más.
@@ -181,110 +182,21 @@ UUIDv7 generados en Python: `mapped_column(primary_key=True, default=uuid.uuid7)
 - **Tests de API:** se sobreescribe (`app.dependency_overrides`) la fábrica de sesiones (`get_sessionmaker`) para que use la conexión del test. Así corre el commit/rollback real de `get_session`. El usuario autenticado también se sobreescribe; unos pocos tests de auth usan el emulador de Firebase de punta a punta.
 - **Datos:** funciones async de ayuda (`await make_space(session, ...)`), sin librerías de factories. Cada test crea lo suyo.
 
-## 11. Esqueleto de un módulo
+## 11. Módulo de referencia: `accounts`
 
-Referencia mínima (`accounts`) hasta que exista el primer módulo real; después, este apartado apuntará a ese módulo. Las columnas completas están en `docs/modelo-de-datos.md`, y los nombres de las dependencias de auth los fija su tarea.
+El primer módulo real es `backend/app/modules/accounts` (KAN-64). Para crear uno nuevo, cópialo como modelo en lugar de partir de cero. Las columnas completas están en `docs/modelo-de-datos.md`, y las reglas cortas, en `backend/CLAUDE.md`.
 
-```python
-# models.py
-class Account(Base):
-    __tablename__ = "accounts"
+| Archivo | Qué muestra |
+|---|---|
+| `models.py` | Tabla con FK por nombre (`ForeignKey("spaces.id", ondelete="RESTRICT")`) e índice, `text` + `CheckConstraint` con nombre para el tipo y las reglas entre columnas (`ck_accounts_card_days`), UUIDv7 y `created_at`/`updated_at` |
+| `schemas.py` | `AccountCreate` (reglas entre campos con `field_validator` + `info.data` + `validate_default=True`, para que el `loc` marque el campo), `AccountUpdate` (hereda de `PatchModel`, ver §5) y `AccountRead` |
+| `repository.py` | `_in_space(space_id)` como única consulta base y funciones con `*, space_id` keyword-only (§6) |
+| `service.py` | Sin commit (`flush`), `_get_or_raise` → `NotFoundError`, una regla que depende de lo guardado (`InvalidFieldError` con `loc`) y `get_account` devolviendo un schema para otros módulos (§2) |
+| `router.py` | `require_space_member` en el `APIRouter`, rutas sin barra final, `response_model` devolviendo el ORM y `responses` con los errores |
+| `migrations/versions/20261018_0003_create_accounts.py` | Migración autogenerada y revisada a mano: nombres con `op.f(...)` y downgrade real |
+| `tests/unit/test_account_schemas.py`, `tests/services/test_accounts_service.py`, `tests/api/test_accounts.py`, `tests/db/test_accounts_migration.py` | Una carpeta por capa (§10). En `api`, los 401 y los dos casos de IDOR: espacio ajeno → `space_not_found`, cuenta ajena desde el propio espacio → `account_not_found` |
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
-    space_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("spaces.id"), index=True)
-    name: Mapped[str] = mapped_column(String(80))
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-# schemas.py
-class AccountCreate(InputModel):
-    name: str = Field(min_length=1, max_length=80)
-
-
-class AccountRead(ReadModel):
-    id: UUID
-    name: str
-    archived_at: datetime | None
-
-
-# repository.py
-def _in_space(space_id: UUID) -> Select[Account]:
-    return select(Account).where(Account.space_id == space_id)
-
-
-async def get(session: AsyncSession, space_id: UUID, account_id: UUID) -> Account | None:
-    return await session.scalar(_in_space(space_id).where(Account.id == account_id))
-
-
-async def list_active(session: AsyncSession, space_id: UUID) -> list[Account]:
-    rows = await session.scalars(
-        _in_space(space_id).where(Account.archived_at.is_(None)).order_by(Account.name)
-    )
-    return list(rows)
-
-
-# service.py
-async def list_accounts(session: AsyncSession, space_id: UUID) -> list[Account]:
-    return await repository.list_active(session, space_id)
-
-
-async def create_account(session: AsyncSession, space_id: UUID, data: AccountCreate) -> Account:
-    account = Account(space_id=space_id, name=data.name)
-    session.add(account)
-    await session.flush()  # sin commit: lo hace get_session al terminar el request
-    return account
-
-
-async def archive_account(
-    session: AsyncSession, space_id: UUID, account_id: UUID, *, balance: int
-) -> Account:
-    account = await _get_or_raise(session, space_id, account_id)
-    if balance != 0:
-        raise ConflictError("account_has_balance", "Account balance must be zero to archive it")
-    account.archived_at = datetime.now(UTC)
-    return account
-
-
-async def get_account(session: AsyncSession, space_id: UUID, account_id: UUID) -> AccountRead:
-    """For other modules: a schema, never the ORM object."""
-    return AccountRead.model_validate(await _get_or_raise(session, space_id, account_id))
-
-
-async def _get_or_raise(session: AsyncSession, space_id: UUID, account_id: UUID) -> Account:
-    account = await repository.get(session, space_id, account_id)
-    if account is None:
-        raise NotFoundError("account_not_found", "Account not found")
-    return account
-
-
-# router.py
-router = APIRouter(
-    prefix="/spaces/{space_id}/accounts",
-    tags=["accounts"],
-    dependencies=[Depends(require_space_member)],
-    responses={404: {"model": ErrorResponse}},
-)
-
-
-@router.get("", response_model=list[AccountRead])
-async def list_accounts(space_id: UUID, session: DbSession) -> list[Account]:
-    return await service.list_accounts(session, space_id)
-
-
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=AccountRead)
-async def create_account(space_id: UUID, data: AccountCreate, session: DbSession) -> Account:
-    return await service.create_account(session, space_id, data)
-
-
-@router.post(
-    "/{account_id}/archive",
-    response_model=AccountRead,
-    responses={409: {"model": ErrorResponse}},
-)
-async def archive_account(space_id: UUID, account_id: UUID, session: DbSession) -> Account:
-    balance = await transactions_service.get_account_balance(session, space_id, account_id)
-    return await service.archive_account(session, space_id, account_id, balance=balance)
-```
+Lo que aún no muestra: archivar con saldo 0, que necesita el saldo de `transactions` (el patrón está en §2 y llega con BE-16), y la paginación por cursor (§7), porque una lista de cuentas no se pagina.
 
 ## 12. Qué se descartó de las fuentes y por qué
 
