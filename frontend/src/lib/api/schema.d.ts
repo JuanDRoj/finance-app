@@ -208,11 +208,11 @@ export interface components {
          */
         AccountUpdate: {
             /** Closing Day */
-            closing_day?: number | null;
+            closing_day?: number;
             /** Due Day */
-            due_day?: number | null;
+            due_day?: number;
             /** Name */
-            name?: string | null;
+            name?: string;
         };
         /** CurrencyRead */
         CurrencyRead: {

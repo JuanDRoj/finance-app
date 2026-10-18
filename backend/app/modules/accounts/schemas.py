@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
-from app.core.schemas import InputModel, ReadModel
+from app.core.schemas import InputModel, PatchModel, ReadModel, unset
 
 AccountType = Literal["bank", "cash", "credit_card"]
 
@@ -47,22 +47,15 @@ class AccountCreate(InputModel):
         return value
 
 
-class AccountUpdate(InputModel):
+class AccountUpdate(PatchModel):
     """Fields to change: only the ones sent are updated. The type of an account cannot change."""
 
     # Whether the days apply depends on the type of the stored account, so the service checks it.
-    name: AccountName | None = None
-    closing_day: MonthDay | None = None
-    due_day: MonthDay | None = None
-
-    @field_validator("name", "closing_day", "due_day")
-    @classmethod
-    def _not_null[T](cls, value: T | None) -> T:
-        # Runs only for fields that were sent (defaults are not validated). None of the fields can
-        # be cleared: a name is required and a card cannot lose a day.
-        if value is None:
-            raise PydanticCustomError("null_not_allowed", "This field cannot be null")
-        return value
+    # No field can be cleared (a name is required and a card cannot lose a day), so none is
+    # `| None`; read this model with `model_dump(exclude_unset=True)` (see `PatchModel`).
+    name: AccountName = unset()
+    closing_day: MonthDay = unset()
+    due_day: MonthDay = unset()
 
 
 class AccountRead(ReadModel):

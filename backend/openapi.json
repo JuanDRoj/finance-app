@@ -124,43 +124,22 @@
         "description": "Fields to change: only the ones sent are updated. The type of an account cannot change.",
         "properties": {
           "closing_day": {
-            "anyOf": [
-              {
-                "maximum": 31.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Closing Day"
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Closing Day",
+            "type": "integer"
           },
           "due_day": {
-            "anyOf": [
-              {
-                "maximum": 31.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Due Day"
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Due Day",
+            "type": "integer"
           },
           "name": {
-            "anyOf": [
-              {
-                "maxLength": 80,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
           }
         },
         "title": "AccountUpdate",

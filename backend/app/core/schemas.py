@@ -2,9 +2,18 @@
 
 from functools import lru_cache
 from importlib import resources
-from typing import Annotated
+from types import NoneType, UnionType
+from typing import Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationInfo,
+    field_validator,
+)
 from pydantic_core import PydanticCustomError
 
 # A money amount in the minor unit of the space's currency (ISO 4217): value x 10^exponent,
@@ -47,3 +56,58 @@ class ReadModel(BaseModel):
     """Base of every response schema (`XRead`): can be built from an ORM object."""
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def admits_none(annotation: object) -> bool:
+    """True if a field annotation accepts None: `X | None`, `Optional[X]`, `Any`, `Literal[None]`.
+
+    Looks through `Annotated[...]` and `type X = ...` aliases, at any depth, so
+    `Annotated[Annotated[int, ...] | None, ...]` and an alias of `int | None` both count.
+    """
+    if annotation is None or annotation is NoneType or annotation is Any:
+        return True
+    if isinstance(annotation, TypeAliasType):
+        return admits_none(annotation.__value__)
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        return admits_none(get_args(annotation)[0])
+    if origin is Union or origin is UnionType:
+        return any(admits_none(arg) for arg in get_args(annotation))
+    if origin is Literal:
+        return None in get_args(annotation)
+    return False
+
+
+def unset() -> Any:
+    """Default of a PATCH field that cannot be cleared: `name: AccountName = unset()`.
+
+    It returns `Any` on purpose: the `pydantic.mypy` plugin rejects `Field(default=None)` on a
+    field whose type does not admit None. An unsent field holds `None` whatever its type says, so
+    a PATCH is read only with `model_dump(exclude_unset=True)`.
+    """
+    return Field(default=None)
+
+
+class PatchModel(InputModel):
+    """Base of every PATCH body (`XUpdate`): `extra="forbid"` plus a null check per field.
+
+    Declare each editable field as `name: Type = unset()`, **without** `| None`: an
+    omitted field means "leave it as it is", and an explicit `null` is a 422 `null_not_allowed`
+    on that field (`loc` is `["body", "<field>"]`). A field that can be cleared is the exception:
+    declare it `Type | None = None` and it accepts null. The check reads the annotation of each
+    field, so OpenAPI and the TypeScript types say the same as the validation does (`name?:
+    string`, not `string | null`).
+
+    Defaults are never validated, so an unsent field holds `None` even when its type says
+    otherwise. **Read a PATCH only with `model_dump(exclude_unset=True)`**, never through loose
+    attributes: that is also what tells "not sent" from "sent as null" on a nullable field.
+    """
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _reject_null_on_non_nullable_fields(cls, value: object, info: ValidationInfo) -> object:
+        # Runs only for the fields that were sent. `info.field_name` is always set for a field
+        # validator.
+        if value is None and not admits_none(cls.model_fields[str(info.field_name)].annotation):
+            raise PydanticCustomError("null_not_allowed", "This field cannot be null")
+        return value
