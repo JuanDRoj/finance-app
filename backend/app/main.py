@@ -9,6 +9,7 @@ from app.core.db import Database
 from app.core.errors import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.health import router as health_router
+from app.modules.accounts.router import router as accounts_router
 from app.modules.auth.firebase import create_firebase_auth
 from app.modules.auth.router import router as auth_router
 from app.modules.spaces.router import router as spaces_router
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(users_router)
     app.include_router(spaces_router)
+    app.include_router(accounts_router)
     return app
 
 

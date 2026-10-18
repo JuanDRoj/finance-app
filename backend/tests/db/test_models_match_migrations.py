@@ -32,6 +32,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.db import Base
+from app.modules.accounts import models as accounts_models  # noqa: F401
 from app.modules.currencies import models as currencies_models  # noqa: F401
 from app.modules.spaces import models as spaces_models  # noqa: F401
 from app.modules.users import models as users_models  # noqa: F401

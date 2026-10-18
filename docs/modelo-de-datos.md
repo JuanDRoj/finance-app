@@ -62,9 +62,11 @@ erDiagram
     uuid space_id FK
     text name
     enum type "bank | cash | credit_card"
-    int closing_day "solo credit_card"
-    int due_day "solo credit_card"
-    timestamp archived_at
+    smallint closing_day "solo credit_card, 1-31"
+    smallint due_day "solo credit_card, 1-31"
+    timestamptz archived_at
+    timestamptz created_at
+    timestamptz updated_at
   }
   TRANSACTIONS {
     uuid id PK
@@ -110,6 +112,8 @@ erDiagram
 **Dinero en unidades menores enteras**`bigint`, nunca `float`. Se guarda ×10^exponente de su moneda (ISO 4217): $15,50 en USD o UYU = 1550; 1.500 en una moneda de exponente 0 (CLP, PYG) = 1500.
  
 **Solo se aparta dinero que existe**Las metas reservan en cuentas `bank` o `cash`, nunca en una tarjeta.
+ 
+**Los días de cierre y vencimiento son solo de las tarjetas**CHECK `ck_accounts_card_days`: una cuenta `credit_card` tiene `closing_day` y `due_day` (1 a 31), y una `bank` o `cash` no tiene ninguno. Lo validan también la API (422) y la BD.
  
 **Un espacio personal por creador**Índice único parcial `uq_spaces_created_by_personal` sobre `spaces(created_by)` donde `type = 'personal'`. En v1 equivale a un espacio personal por usuario; unirse a un hogar en v2 (`space_members`) no la afecta, porque la regla mira quién creó el espacio, no la membresía.
  
@@ -173,12 +177,15 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
  
 | idPK | uuid |
 | --- | --- |
-| space_idFK |  |
-| name | "Itaú", "Visa" |
-| type | bank · cash · credit_card; no se cambia después de crear la cuenta (decidido en KAN-63: el PATCH no lo acepta) |
-| closing_day | solo credit_card |
-| due_day | solo credit_card |
-| archived_at | null = activa; requiere saldo 0 y sin apartados |
+| space_idFK | `NOT NULL`, `ON DELETE RESTRICT` (el dinero no desaparece por una cascada desde su espacio); índice `ix_accounts_space_id` |
+| name | "Itaú", "Visa"; `text` sin espacios en los extremos (lo recorta la API), no vacío (`ck_accounts_name_not_blank`) y de hasta 80 caracteres (`ck_accounts_name_length`). No es único: puede haber dos "Itaú" |
+| type | bank · cash · credit_card (texto + CHECK `ck_accounts_type`); no se cambia después de crear la cuenta (decidido en KAN-63: el PATCH no lo acepta) |
+| closing_day | `smallint`, solo credit_card, obligatorio ahí; 1 a 31 (`ck_accounts_closing_day_range`, y `ck_accounts_card_days` para "solo y obligatorio en tarjeta") |
+| due_day | `smallint`, igual que `closing_day` (`ck_accounts_due_day_range`) |
+| archived_at | `timestamptz`; null = activa. Archivar con saldo 0 y sin apartados lo aplica el service de archivar (BE-16); la tabla solo guarda la fecha |
+| created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger |
+
+El saldo no es una columna: se calcula con los `entries` (ver "Reglas que el modelo garantiza"). La lista de la API oculta las archivadas salvo con `?include_archived=true`.
  
 ### card_statements
  
