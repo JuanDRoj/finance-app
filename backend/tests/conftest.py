@@ -122,17 +122,24 @@ def restore_root_logger() -> Iterator[None]:
 
 @pytest.fixture
 def isolated_backend(tmp_path: Path) -> Path:
-    """Working directory for subprocess tests: a copy of the code, without `.env`.
+    """Working directory for subprocess tests that need the code next to the cwd.
 
-    Settings reads `.env` relative to the cwd, so a subprocess started in `backend/` would pick
-    up the developer's file and the result would depend on the machine. The environment is
-    already clean: `_isolated_settings` removes the database variables from `os.environ`.
+    A copy of `app/`, `migrations/` and `alembic.ini`, without `.env`. Settings reads `.env`
+    relative to the cwd, so a subprocess started in `backend/` would pick up the developer's
+    file and the result would depend on the machine. The environment is already clean:
+    `_isolated_settings` removes the database variables from `os.environ`.
+
+    Use it only when the subprocess writes relative to the code (the default `openapi.json`
+    path) or needs `alembic.ini` and `app/` in the cwd (`prepend_sys_path`). Any other
+    subprocess test should run in an empty cwd with PYTHONPATH on the real `BACKEND_DIR`.
+
+    `__pycache__` is copied on purpose: `copytree` keeps the mtimes, so the cached bytecode is
+    still valid for the copied sources and the subprocess does not recompile the whole app.
     """
     root = tmp_path / "backend"
     root.mkdir()
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
-    shutil.copytree(BACKEND_DIR / "app", root / "app", ignore=ignore)
-    shutil.copytree(BACKEND_DIR / "migrations", root / "migrations", ignore=ignore)
+    shutil.copytree(BACKEND_DIR / "app", root / "app")
+    shutil.copytree(BACKEND_DIR / "migrations", root / "migrations")
     shutil.copy(BACKEND_DIR / "alembic.ini", root / "alembic.ini")
     return root
 
