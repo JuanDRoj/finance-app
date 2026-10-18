@@ -80,6 +80,8 @@ describe("describeFirebaseAuthError", () => {
       "auth/password-does-not-meet-requirements",
       "Firebase: Password does not meet requirements. (auth/password-does-not-meet-requirements).",
     );
+    // Literal on purpose: the exact text the person sees. If the minimum changes, this fails and
+    // forces a check of the Firebase password policy.
     expect(describeFirebaseAuthError(error)).toEqual({
       title: "La contraseña no cumple los requisitos",
       message: "Usa al menos 8 caracteres e inténtalo de nuevo.",

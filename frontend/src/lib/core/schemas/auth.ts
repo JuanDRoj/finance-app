@@ -10,8 +10,8 @@ import { z } from "zod";
 
 /**
  * Matches the Firebase password policy of the staging project (required, minimum 8): the form
- * rejects what Firebase would. Keep them in sync, and the text of
- * `auth/password-does-not-meet-requirements` in lib/core/firebase-errors.ts.
+ * rejects what Firebase would. Keep this constant equal to the Firebase policy; the texts that
+ * mention the minimum are built from it.
  */
 export const PASSWORD_MIN_LENGTH = 8;
 
