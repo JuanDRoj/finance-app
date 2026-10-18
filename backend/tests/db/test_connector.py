@@ -13,8 +13,8 @@ from sqlalchemy.engine import URL
 from app.core import db as db_module
 from app.core.config import Settings
 from app.core.db import Database
-from tests.conftest import BACKEND_DIR
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 # Safety net for a loaded machine; the real fix is not recompiling `app` in the subprocess.
 SUBPROCESS_TIMEOUT_S = 180
 INSTANCE = "my-project:southamerica-east1:finance-db"
