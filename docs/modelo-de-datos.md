@@ -175,7 +175,7 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
 | --- | --- |
 | space_idFK |  |
 | name | "Itaú", "Visa" |
-| type | bank · cash · credit_card |
+| type | bank · cash · credit_card; no se cambia después de crear la cuenta (decidido en KAN-63: el PATCH no lo acepta) |
 | closing_day | solo credit_card |
 | due_day | solo credit_card |
 | archived_at | null = activa; requiere saldo 0 y sin apartados |
