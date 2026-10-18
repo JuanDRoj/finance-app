@@ -3,7 +3,7 @@
 Python **3.14** · FastAPI · SQLAlchemy 2.1 async (asyncpg) · Alembic (async) · PostgreSQL · pytest · uv · ruff · mypy.
 Despliegue: Cloud Run (`southamerica-east1`) + Cloud SQL vía Cloud SQL Python Connector.
 
-Patrones de arquitectura con su porqué y un esqueleto de módulo: `docs/arquitectura-backend.md`. **Léelo al crear un módulo, una capa o un patrón nuevo.**
+Patrones de arquitectura con su porqué y el módulo de referencia (`app/modules/accounts`): `docs/arquitectura-backend.md`. **Léelo al crear un módulo, una capa o un patrón nuevo.**
 
 > **Nota:** los comandos de abajo son la convención acordada. Los fija **KAN-17 [BE-01]**: si esa tarea (o una posterior) los cambia, **actualiza este archivo en la misma tarea**.
 
