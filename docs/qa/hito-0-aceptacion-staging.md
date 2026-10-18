@@ -140,12 +140,12 @@ Las pruebas del backend corren con `docker compose up -d` y `cd backend && uv ru
 
 Antes de KAN-60 este criterio de HU-5 solo estaba cubierto por la lectura de `infra/scripts/cd_deploy.sh`. Se probó de verdad el 17/10/2026 (hora local; 18/10 UTC), en `kanza-stg`:
 
-- **Migración rota:** archivo temporal **sin trackear** `0003` (`0002 -> 0003`) con `CREATE TABLE kan60_probe (id int)` seguido de `SELECT 1/0`. Imagen `finance-api:kan60-broken-migration`, digest `sha256:f89e84c8...`. Si la tabla no existía después, todo se había revertido.
-- **Línea base:** servicio `finance-api-stg` en `finance-api-stg-00023-vat` con 100 % del tráfico, 15 revisiones, `/health` 200; `alembic_version = 0002` y `kan60_probe = NULL` (Cloud SQL Studio).
+- **Migración rota:** archivo temporal **sin trackear** `0003` (`0002 -> 0003`) con `CREATE TABLE kan60_probe (id int)` seguido de `SELECT 1/0`. Imagen `finance-api:kan60-broken-migration`, digest `sha256:f89e84c8...`. Si después la tabla no existe, la migración se revirtió completa.
+- **Línea base:** servicio `finance-api-stg` en `finance-api-stg-00023-vat` con 100 % del tráfico, 15 revisiones, `/health` 200; `alembic_version = 0002` y `to_regclass('public.kan60_probe')` = NULL (la tabla no existe) (Cloud SQL Studio).
 - **Corrida real de `cd_deploy.sh`** (local, con la sesión de gcloud del humano): el paso 3 terminó en rojo, "La migración falló (ejecución finance-migrate-stg-pgfzv): Task ... failed with exit code: 1 ... No se despliega; la revisión finance-api-stg-00023-vat sigue sirviendo." Salida con código 1; los pasos 4 a 6 no corrieron.
 - **Ejecución del job:** `finance-migrate-stg-pgfzv`, succeeded 0, failed 1. Log: "Running upgrade 0002 -> 0003" y `asyncpg.exceptions.DivisionByZeroError: division by zero`.
 - **Servicio intacto:** `latestReady = latestCreated = 00023-vat`, 100 % del tráfico en esa revisión, 15 revisiones (ninguna nueva) y `/health` 200 `{"status":"ok"}`.
-- **BD sin migración a medias:** después, `alembic_version = 0002` y `kan60_probe = NULL`: la tabla creada dentro de la migración se revirtió (DDL transaccional de Postgres y una sola transacción de Alembic por corrida).
+- **BD sin migración a medias:** después, `alembic_version = 0002` y `kan60_probe` no existe: la tabla creada dentro de la migración se revirtió (DDL transaccional de Postgres y una sola transacción de Alembic por corrida).
 - **Limpieza:** el job volvió a su imagen anterior (`sha256:7e9d6fa0...`, verificado), el archivo temporal se borró (`alembic heads = 0002`, `git status` limpio). La imagen temporal `kan60-broken-migration` se borró en Artifact Registry (el humano, en la Consola, 17/10/2026; ya no aparece en `docker images list` y la vigente `sha256:7e9d6fa0...` sigue). Cloud SQL quedó apagada (`STOPPED/NEVER`, verificado).
 
 **Límite de la evidencia:** se probó `cd_deploy.sh` en local con la sesión de gcloud del humano (owner), no el workflow de GitHub (WIF solo deja entrar a `main`). Es la misma lógica del script; el workflow solo lo invoca.
