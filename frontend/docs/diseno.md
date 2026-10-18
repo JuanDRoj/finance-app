@@ -2,7 +2,7 @@
 
 Estado: **aprobado por Juan David el 2026-10-05** · Tarea KAN-32 [FE-06] (historia KAN-31, HU-6 Sistema de diseño base) · Lo implementaron KAN-33 (setup) y KAN-34 (componentes base y catálogo); KAN-26 (login) añadió `TextField`; KAN-41 (`AppShell` responsive) añadió la barra lateral, el menú del avatar, el globo y los tokens `sidebar` y `tooltip`.
 Dirección visual "Menta": mockup de referencia en https://claude.ai/artifact/WdpLUxb8M6VgXupjqezr5M. Nombre de la app: **Kanza** (identidad en [D16](#d16-identidad-kanza) y en [`marca-kanza.md`](marca-kanza.md), KAN-40).
-Pantallas de Kanza en celular, tablet y escritorio (claro y oscuro): https://claude.ai/artifact/QhYwACgCTYJHpApRSWLgRa (responsive en [D17](#d17-web-responsive-y-escritorio)).
+Pantallas de Kanza en celular, tablet y escritorio (claro y oscuro): https://claude.ai/artifact/QhYwACgCTYJHpApRSWLgRa (responsive en [D17](#d17-web-responsive-y-escritorio); las del Hito 1, con prefijo `K-H1-`, en [D17](#navegación-del-hito-1-kan-63) y [D18](#d18-primer-uso-y-cuentas-hito-1)).
 
 ## Cómo usar este documento
 
@@ -32,7 +32,8 @@ Pantallas de Kanza en celular, tablet y escritorio (claro y oscuro): https://cla
 | Tokens | Nombres shadcn + `income` / `expense` / `debt` | [D14](#d14-tokens) |
 | Viewport y móvil | 360 px mínimo; matriz 375 / ~393 / ~430 | [D15](#d15-viewport-y-móvil) |
 | Identidad de marca | Kanza: ícono del grillo con la moneda, favicon simplificado, lema "Haz que alcance" | [D16](#d16-identidad-kanza) |
-| Web responsive y escritorio | Menos de 1024 px: barra inferior (Hito 1); desde 1024 px: barra lateral, una tarjeta flotante (hecha en KAN-41); mismas secciones; "Cerrar sesión" en el menú del avatar (hecho en KAN-41) | [D17](#d17-web-responsive-y-escritorio) |
+| Web responsive y escritorio | Menos de 1024 px: barra inferior (Hito 1); desde 1024 px: barra lateral, una tarjeta flotante (hecha en KAN-41); mismas secciones; "Cerrar sesión" en el menú del avatar (hecho en KAN-41); en Hito 1, Inicio · Movimientos · + · Cuentas · Más (KAN-63) | [D17](#d17-web-responsive-y-escritorio) |
+| Primer uso y Cuentas (Hito 1) | Inicio vacío con el grillo y la moneda; formulario de cuenta en página; Cuentas por Disponible y Deuda; archivar con saldo 0 y Deshacer; cuadrar en hoja o diálogo | [D18](#d18-primer-uso-y-cuentas-hito-1) |
 
 ## 1. Checklist para una pantalla nueva
 
@@ -405,7 +406,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 | Título de ítem | Karla | 15 · 700 |
 | Cuerpo | Karla | 16 |
 | Secundario | Karla | 13–14 (mínimo 13) |
-| Label de la nav | fuente por fijar en la tarea que cree la nav (no en KAN-34) | 11 · 600/700 (excepción al mínimo de 13) |
+| Label de la nav | Karla (KAN-63) | 11 · 700 en la sección activa y 600 en el resto; 12 desde 768 px, como K-Tablet (excepción al mínimo de 13) |
 | Texto de inputs | Karla | ≥16 (evita el zoom de iOS) |
 | Iniciales del avatar | Montserrat | 14 · 700 en el tile de celular; 15 · 700 (`text-avatar`) en el de 48 px desde 768 px (KAN-41) |
 | Texto del globo de la barra lateral | Karla | 13 · 700 (`text-tooltip-label`; el mínimo de 13) (KAN-41) |
@@ -585,7 +586,8 @@ Definida el 2026-10-06 (KAN-40 [FE-09]). Guía completa, archivos y licencias en
 - Título de pestaña: "Kanza" (`%s · Kanza` en las pantallas que definen el suyo).
 - Íconos de marca junto a texto visible: `alt=""`. Nombre en `text-primary` (contraste 5,54 claro / 11,48 oscuro sobre `background`). Ícono completo desde 32 px; por debajo, el favicon.
 - El peek va en un contenedor `relative` sobre la tarjeta: `-top-18.5 right-5.5` (74 px arriba y 22 px a la derecha), 120×90 px, `z-10`, y 80 px libres encima de la tarjeta (`mt-14` + `gap-6`): la caja del peek sube 74 px sobre la tarjeta, así que no llega al título (y su parte superior es transparente).
-- Fuera de v1 / otras tareas: pantalla de carga, avisos del grillo y estados vacíos con la mascota, registro formal de marca.
+- **Estados vacíos con la mascota: sí en v1** (KAN-63). La ilustración del grillo detrás de la moneda (la de K-Vacio) va en los estados vacíos que invitan a actuar: el Inicio sin cuentas, Cuentas vacía y, con FE-18, Movimientos vacío. Es una imagen decorativa (`alt=""`: el título del estado ya dice lo que pasa), de 120 px en celular y 140 px en escritorio. Los estados de error no la llevan (usan su ícono en `destructive`).
+- Fuera de v1 / otras tareas: pantalla de carga y registro formal de marca. **Avisos del grillo** ("Cri, cri…", el toast de K-Inicio y el peek de Pendientes): dependen de Pendientes, así que se deciden en Hito 2.
 - Los estáticos de marca son públicos: `proxy.ts` (KAN-27) los deja pasar sin sesión (`/favicon.ico`, `/favicon.svg`, `/site.webmanifest`, `/brand/*` y los `*.png` de la raíz): su `matcher` excluye solo los archivos de la raíz de `public/` (`png`, `svg`, `ico`, `webmanifest`) y los de `public/brand/` (`png`, `svg`), no cualquier ruta que acabe en `.png`. Un estático nuevo va en la raíz o en `public/brand/`; otra carpeta exige ampliar el matcher, y `proxy.test.ts` recorre `public/` para que un archivo nuevo no se rompa en silencio.
 
 ### D17. Web responsive y escritorio
@@ -604,7 +606,7 @@ Aprobada por Juan David el 2026-10-07. La web es el producto de ahora (celular, 
 **Elección**
 - **Menos de 1024 px (celular y tablet):** encabezado con el espacio y el avatar, y la barra de navegación inferior flotante. En tablet el contenido se ensancha hasta unos 640 px, centrado. _Hecho en KAN-41: el encabezado plano con el título y el avatar (como el lienzo) y la columna de 640 px; el espacio en el encabezado llega con el selector de espacios, y la barra inferior con el botón "+" es de Hito 1._
 - **Desde 1024 px (`lg` de Tailwind):** barra lateral fija de íconos a la izquierda (logo, secciones, botón "+", y abajo Ayuda y Ajustes), con el nombre de cada ícono en un globo al pasar el mouse o al llegar con el teclado. El contenido se reparte en tarjetas bento, hasta 1440 px de ancho. _Hecho en KAN-41, como el lienzo: la barra es una tarjeta flotante y, junto con el contenido, forma un grupo de hasta 1440 px. Tiene el logo y las secciones (solo Inicio en Hito 0). El avatar no está en la barra sino en el encabezado; abajo queda vacía hasta que lleguen Ayuda y Ajustes, y el botón "+" y el contador de Pendientes, en Hito 1._
-- **Las mismas secciones en todos los anchos.** Celular y tablet: Inicio · Movimientos · "+" · Pendientes (con contador) · Más. "Más" agrupa Cuentas, Ayuda y Ajustes. Escritorio: Inicio, Movimientos, Pendientes, Cuentas, "+", y abajo Ayuda y Ajustes.
+- **Las mismas secciones en todos los anchos.** Celular y tablet: Inicio · Movimientos · "+" · Pendientes (con contador) · Más. "Más" agrupa Cuentas, Ayuda y Ajustes. Escritorio: Inicio, Movimientos, Pendientes, Cuentas, "+", y abajo Ayuda y Ajustes. _Es la navegación final (desde Hito 2-3). En Hito 1 todavía no hay Pendientes, Ayuda ni Ajustes: ver [Navegación del Hito 1](#navegación-del-hito-1-kan-63)._
 - **"Cerrar sesión" va en el menú del avatar** (que está en el encabezado), en todos los anchos. Sigue lo de KAN-27: siempre disponible en una pantalla con sesión, y la página no muestra datos al volver atrás.
 - **Login:** sin versión propia de escritorio; la tarjeta centrada (`max-w-md`) sirve en todos los anchos. Un diseño de escritorio dedicado queda como idea para más adelante.
 
@@ -628,6 +630,57 @@ Aprobada por Juan David el 2026-10-07. La web es el producto de ahora (celular, 
 - **El avatar:** 44 px estilo tile glass bajo 768 px; 48 px con `secondary` desde 768 px. Dos iniciales (`initialsOf`).
 - **Safe areas:** cada lado es `max(gutter, env(safe-area-inset-*))`, no una suma: el inset es espacio que la pantalla ya ocupa (un notch en apaisado). Arriba, el encabezado suma `env(safe-area-inset-top)` a sus 18 px bajo 1024 px, y desde 1024 px lo hacen el aire del grupo y la posición `sticky` de la tarjeta. Falta confirmarlo en hardware (Pendientes).
 - **Verificación sin Playwright:** el panel "Auditoría" del catálogo en 360, 375, 393, 430, 768, 1024, 1280 y 1440 px; los anchos y la barra no se pueden probar con jsdom (no carga el CSS de Tailwind). El proyecto "Escritorio" de Playwright (D10) cubrirá los criterios cuando se instale.
+
+#### Navegación del Hito 1 (KAN-63)
+
+Aprobada por Juan David el 2026-10-18. Referencia en el lienzo: "H1 · Barra inferior", "H1 · Más" y la barra lateral de "H1 · Cuentas en escritorio" (claro y oscuro). La implementa FE-15 (KAN-69).
+
+- **Barra inferior (menos de 1024 px):** Inicio · Movimientos · "+" · **Cuentas** · Más. Cuentas ocupa el lugar que en Hito 2 toma Pendientes (con su contador); entonces Cuentas pasa a "Más", como dice la elección de arriba.
+  - Medidas de K-Inicio: tarjeta glass flotante (`glass`, D13) a 12 px de los bordes (más la safe area de abajo: `max(12px, env(safe-area-inset-bottom))`), 68 px de alto y radio 30. Cada sección es un enlace de al menos 64 × 52 px con el ícono de 22 px y el label debajo (2 px de separación); la activa lleva una píldora `primary` al 12 % (14 % en oscuro), radio 22, ícono **fill** y texto `primary` (D5); el resto, ícono regular y `muted-foreground`. `aria-current="page"` en la activa.
+  - **Label:** Karla 11 px, 700 en la activa y 600 en el resto; desde 768 px, 12 px (K-Tablet). Es la única excepción al mínimo de 13 px (D13).
+  - **"+":** círculo `primary` de 52 px (54 desde 768 px) con sombra, `aria-label="Registrar movimiento"`. Hasta que llegue la hoja de registro (FE-20), y siempre que el espacio no tenga cuentas, lleva al formulario de cuenta (D18).
+  - **Tablet (768 a 1023 px):** la barra de K-Tablet, de 480 px centrada, con Cuentas en lugar de Pendientes; no tiene artboard propio en Hito 1.
+  - El `Toaster` va 8 px por encima de la barra (D8).
+- **"Más" (solo bajo 1024 px):** pantalla con `h1` "Más" y grupos de enlaces con título de sección (Karla 14 · 700, `muted-foreground`). En Hito 1 tiene un solo grupo, "Organiza", con **Categorías** (pantalla de FE-18). En Hito 2 se suma Cuentas; en Hito 3, Ayuda y Ajustes. No se rellena con opciones que no existen. Cada fila mide 72 px: contenedor de ícono de 42 px (duotone, D5), título, una línea secundaria y un chevron.
+- **Barra lateral (desde 1024 px):** logo; Inicio, Movimientos y Cuentas; el "+" (círculo `sidebar-primary` de 48 px, mismo destino que en la barra inferior); y **abajo, Categorías**, que en Hito 3 queda junto a Ayuda y Ajustes. Desde 1024 px no hay "Más": `/mas` no tiene sentido ahí (que la ruta redirija o muestre la misma lista lo decide FE-15).
+- **Pantallas sin barra:** las de formulario con "Volver" (la de cuenta, D18) no muestran la barra inferior, para dejar sitio al teclado; la barra lateral sí se queda en escritorio.
+
+### D18. Primer uso y Cuentas (Hito 1)
+
+Aprobada por Juan David el 2026-10-18 (KAN-63 [FE-14]). Referencia en el lienzo: fila "Hito 1 · navegación, primer uso y Cuentas" (celular, claro y oscuro) y fila de escritorio (1440 px). La implementan FE-16 (KAN-70, primer uso y formulario) y FE-17 (KAN-71, Cuentas). Reglas de producto en [`docs/decisiones-producto.md`](../../docs/decisiones-producto.md) (Primer uso, Moneda, Cuentas) y en `docs/modelo-de-datos.md` (`accounts`).
+
+**Opciones evaluadas**
+
+| Opción | Veredicto |
+|---|---|
+| Formulario de cuenta en una hoja (sheet) | Descartada: tiene hasta cinco campos y el teclado taparía la mitad de la hoja |
+| Formulario de cuenta en un diálogo en escritorio | Descartada: dos versiones del mismo formulario; la página ya tiene URL propia y funciona con el teclado |
+| **Formulario de cuenta en una página en todos los anchos** | **Elegida** |
+| Moneda dentro del formulario de la primera cuenta | Descartada: el formulario lo reutiliza FE-17 y la moneda es del espacio, no de la cuenta |
+| **Moneda como una fila "Cambiar" en el Inicio vacío** | **Elegida** |
+| Archivar con confirmación | Descartada: archivar se deshace; un toast con "Deshacer" (D8) basta |
+| Pantalla de detalle de cuenta con sus movimientos | Fuera de Hito 1: tocar una cuenta abre su edición. Queda como idea para más adelante |
+
+**Elección y reglas de uso**
+- **Inicio sin cuentas** ("H1 · Inicio sin cuentas", 360 y 1440 px): encabezado "Hola, {nombre}" y avatar; una tarjeta con el grillo (D16), el título "Empieza por tus cuentas", el texto "Agrega dónde está tu dinero hoy: un banco, tu efectivo o una tarjeta. Con su saldo actual verás tu neto al instante." y el botón primario "Crear mi primera cuenta", que abre el formulario. Debajo, la fila **"Moneda de tu espacio: Peso uruguayo · UYU"** con el botón "Cambiar" y la nota "Puedes cambiarla hasta que registres tu primer movimiento.". En escritorio, la tarjeta y la fila van en una columna de hasta 560 px centrada.
+  - La fila de moneda solo se muestra mientras el espacio no tiene movimientos. Crear la primera cuenta con saldo ya es un movimiento (el ajuste del saldo inicial), así que después la fila desaparece.
+- **Elegir la moneda** ("H1 · Elegir la moneda"): hoja (`glass-strong`, radio 30 arriba, D13) con el título "Moneda de tu espacio", la explicación y la lista de las monedas de `GET /currencies` como radios (nombre en español y código; la elegida en negrita sobre `primary` al 8 %); botón "Usar esta moneda". En escritorio, el mismo contenido en un diálogo. El 409 de "ya hay movimientos" se muestra con su traducción (FE-16).
+- **Formulario de cuenta** ("H1 · Nueva cuenta", "Nueva tarjeta" y "Editar tarjeta"): página con "Volver" y `h1` "Nueva cuenta" o "Editar cuenta", sin barra inferior. Una tarjeta con:
+  - **Tipo:** control segmentado (radios) Banco · Efectivo · Tarjeta, solo al crear. **Al editar, el tipo se muestra fijo** con la nota "El tipo no se cambia después de crear la cuenta.".
+  - **Nombre** (placeholder según el tipo: "Ej.: Itaú", "Ej.: Billetera", "Ej.: Visa Itaú").
+  - **Saldo actual** (banco y efectivo) o **Deuda actual** (tarjeta), solo al crear: campo de dinero con "$" delante, `inputmode="decimal"`, Montserrat 600 18 px; la deuda se escribe en positivo y se ve en color `debt`. Ayuda: "Se registra como ajuste: no cuenta como ingreso" (o "como gasto" en la tarjeta).
+  - **Día de cierre** y **Día de vencimiento** (solo tarjeta): dos `select` de 1 a 31 lado a lado, con la ayuda "Con estos días Kanza calcula cuánto pagar cada mes.".
+  - Botón "Crear cuenta" o "Guardar cambios". En escritorio, la misma tarjeta con un ancho de hasta 560 px.
+  - **Al editar**, debajo hay un grupo "Más acciones" con **Cuadrar saldo** e **Archivar cuenta** ("Solo con saldo en $ 0,00").
+- **Cuentas** ("H1 · Cuentas" y "Cuentas en escritorio"): encabezado "Cuentas" con el botón "Nueva cuenta" (ícono de 44 px en celular; píldora `primary` con texto desde 1024 px) y el avatar.
+  - Dos grupos con su total a la derecha del título: **Disponible** (bancos y efectivo) y **Deuda** (tarjetas, total y saldos en `debt`, en positivo como en el Inicio). En celular van uno debajo del otro; desde 1024 px, lado a lado (`flex-wrap`, mínimo 380 px cada uno).
+  - Cada cuenta es una fila-enlace de 68 px a su edición: ícono duotone en un contenedor de 42 px (banco, billetes o tarjeta), nombre (cortado con "…" si no cabe), una línea secundaria (el tipo, o "Cierra el 5 · vence el 12" en la tarjeta) y el saldo con `formatMoney`.
+  - Al final, **"Archivadas (n)"** plegado (`aria-expanded`); al abrirlo, cada archivada en `muted-foreground` con su botón "Desarchivar". Si no hay archivadas, la fila no aparece.
+  - Estados: **carga** (esqueleto de un grupo de 3 filas), **vacío** (el grillo, "Aún no tienes cuentas" y "Crear cuenta"; solo pasa sin ninguna cuenta, porque el primer uso empieza en el Inicio) y **error** (ícono en `destructive`, "No se pudieron cargar tus cuentas", "Revisa tu conexión e inténtalo de nuevo; tus datos están a salvo." y "Reintentar"). Están en los Tweaks del artboard.
+- **Archivar:** con saldo 0, sin confirmación: la cuenta pasa a "Archivadas" y aparece el toast "Archivaste «{nombre}»" con "Deshacer" (D8, "H1 · Cuenta archivada"). Si el saldo no es 0 (409 del backend, BE-16), una hoja de alerta (`alertdialog`, "H1 · No se puede archivar") explica el motivo con el saldo de hoy ("Para archivar una cuenta, su saldo tiene que ser $ 0,00. Hoy debes $ 24.120,00 en esta tarjeta.") y qué hacer ("Págala con una transferencia o, si ya no la usas, cuadra su saldo en $ 0,00."), con los botones "Cuadrar saldo" (abre el cuadre) y "Entendido". En una cuenta de banco o efectivo, el texto dice "Hoy tiene…" en vez de "Hoy debes…".
+- **Cuadrar saldo** ("H1 · Cuadrar saldo" y "Cuadrar saldo en escritorio"): hoja en celular y diálogo de 440 px en escritorio. Muestra la cuenta, el "Saldo en Kanza" y el campo "Saldo real en tu banco"; debajo, en `primary` suave y con `aria-live="polite"`, la vista previa del ajuste que se registrará ("Se registrará un ajuste de +$ 1.230,00. No cuenta como ingreso ni gasto.", con "−" U+2212 si baja). Si no hay diferencia: "El saldo ya coincide: no se registra ningún ajuste." Botones "Cuadrar saldo" y "Cancelar".
+
+**Motivo:** el primer uso tiene que llevar a crear la primera cuenta sin pasos de onboarding (decisión de producto), y la moneda se elige justo antes porque después queda fija. Agrupar por Disponible y Deuda repite el modelo mental del Inicio (Disponible − Deuda = Neto). Archivar con "Deshacer" sigue el patrón de borrado de toda la app, y el aviso de saldo distinto de 0 dice qué hacer en vez de solo bloquear.
 
 ## 3. Skills de apoyo
 
@@ -665,7 +718,7 @@ Las filas de revisión visual y de hardware se actualizaron con lo que verificó
 | `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | Catálogo hecho (KAN-34). **Visto a ojo (KAN-62), sin medir:** las cifras de Montserrat y de Karla en el catálogo (sección "Cifras") se dieron por buenas visualmente. No se midió el ancho de "1111" y "8888" ni se comprobó la fuente servida; si más adelante se ve una desalineación, reabrir |
 | Contraste AA en claro y oscuro, incluido `--input` sobre cada superficie y los pares con alfa o blob | Hecho (KAN-34): `--input` oscuro subió a alfa 0,40 y `tokens.test.ts` compone los pares translúcidos sobre fondo y blobs. **Visto en pantalla a ojo (KAN-62)**, en Chrome de escritorio: el catálogo en claro y oscuro se lee bien; sin medir. Los pares calculados siguen en `tokens.test.ts` |
 | `popover-foreground` asumido igual a `foreground` | Hecho (KAN-34): `popover-foreground` sobre `popover` tiene su par en `tokens.test.ts` y `Toaster` y los popovers usan `foreground` |
-| Excepción del label de la nav de 11 px y su fuente | Se decide en la tarea que cree la nav inferior (no hay nav en KAN-34) |
+| Excepción del label de la nav de 11 px y su fuente | Hecho (KAN-63): Karla 11 px, 700 activa / 600 resto, 12 px desde 768 px (D13 y [Navegación del Hito 1](#navegación-del-hito-1-kan-63)). Lo implementa FE-15 (KAN-69) |
 | Safe areas: `AppShell` y `Toaster` ya aplican `env(safe-area-inset-*)` (KAN-34); cada elemento fijo nuevo (nav inferior, botón "+", sheet) debe aplicarlo y **todo se prueba en hardware** (un iPhone con notch y uno con home indicator) | **Pendiente de hardware** (KAN-62 no pudo: sin iPad): un iPad horizontal, en Safari y con la app instalada en la pantalla de inicio (los insets reales de la barra de estado y del indicador de inicio no se ejercieron). Tampoco consta una prueba específica de las safe areas en un iPhone con notch y con home indicator. Juan David o qa; la nav, el botón "+" y el sheet, en sus tareas |
 | Foco por defecto: la base usa `outline-ring` sólido (3:1 mínimo; con `/50` quedaba en ~2,15:1 en claro); un test lo comprueba. Los componentes que cambien el foco deben mantener 3:1 | Hecho (KAN-34): todos los controles usan `components/ui/focus.ts` (outline sólido, con test) |
 | Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | Se mantiene en 20 px; **sin confirmar en un dispositivo real** (KAN-62: la prueba en Safari 16.4-17 quedó NO VERIFICABLE y la decisión, sin respuesta). El lienzo usa `blur(18px) saturate(150%)`; el código, `blur(20px)` sin saturación. Juan David lo confirma viendo el Inicio de staging o el catálogo en un iPhone o un Android reales: no depende de la versión de iOS |
