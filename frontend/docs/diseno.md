@@ -9,7 +9,7 @@ Pantallas de Kanza en celular, tablet y escritorio (claro y oscuro): https://cla
 - **Al empezar una pantalla nueva, ve a la sección 1 (checklist).** Te dice qué librería, token y componente usar y te lleva a la decisión que lo justifica.
 - Precedencia: este documento y `CLAUDE.md` ganan sobre cualquier skill (ver [`../../.claude/third-party-skills.md`](../../.claude/third-party-skills.md)). `CLAUDE.md` manda en comandos y convenciones de código; este documento, en librerías, tokens y dirección visual.
 - Cada decisión se presenta igual: **Opciones evaluadas** (tabla), **Elección**, **Motivo**, **Reglas de uso** y, si aplica, **Verificar en KAN-33/34**.
-- **†** marca un motivo que se redactó en FE-06 sin que la sesión de diseño lo dictara (motivo redactado en FE-06, revisar). Los motivos sin † los dio Juan David.
+- Los motivos de las opciones descartadas los dio Juan David o los revisó y aprobó en KAN-62. Hasta entonces, los que FE-06 había redactado sin que la sesión de diseño los dictara llevaban una †; ya no queda ninguna.
 - Si una decisión cambia, se actualiza este documento en el mismo PR.
 
 ## 0. Resumen
@@ -90,7 +90,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 | Opción | Veredicto |
 |---|---|
-| Todo en `components/` y `lib/` sin frontera con Next | Descartada: la futura app nativa tendría que reescribir formatos, esquemas y llamadas a la API † |
+| Todo en `components/` y `lib/` sin frontera con Next | Descartada: la futura app nativa tendría que reescribir formatos, esquemas y llamadas a la API |
 | Arquitectura hexagonal completa en el frontend | Descartada: el dominio vive en el backend |
 | Núcleo puro `src/lib/core/` + Ports & Adapters ligero | **Elegida** |
 | Paquete `packages/core` desde ya | Descartada por ahora: core pasa a `packages/core` cuando empiece el nativo |
@@ -113,9 +113,9 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | TanStack Query v5 | **Elegida** |
-| SWR | Descartada: el proyecto estandariza una sola librería de datos y TanStack Query trae el patrón oficial de hidratación del App Router, `useInfiniteQuery` y `useMutation` † |
-| `fetch` + `useEffect` / `useState` a mano | Descartada: obliga a reimplementar caché, refetch y estados de carga y error † |
-| Server Actions + `revalidatePath` solos | Descartada: sin caché en el cliente, y no existen en la app nativa † |
+| SWR | Descartada: el proyecto estandariza una sola librería de datos y TanStack Query trae el patrón oficial de hidratación del App Router, `useInfiniteQuery` y `useMutation` |
+| `fetch` + `useEffect` / `useState` a mano | Descartada: obliga a reimplementar caché, refetch y estados de carga y error |
+| Server Actions + `revalidatePath` solos | Descartada: sin caché en el cliente, y no existen en la app nativa |
 | Zustand como store global | Diferida: sin Zustand en v1; revisar con el nativo o con estado cliente global real |
 
 **Elección:** TanStack Query desde v1, con el patrón oficial del App Router.
@@ -138,7 +138,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Tailwind CSS v4 | **Elegida**: es lo que trae shadcn y los tokens quedan como variables CSS |
-| CSS Modules | Alternativa evaluada; descartada: los tokens como clases de Tailwind compartidas con shadcn evitan mantener un segundo sistema de estilos † |
+| CSS Modules | Alternativa evaluada; descartada: los tokens como clases de Tailwind compartidas con shadcn evitan mantener un segundo sistema de estilos |
 
 **Elección:** Tailwind CSS v4.
 **Motivo:** integración directa con shadcn/ui; los tokens son variables CSS que el tema claro y el oscuro sobrescriben; sin JS para el modo oscuro.
@@ -156,10 +156,10 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 
 | Opción | Veredicto |
 |---|---|
-| shadcn/ui con primitivas **Base UI**, código copiado al repo | **Elegida** (Base UI es el default de shadcn: a verificar en KAN-33 al correr `shadcn init`) |
-| shadcn/ui con primitivas Radix | Descartada: Base UI es el default de shadcn (a verificar en KAN-33) † |
-| Radix o Base UI solos, sin shadcn | Descartada: habría que escribir y mantener a mano el estilo y los estados de cada componente † |
-| Componentes propios desde cero | Descartada: reimplementar accesibilidad (foco, teclado, ARIA) en cada componente † |
+| shadcn/ui con primitivas **Base UI**, código copiado al repo | **Elegida** (Base UI es el default de shadcn: verificado en KAN-33 al correr `shadcn init`) |
+| shadcn/ui con primitivas Radix | Descartada: Base UI es el default de shadcn (verificado en KAN-33) |
+| Radix o Base UI solos, sin shadcn | Descartada: habría que escribir y mantener a mano el estilo y los estados de cada componente |
+| Componentes propios desde cero | Descartada: reimplementar accesibilidad (foco, teclado, ARIA) en cada componente |
 | HeroUI v3 | Descartada: dependencia npm y riesgo de reescritura v2 a v3 |
 
 **Elección:** shadcn/ui con Base UI, código copiado a `components/ui`.
@@ -209,7 +209,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Phosphor (`@phosphor-icons/react`) | **Elegida** |
-| lucide-react | Alternativa evaluada; descartada: un solo estilo de trazo, sin fill ni duotone que la dirección visual usa † |
+| lucide-react | Alternativa evaluada; descartada: un solo estilo de trazo, sin fill ni duotone que la dirección visual usa |
 
 **Elección:** Phosphor.
 **Motivo:** varios pesos (regular, fill, duotone) que Menta usa; shadcn lo soporta como `iconLibrary`. Para el nativo, `phosphor-react-native` es comunitario; el fallback es SVG con licencia MIT y `react-native-svg`.
@@ -229,8 +229,8 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Montserrat (600/700) + Karla (400–700) | **Elegida** (dirección visual Menta) |
-| Fuente del sistema | Descartada: sin identidad propia y los numerales cambian entre iOS y Android † |
-| Una sola familia para todo | Descartada: la dirección visual separa números y títulos del texto corrido † |
+| Fuente del sistema | Descartada: sin identidad propia y los numerales cambian entre iOS y Android |
+| Una sola familia para todo | Descartada: la dirección visual separa números y títulos del texto corrido |
 
 **Elección:** Montserrat 600/700 para números y títulos; Karla 400–700 para texto.
 **Motivo:** identidad "Menta"; Montserrat da legibilidad y presencia a los montos y lleva `tnum`, así que los montos se alinean en columnas; que Karla también tenga `tnum` (cifras en texto corrido) se verifica en KAN-34.
@@ -241,7 +241,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 - Escala tipográfica en D13.
 - **Fuente de marca (KAN-40):** Bricolage Grotesque ExtraBold (800, tamaño óptico 96, `letter-spacing: -0.03em`) solo para el nombre "Kanza" (logotipo y cabecera del login). Va por `next/font/local` (`components/brand/brand-font.ts`, woff2 de 21,7 kB en `src/app/fonts/bricolage/`), no por `next/font/google`: este no deja fijar el tamaño óptico con un solo peso (con `weight` fijo rechaza `axes`; con `weight: "variable"` baja el rango completo, ~77 kB). Clases `font-brand`, `tracking-brand` (`--tracking-brand: -0.03em`) y `text-brand` (`--text-brand: 1.4375rem`, 23 px: el tamaño del login), definidas en `globals.css`. Se declara en el componente del nombre y no en `layout.tsx`, para que solo las rutas que lo muestran lo precarguen. Licencia OFL en `marca-kanza.md`.
 
-**Verificar en KAN-34:** que el archivo de fuente que sirve `next/font` conserva `tnum` en Montserrat y en Karla. El catálogo (sección "Cifras") trae una columna de montos y una fila `1111 / 8888` en cada fuente. **Pendiente de ojo humano:** no se pudo comprobar sin navegador; si las cifras no son tabulares, anótalo aquí.
+**Verificar en KAN-34:** que el archivo de fuente que sirve `next/font` conserva `tnum` en Montserrat y en Karla. El catálogo (sección "Cifras") trae una columna de montos y una fila `1111 / 8888` en cada fuente. **Visto a ojo en KAN-62, sin medir:** las cifras de Montserrat y de Karla en el catálogo se dieron por buenas visualmente; no se midió el ancho de "1111" y "8888" ni se comprobó la fuente servida (ver Pendientes). Si las cifras no son tabulares, anótalo aquí.
 
 ### D7. Formularios
 
@@ -250,7 +250,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | react-hook-form + zod | **Elegida** |
-| `useActionState` nativo (Server Actions) | Alternativa evaluada; descartada: las Server Actions no existen en la app nativa y los esquemas zod de core no se reutilizarían † |
+| `useActionState` nativo (Server Actions) | Alternativa evaluada; descartada: las Server Actions no existen en la app nativa y los esquemas zod de core no se reutilizarían |
 
 **Elección:** react-hook-form + zod.
 **Motivo:** esquemas zod en core, reutilizables en web y nativo; validación en el cliente; submit con `useMutation` de TanStack Query, coherente con D2.
@@ -273,8 +273,8 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | Sonner (vía shadcn) | **Elegida** |
-| Toast de Base UI | Descartada: Sonner es el que integra shadcn y trae la acción y el gesto de cerrar listos † |
-| Toast propio | Descartada: reimplementar cola, apilado y accesibilidad † |
+| Toast de Base UI | Descartada: Sonner es el que integra shadcn y trae la acción y el gesto de cerrar listos |
+| Toast propio | Descartada: reimplementar cola, apilado y accesibilidad |
 
 **Elección:** Sonner, con acción "Deshacer".
 **Motivo:** integración con shadcn y una acción de primera clase (`action: { label, onClick }`).
@@ -310,7 +310,7 @@ Sigue los pasos en orden. Entre paréntesis, la decisión que lo respalda.
 | Opción | Veredicto |
 |---|---|
 | vitest + Testing Library | **Elegida** |
-| Jest | Descartada: más configuración para TypeScript y módulos ESM, sin ventaja para este proyecto † |
+| Jest | Descartada: más configuración para TypeScript y módulos ESM, sin ventaja para este proyecto |
 | Playwright con un solo navegador | Descartada: en iOS, en la práctica, casi todos los navegadores son WebKit (la UE permite otros motores desde iOS 17.4) y Safari es la referencia, así que se prueban los dos motores |
 
 **Elección:** vitest + Testing Library para lógica y componentes; Playwright para E2E en dos proyectos: **"iPhone"** (WebKit) y **"Pixel"** (Chromium, con **viewport de 360 px de ancho**).
@@ -367,7 +367,7 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 | Seguir el sistema con CSS `prefers-color-scheme` | **Elegida** para v1 |
 | Toggle manual con `next-themes` | Después de v1 |
 | Solo tema claro | Descartada: la dirección Menta incluye paleta oscura |
-| Clase `.dark` activada por JavaScript desde el inicio | Descartada: depende de un script y puede parpadear al cargar † |
+| Clase `.dark` activada por JavaScript desde el inicio | Descartada: depende de un script y puede parpadear al cargar |
 
 **Elección:** modo oscuro en v1, siguiendo el sistema con CSS `prefers-color-scheme`, con dos paletas.
 **Motivo:** sin JS y sin flash; el color del navegador (`theme-color`) cambia por esquema.
@@ -451,8 +451,8 @@ Ejemplos (unidad menor → texto; salida de Node 24, otro motor podría variar e
 | Opción | Veredicto |
 |---|---|
 | Variables CSS con nombres shadcn + tokens de finanzas (`income`, `expense`, `debt`) | **Elegida** |
-| Solo la paleta por defecto de Tailwind, sin nombres semánticos | Descartada: sin tokens semánticos no hay tema claro y oscuro ni mapeo a nativo † |
-| Herramienta de tokens externa (por ejemplo Style Dictionary) | Descartada: complejidad innecesaria con un solo cliente hoy † |
+| Solo la paleta por defecto de Tailwind, sin nombres semánticos | Descartada: sin tokens semánticos no hay tema claro y oscuro ni mapeo a nativo |
+| Herramienta de tokens externa (por ejemplo Style Dictionary) | Descartada: complejidad innecesaria con un solo cliente hoy |
 
 **Elección:** variables CSS con nombres de shadcn (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, `--ring`, `--destructive`…) más las de finanzas (`--income`, `--expense`, `--debt`).
 **Motivo:** los componentes de shadcn funcionan sin renombrar; `income` / `expense` / `debt` expresan el dominio; una futura librería nativa (React Native Reusables o HeroUI Native) puede mapearlos; todos los pares de texto cumplen AA (tabla de abajo).
@@ -552,7 +552,7 @@ Todos los pares de texto superan 4,5:1 y todos los no-texto 3:1. Antes de KAN-34
 | Opción | Veredicto |
 |---|---|
 | Diseñar a 360 px y ampliar | **Elegida** |
-| Diseñar a 390 px y encoger | Descartada: 360 px es el mínimo que garantizamos y los Android pequeños se romperían † |
+| Diseñar a 390 px y encoger | Descartada: 360 px es el mínimo que garantizamos y los Android pequeños se romperían |
 | Solo web móvil sin pensar en nativo | Descartada: iPhone y Android web primero, luego nativo |
 
 **Elección:** diseñar para **360 px de ancho** (iPhone y Android web; luego nativo). Matriz de prueba: **375** (iPhone SE), **~393** (iPhone) y **~430** (Pro Max / Pixel).
@@ -645,12 +645,14 @@ Están en `.claude/skills/`. Las convenciones del proyecto ganan sobre las skill
 
 Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en `frontend/CLAUDE.md` (actualizado en esa tarea: stack, comandos, estructura, `lib/core`, TanStack Query, tests).
 
+Las filas de revisión visual y de hardware se actualizaron con lo que verificó KAN-30 (aceptación del Hito 0 en staging, 17/10/2026: [`docs/qa/hito-0-aceptacion-staging.md`](../../docs/qa/hito-0-aceptacion-staging.md)) y con KAN-62 (revisión visual: [`docs/qa/hito-0-revision-visual.md`](../../docs/qa/hito-0-revision-visual.md)). **Verificado a ojo** quiere decir que el humano lo miró contra el artboard del lienzo, sin medir; **medido**, que hubo una lectura numérica. En KAN-62 no se midió nada: todo lo que se ejecutó quedó a ojo.
+
 | Pendiente | Estado / lo resuelve |
 |---|---|
 | Actualizar `frontend/CLAUDE.md` | Hecho (KAN-33) |
 | ESLint: `no-restricted-imports` para core (fusionado con la regla de `process`) y Phosphor siempre desde `/ssr` | Hecho (KAN-33) |
 | Verificaciones de `shadcn init`, de `@hookform/resolvers` con zod 4 y de `optimizePackageImports` | Hecho (KAN-33): ver D4, D5 y D7 |
-| Glass: CSS generado con ambas declaraciones y fallback | Hecho sobre el CSS del build (KAN-33). **Pendiente de hardware:** Safari 16.4–17 real, `prefers-reduced-transparency: reduce` y Android de gama baja (Juan David o qa) |
+| Glass: CSS generado con ambas declaraciones y fallback | Hecho sobre el CSS del build (KAN-33). **Pendiente de hardware:** Safari 16.4–17 real, `prefers-reduced-transparency: reduce` y Android de gama baja (Juan David o qa). KAN-62 no pudo verificarlo: sin dispositivo con iOS 16.4-17 (B1), sin Android de gama baja (B4), y `prefers-reduced-transparency` no se ejecutó (A9, por decisión del humano) |
 | Export `viewport` (`viewportFit`, `interactiveWidget`, `themeColor` por esquema, `colorScheme`) | Hecho (KAN-33). Prueba en dispositivo real pendiente |
 | Adaptar el CSS de shadcn a `prefers-color-scheme` y definir tokens, radios y blobs | Hecho (KAN-33) |
 | Convención de errores tipados para el `queryFn` y dónde viven las query keys / `queryOptions` | Hecho (KAN-33): `unwrap` + `ApiError`, `lib/core/data/<recurso>.ts` |
@@ -660,25 +662,25 @@ Estado tras KAN-33 [FE-07]. Lo ya hecho consta en las decisiones de arriba y en 
 | `Toaster` de Sonner montado en `layout.tsx` | Hecho (KAN-34) |
 | `lib/core/i18n.ts` (mapa único de traducciones) | Hecho (KAN-34): errores del backend (`describeApiError`, `fieldErrorMessage`). Los valores de dominio (`expense`, `pending`, `credit_card`…) se añaden con la primera pantalla que los muestre |
 | `lib/core/schemas/` | Hecho (KAN-26): `auth.ts` (login y registro) |
-| `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | Catálogo hecho (KAN-34). **Pendiente de ojo humano** en el catálogo (sección "Cifras") |
-| Contraste AA en claro y oscuro, incluido `--input` sobre cada superficie y los pares con alfa o blob | Hecho (KAN-34): `--input` oscuro subió a alfa 0,40 y `tokens.test.ts` compone los pares translúcidos sobre fondo y blobs. Falta verlo en pantalla (catálogo, claro y oscuro) |
+| `tnum` de Montserrat y Karla con el archivo que sirve `next/font` | Catálogo hecho (KAN-34). **Visto a ojo (KAN-62), sin medir:** las cifras de Montserrat y de Karla en el catálogo (sección "Cifras") se dieron por buenas visualmente. No se midió el ancho de "1111" y "8888" ni se comprobó la fuente servida; si más adelante se ve una desalineación, reabrir |
+| Contraste AA en claro y oscuro, incluido `--input` sobre cada superficie y los pares con alfa o blob | Hecho (KAN-34): `--input` oscuro subió a alfa 0,40 y `tokens.test.ts` compone los pares translúcidos sobre fondo y blobs. **Visto en pantalla a ojo (KAN-62)**, en Chrome de escritorio: el catálogo en claro y oscuro se lee bien; sin medir. Los pares calculados siguen en `tokens.test.ts` |
 | `popover-foreground` asumido igual a `foreground` | Hecho (KAN-34): `popover-foreground` sobre `popover` tiene su par en `tokens.test.ts` y `Toaster` y los popovers usan `foreground` |
 | Excepción del label de la nav de 11 px y su fuente | Se decide en la tarea que cree la nav inferior (no hay nav en KAN-34) |
-| Safe areas: `AppShell` y `Toaster` ya aplican `env(safe-area-inset-*)` (KAN-34); cada elemento fijo nuevo (nav inferior, botón "+", sheet) debe aplicarlo y **todo se prueba en hardware** (un iPhone con notch y uno con home indicator) | Juan David o qa; la nav, el botón "+" y el sheet, en sus tareas |
+| Safe areas: `AppShell` y `Toaster` ya aplican `env(safe-area-inset-*)` (KAN-34); cada elemento fijo nuevo (nav inferior, botón "+", sheet) debe aplicarlo y **todo se prueba en hardware** (un iPhone con notch y uno con home indicator) | **Pendiente de hardware** (KAN-62 no pudo: sin iPad): un iPad horizontal, en Safari y con la app instalada en la pantalla de inicio (los insets reales de la barra de estado y del indicador de inicio no se ejercieron). Tampoco consta una prueba específica de las safe areas en un iPhone con notch y con home indicator. Juan David o qa; la nav, el botón "+" y el sheet, en sus tareas |
 | Foco por defecto: la base usa `outline-ring` sólido (3:1 mínimo; con `/50` quedaba en ~2,15:1 en claro); un test lo comprueba. Los componentes que cambien el foco deben mantener 3:1 | Hecho (KAN-34): todos los controles usan `components/ui/focus.ts` (outline sólido, con test) |
-| Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | Se mantiene en 20 px; Juan David lo confirma viendo el catálogo en un dispositivo real |
+| Blur de `card-surface` (20 px, elegido en KAN-33 porque D13/D14 no lo fijan) | Se mantiene en 20 px; **sin confirmar en un dispositivo real** (KAN-62: la prueba en Safari 16.4-17 quedó NO VERIFICABLE y la decisión, sin respuesta). El lienzo usa `blur(18px) saturate(150%)`; el código, `blur(20px)` sin saturación. Juan David lo confirma viendo el Inicio de staging o el catálogo en un iPhone o un Android reales: no depende de la versión de iOS |
 | Duración del toast con "Deshacer" (Sonner usa 4000 ms por defecto; valorar más tiempo) | Hecho (KAN-34): 6000 ms (D8) |
-| Revisión humana del catálogo: dirección visual, 360/375/393/430 px, claro y oscuro, panel "Auditoría", foco con Tab, en un iPhone y un Android reales | Juan David o qa (KAN-34) |
-| Revisar los motivos marcados con † (motivos redactados en FE-06) | Juan David, en el repaso |
-| Identidad Kanza (KAN-40) a ojo y en hardware: el favicon legible a 16 px en pestaña clara y oscura (Chrome, Safari y Firefox), el login a 360 / 375 / 393 / 430 px en claro y oscuro (fila de marca, grillo sobre la tarjeta sin tapar el título, sin desbordes), el contraste del nombre cerca del blob y la carga de Bricolage sin salto visible | Juan David o qa |
+| Revisión humana del catálogo: dirección visual, 360/375/393/430 px, claro y oscuro, panel "Auditoría", foco con Tab, en un iPhone y un Android reales | **Parcial (KAN-62):** en Chrome de escritorio, a ojo, en varios anchos y en claro y oscuro (panel "Auditoría", foco con Tab, menú con teclado); falta en iPhone y Android reales (dirección visual, 375 / 393 / 430 px). Juan David o qa (KAN-34) |
+| Revisar los motivos marcados con † (motivos redactados en FE-06) | Hecho (KAN-62): revisados los 19 motivos; 18 quedan como estaban y pierden la †; el de D4 sobre Radix se reescribe como "Base UI es el default de shadcn (verificado en KAN-33)", también sin †. Ningún motivo conserva la marca |
+| Identidad Kanza (KAN-40) a ojo y en hardware: el favicon legible a 16 px en pestaña clara y oscura (Chrome, Safari y Firefox), el login a 360 / 375 / 393 / 430 px en claro y oscuro (fila de marca, grillo sobre la tarjeta sin tapar el título, sin desbordes), el contraste del nombre cerca del blob y la carga de Bricolage sin salto visible | **Parcial (KAN-62).** Favicon legible a 16 px en pestaña clara y oscura: visto a ojo, sin medir, en Chrome de escritorio; no consta otro navegador. **Sigue pendiente:** la carga de Bricolage sin salto visible (no ejecutado, por decisión del humano: requiere throttling de DevTools), el login a 360 / 375 / 393 / 430 px en claro y oscuro, el grillo sobre la tarjeta sin tapar el título, el contraste del nombre cerca del blob y el favicon en Firefox y Safari. Juan David o qa |
 | `proxy.ts` (KAN-27) debe excluir los estáticos de marca de la redirección a `/login` (D16) | Hecho (KAN-27): el `matcher` los excluye (raíz de `public/` y `public/brand/`, por extensión); `proxy.test.ts` recorre `public/`. Comprobado con `curl` sobre `next start` |
-| "Atrás" tras cerrar sesión (KAN-27; desde KAN-41 el flujo es Home → avatar → "Cerrar sesión"): con Home → "Cerrar sesión" → atrás no debe verse ningún dato, en iPhone Safari y en Android Chrome, también con varias pantallas privadas en el historial (cuando existan). La capa del bfcache (`BfcacheGuard` y `data-session-ended`) y la carga completa solo se prueban en el navegador. En local el origen es solo `localhost`: hace falta staging para un dispositivo real | Juan David o qa (y un E2E de Playwright "login → logout → atrás" cuando se instale) |
-| Login (KAN-26) en hardware: popup de Google en Safari iOS (que el primer toque abra la ventana, sin `auth/popup-blocked`: el SDK se calienta al montar la pantalla, ver `CLAUDE.md` > Sesión) y en un Android real (con el emulador no se puede: escucha solo en `127.0.0.1`; hace falta el proyecto de staging), 360 / 375 / 393 / 430 px en claro y oscuro, y el teclado abierto en el formulario | Juan David o qa |
-| Cookie de sesión en un navegador real (`Set-Cookie` de `POST /api/auth/session` a través del rewrite y de vuelta en `browserApi`): curl lo confirmó en KAN-26; falta el navegador (`/catalog` > "Probar GET /me") | Juan David |
+| "Atrás" tras cerrar sesión (KAN-27; desde KAN-41 el flujo es Home → avatar → "Cerrar sesión"): con Home → "Cerrar sesión" → atrás no debe verse ningún dato, en iPhone Safari y en Android Chrome, también con varias pantallas privadas en el historial (cuando existan). La capa del bfcache (`BfcacheGuard` y `data-session-ended`) y la carga completa solo se prueban en el navegador. En local el origen es solo `localhost`: hace falta staging para un dispositivo real | **Parcial.** Verificado en staging (KAN-30, 17/10/2026) en un Pixel 10 (Chrome), un iPhone 17 Pro (Safari, también con el gesto de "atrás" de Safari) y Chrome de escritorio: tras "Cerrar sesión" desde el menú del avatar, "atrás" no muestra datos del usuario. **Sigue pendiente:** con varias pantallas privadas en el historial (QA-06, KAN-85) y el E2E de Playwright "login → logout → atrás" cuando se instale. Juan David o qa |
+| Login (KAN-26) en hardware: popup de Google en Safari iOS (que el primer toque abra la ventana, sin `auth/popup-blocked`: el SDK se calienta al montar la pantalla, ver `CLAUDE.md` > Sesión) y en un Android real (con el emulador no se puede: escucha solo en `127.0.0.1`; hace falta el proyecto de staging), 360 / 375 / 393 / 430 px en claro y oscuro, y el teclado abierto en el formulario | **Parcial.** Popup de Google verificado en staging (KAN-30, 17/10/2026): abrió al primer toque, sin `auth/popup-blocked`, en un Pixel 10 (Chrome) y un iPhone 17 Pro (Safari). **Sigue pendiente:** 360 / 375 / 393 / 430 px en claro y oscuro y el teclado abierto en el formulario. Juan David o qa |
+| Cookie de sesión en un navegador real (`Set-Cookie` de `POST /api/auth/session` a través del rewrite y de vuelta en `browserApi`): curl lo confirmó en KAN-26; el navegador (`/catalog` > "Probar GET /me") quedaba por hacer | Hecho (KAN-30, 17/10/2026), en un navegador real contra staging: `__Host-session` con HttpOnly, Secure, SameSite Lax, Path `/` y unos 14 días; `POST` y `DELETE /api/auth/session` responden 204; `GET /api/spaces` desde la barra del navegador viaja con la cookie por el rewrite. **Matiz:** "Probar GET /me" del catálogo no se ejecutó (no existe en staging), así que `browserApi` leyendo con la cookie en el cliente no se probó como tal; el equivalente fue ese `GET /api/spaces` por el mismo rewrite |
 | `AppShell` responsive (D17): barra lateral desde 1024 px, menú del avatar con "Cerrar sesión", tokens de la barra lateral y posición del `Toaster` en escritorio | Hecho (KAN-41, alineado con el lienzo). **Pendiente de Hito 1:** la barra inferior por debajo de 1024 px (con el botón "+" y el contador de Pendientes), el espacio en el encabezado ("Mi espacio"), el buscador, Ayuda y Ajustes abajo en la barra y las secciones Movimientos, Pendientes y Cuentas |
-| Panel "Auditoría" del catálogo en 768 / 1024 / 1280 / 1440 px (hoy mide los anchos de celular) | Hecho (KAN-41): el panel mide en cualquier ancho y suma barra lateral, ancho del contenido y scroll horizontal. **Pendiente de ojo humano:** pasarlo en los ocho anchos, en claro y oscuro |
-| `AppShell` responsive (KAN-41) a ojo y en hardware, **contra el lienzo** (escritorio claro y oscuro, tablet, celular): la barra flotante a 1024 / 1280 / 1440 px (tarjeta de 76 px con 16 px de aire, `#0E1A14` en claro y `#13241B` en oscuro, sin pegarse al borde), el grupo barra + contenido de hasta 1440 px centrado a 1920 px, el contenido de 640 px centrado a 768 px, el encabezado plano alineado con el contenido (`h1` de 24 / 26 / 30 px), el avatar de 44 px tile bajo 768 px y de 48 px verde suave desde 768 px con dos iniciales, sin scroll horizontal a 360 / 375 / 393 / 430 px, Tab por la barra (globo invertido y foco visibles en los dos temas), el menú del avatar con teclado (flechas, Escape) y con el dedo en un iPhone y un Android, "Cerrar sesión" desde el menú y "atrás" sin datos, las safe areas de la tarjeta y del grupo en un iPad apaisado (y que el título y el contenido compartan el borde derecho con inset, también en un celular apaisado), y el `Toaster` abajo a la derecha a 1280 px | Juan David o qa |
-| Menú de la cuenta y modo `modal` de Base UI (bloquea el scroll de la página al abrir): confirmar que en escritorio no hay salto de layout por la barra de scroll | Juan David o qa (con la revisión de KAN-41) |
+| Panel "Auditoría" del catálogo en 768 / 1024 / 1280 / 1440 px (hoy mide los anchos de celular) | Hecho (KAN-41): el panel mide en cualquier ancho y suma barra lateral, ancho del contenido y scroll horizontal. **Visto a ojo (KAN-62), sin medir:** revisado a ojo en varios anchos de la checklist (360 a 1440 px), en claro y oscuro; el humano no detalló cuáles y no hay lecturas registradas del panel. **Diferencia conocida:** a 768 px el contenido mide 608 px (el `max-w-160` de 640 px incluye el padding de 16 px por lado) y el lienzo 640 px; por código, no medida; registrada sin tarea por decisión del humano |
+| `AppShell` responsive (KAN-41) a ojo y en hardware, **contra el lienzo** (escritorio claro y oscuro, tablet, celular): la barra flotante a 1024 / 1280 / 1440 px (tarjeta de 76 px con 16 px de aire, `#0E1A14` en claro y `#13241B` en oscuro, sin pegarse al borde), el grupo barra + contenido de hasta 1440 px centrado a 1920 px, el contenido de 640 px centrado a 768 px, el encabezado plano alineado con el contenido (`h1` de 24 / 26 / 30 px), el avatar de 44 px tile bajo 768 px y de 48 px verde suave desde 768 px con dos iniciales, sin scroll horizontal a 360 / 375 / 393 / 430 px, Tab por la barra (globo invertido y foco visibles en los dos temas), el menú del avatar con teclado (flechas, Escape) y con el dedo en un iPhone y un Android, "Cerrar sesión" desde el menú y "atrás" sin datos, las safe areas de la tarjeta y del grupo en un iPad apaisado (y que el título y el contenido compartan el borde derecho con inset, también en un celular apaisado), y el `Toaster` abajo a la derecha a 1280 px | **Parcial.** Verificado a ojo contra el lienzo (KAN-62), sin medir, en Chrome de escritorio, en varios anchos y en claro y oscuro (el humano no detalló anchos ni tema por paso): barra lateral, grupo centrado, `Toaster` abajo a la derecha, Tab por la barra y menú del avatar con teclado. El lienzo no tiene artboard de referencia para 768 px oscuro ni para 1024 px. En staging (KAN-30, 17/10/2026), en un Pixel 10 (Chrome) y un iPhone 17 Pro (Safari): el menú del avatar con el dedo, "Cerrar sesión" desde el menú, "atrás" sin datos y el Inicio frente al lienzo en claro y oscuro. Esos teléfonos miden unos 400 px CSS de ancho (a confirmar), así que **el Inicio no se verificó a 360 px exactos**: el paso en DevTools no se ejecutó (requería sesión en staging y Cloud SQL no se encendió). **Diferencia conocida:** a 768 px el contenido mide 608 px (el `max-w-160` de 640 px incluye el padding de 16 px por lado) y el lienzo 640 px; por código, no medida; registrada sin tarea por decisión del humano. **Sigue pendiente:** las safe areas de la tarjeta y del grupo en un iPad horizontal (sin iPad), que el título y el contenido compartan el borde derecho con inset en un celular apaisado, y 375 / 393 / 430 px a ojo contra el lienzo en un celular real. Juan David o qa |
+| Menú de la cuenta y modo `modal` de Base UI (bloquea el scroll de la página al abrir): confirmar que en escritorio no hay salto de layout por la barra de scroll | Hecho (KAN-30, 17/10/2026): verificado en Chrome de escritorio a 1280 px, sin salto de layout al abrir el menú |
 | Playwright: un tercer proyecto "Escritorio" (Chromium, 1280 px) además de "iPhone" y "Pixel" (D10) | Primera sub-tarea de E2E (qa) |
 
 Dependencias instaladas en KAN-33 (`tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` y `shadcn` van en devDependencies: solo se usan en el build, `tw-animate-css` y `shadcn` como `@import` de CSS): `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css`, `shadcn`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@base-ui/react`, `@phosphor-icons/react`, `sonner`, `@tanstack/react-query`, `react-hook-form`, `@hookform/resolvers`, `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react` y `@testing-library/dom`. Dependencia añadida en KAN-26: `firebase` (SDK modular; el código usa solo `firebase/app` y `firebase/auth`, en `lib/firebase.ts`). `npm audit` marca `@grpc/grpc-js` (de `@firebase/firestore`, solo servidor/Node): no entra en el bundle del navegador porque no se importa Firestore. No se instalan: `@playwright/test` (ver arriba), `@testing-library/jest-dom` y `user-event` (cuando un test los necesite), `vite-tsconfig-paths` (Vite 8 resuelve los alias con `resolve.tsconfigPaths`), `recharts` (con el primer gráfico real), `next-themes` ni Zustand (v1).
