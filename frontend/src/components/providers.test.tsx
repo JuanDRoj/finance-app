@@ -1,5 +1,5 @@
-import { QueryClient, useQueryClient } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getQueryClient, Providers } from "./providers";
 
@@ -58,6 +58,29 @@ describe("401 handling", () => {
     const { client, replace, ApiError } = await setup();
     await run(client, "a", new ApiError(401, undefined));
     expect(replace).toHaveBeenCalledExactlyOnceWith("/login");
+  });
+
+  it("goes to /login when a useQuery inside the real <Providers> gets a 401", async () => {
+    vi.resetModules();
+    const replace = vi.fn();
+    vi.stubGlobal("location", { ...window.location, pathname: "/", replace });
+    const { Providers: FreshProviders } = await import("./providers");
+    const { ApiError } = await import("@/lib/core/data/errors");
+
+    function Screen() {
+      const { isError } = useQuery({
+        queryKey: ["private"],
+        queryFn: () => Promise.reject(new ApiError(401, undefined)),
+      });
+      return <p>{isError ? "error" : "cargando"}</p>;
+    }
+    render(
+      <FreshProviders>
+        <Screen />
+      </FreshProviders>,
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/login"));
   });
 
   it("goes to /login only once when several queries get a 401", async () => {
