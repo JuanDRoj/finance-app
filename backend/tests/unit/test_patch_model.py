@@ -206,5 +206,15 @@ def test_every_patch_model_of_the_app_rejects_null_on_its_non_nullable_fields() 
             ], f"{model.__name__}.{name}"
 
 
+def test_every_patch_model_of_the_app_accepts_an_empty_body_and_sets_nothing() -> None:
+    # Guards against `validate_default=True` (or a default validator) creeping into a PatchModel:
+    # omitting a field must never be an error.
+    for model in _app_patch_models():
+        patch = model.model_validate({})
+
+        assert patch.model_dump(exclude_unset=True) == {}, model.__name__
+        assert patch.model_fields_set == set(), model.__name__
+
+
 def test_the_models_defined_in_tests_are_not_part_of_the_app_check() -> None:
     assert _Patch not in _app_patch_models()

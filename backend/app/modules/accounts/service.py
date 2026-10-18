@@ -38,7 +38,9 @@ async def create_account(
         due_day=data.due_day,
     )
     session.add(account)
-    await session.flush()  # the id and the defaults; the commit happens when the request ends
+    # RETURNING loads the id and the server defaults (`created_at`, `updated_at`); the commit
+    # happens when the request ends.
+    await session.flush()
     return account
 
 
@@ -58,6 +60,9 @@ async def update_account(
         return account
     for field, value in changes.items():
         setattr(account, field, value)
+    # The UPDATE leaves `updated_at` (its `onupdate`) expired. `AccountRead` does not expose it; if
+    # it ever does, reading it in async raises MissingGreenlet, so use `eager_defaults=True` on
+    # the model or `session.refresh(account)` here.
     await session.flush()
     return account
 

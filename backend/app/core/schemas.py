@@ -101,6 +101,10 @@ class PatchModel(InputModel):
     Defaults are never validated, so an unsent field holds `None` even when its type says
     otherwise. **Read a PATCH only with `model_dump(exclude_unset=True)`**, never through loose
     attributes: that is also what tells "not sent" from "sent as null" on a nullable field.
+
+    Never use `validate_default=True` in a `PatchModel`: the check below would then run on the
+    default `None` and omitting a field would be a 422 `null_not_allowed`. A rule between fields,
+    or one that depends on stored data, goes in the service (see `accounts.service.update_account`).
     """
 
     @field_validator("*", mode="before")

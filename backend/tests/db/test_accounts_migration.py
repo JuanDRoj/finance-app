@@ -267,11 +267,13 @@ async def test_downgrade_removes_the_table_and_upgrade_recreates_it(engine: Asyn
     config = _config()
     sql = "SELECT table_name FROM information_schema.tables WHERE table_name = 'accounts'"
     assert await _rows(engine, sql) == [("accounts",)]
+    await _space(engine)  # data of a previous revision, which the downgrade must not touch
 
     await asyncio.to_thread(command.downgrade, config, "0002")
     assert await _rows(engine, sql) == []
-    # The tables of the previous revisions are untouched.
-    assert await _rows(engine, "SELECT count(*) FROM spaces") == [(0,)]
+    # The tables of the previous revisions keep their data.
+    assert await _rows(engine, "SELECT count(*) FROM spaces") == [(1,)]
+    assert await _rows(engine, "SELECT count(*) FROM users") == [(1,)]
 
     await asyncio.to_thread(command.upgrade, config, "head")
     assert await _rows(engine, sql) == [("accounts",)]
