@@ -13,6 +13,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+# Safety net for a loaded machine; the real fix is not recompiling `app` in the subprocess.
+SUBPROCESS_TIMEOUT_S = 180
 
 PROBE_REVISION = """\
 import sqlalchemy as sa
@@ -99,6 +101,9 @@ async def test_env_py_applies_the_naming_convention_and_reverts_cleanly(
 async def test_alembic_cli_upgrades_and_downgrades_from_the_backend_directory(
     scratch_database_url: str, isolated_backend: Path
 ) -> None:
+    # Needs the copy (unlike the empty-cwd subprocess tests): the cwd must hold `app/`,
+    # `migrations/` and `alembic.ini`, and no PYTHONPATH, or the test would pass even without
+    # `prepend_sys_path`. The copy has no `.env`, so the developer's file cannot leak in.
     env = {**os.environ, "DATABASE_URL": scratch_database_url}
 
     def run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -110,7 +115,7 @@ async def test_alembic_cli_upgrades_and_downgrades_from_the_backend_directory(
             env=env,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=SUBPROCESS_TIMEOUT_S,
             check=False,
         )
 

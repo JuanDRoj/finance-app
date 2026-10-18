@@ -14,6 +14,8 @@ from app.main import create_app
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 COMMITTED_OPENAPI = BACKEND_DIR / "openapi.json"
+# Safety net for a loaded machine; the real fix is not recompiling `app` in the subprocess.
+SUBPROCESS_TIMEOUT_S = 180
 
 
 def _fresh_render() -> str:
@@ -22,17 +24,23 @@ def _fresh_render() -> str:
     return render_openapi(create_app())
 
 
-def _run_export(cwd: Path, *args: str, hash_seed: int = 0) -> subprocess.CompletedProcess[str]:
+def _run_export(
+    cwd: Path, *args: str, hash_seed: int = 0, real_app: bool = False
+) -> subprocess.CompletedProcess[str]:
     # ENV=prod with no DATABASE_URL: building Settings would fail, so a clean exit proves the
     # export never needs configuration. `_isolated_settings` already cleared the DB variables.
     env = {**os.environ, "ENV": "prod", "PYTHONHASHSEED": str(hash_seed)}
+    if real_app:
+        # Import the real `app` (its cached bytecode is reused) from a cwd that has no `.env`.
+        # Never set this when the run writes next to the code: it would hit the real tree.
+        env["PYTHONPATH"] = str(BACKEND_DIR)
     return subprocess.run(  # noqa: S603
         [sys.executable, "-m", "app.export_openapi", *args],
         cwd=cwd,
         env=env,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=SUBPROCESS_TIMEOUT_S,
         check=False,
     )
 
@@ -114,12 +122,14 @@ def test_export_never_runs_the_lifespan_or_creates_a_database(
 
 
 def test_export_runs_without_env_vars_and_output_does_not_depend_on_hash_seed(
-    isolated_backend: Path, tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     first, second = tmp_path / "seed1.json", tmp_path / "seed2.json"
 
-    run_1 = _run_export(isolated_backend, "--output", str(first), hash_seed=1)
-    run_2 = _run_export(isolated_backend, "--output", str(second), hash_seed=2)
+    # The output goes to `--output`, so the run needs no copy of the code: an empty cwd (no
+    # `.env`) is enough, with PYTHONPATH on the real `app`.
+    run_1 = _run_export(tmp_path, "--output", str(first), hash_seed=1, real_app=True)
+    run_2 = _run_export(tmp_path, "--output", str(second), hash_seed=2, real_app=True)
 
     assert run_1.returncode == 0, run_1.stderr
     assert run_2.returncode == 0, run_2.stderr
@@ -127,6 +137,8 @@ def test_export_runs_without_env_vars_and_output_does_not_depend_on_hash_seed(
 
 
 def test_default_run_writes_openapi_json_inside_the_backend_copy(isolated_backend: Path) -> None:
+    # Needs the copy: the default output sits next to the code, so running the real `app` would
+    # overwrite the committed openapi.json. Do not pass `real_app` here.
     real_before = COMMITTED_OPENAPI.read_bytes() if COMMITTED_OPENAPI.exists() else None
 
     result = _run_export(isolated_backend)
