@@ -130,23 +130,27 @@ Si cambian `main` o los archivos de `paths` después de escribir esto, el commit
 | Cookie `__Host-session` con HttpOnly, Secure y SameSite=Lax | `backend/tests/api/test_auth_session.py::test_cookie_is_host_prefixed_and_secure_outside_local` | B5 (DevTools en staging real) |
 | El origen no permitido no abre sesión | `backend/tests/api/test_auth_session.py::test_a_disallowed_origin_is_a_403_and_does_nothing` · `...::test_the_staging_origin_is_the_only_one_allowed_there` | C6 (`vercel_check.sh`): su paso 3/5 envía `DELETE /api/auth/session` con `Origin: https://evil.invalid` y exige 403 `origin_not_allowed` sin `Set-Cookie` (líneas 229 a 237 del script). Prueba el origen rechazado a través del rewrite de Vercel con `DELETE`, no con `POST` |
 | HU-5: un PR mergeado llega a staging en menos de 15 minutos, con migraciones antes | Sin test posible (es el workflow). | P2, P3, C1 a C5 |
-| HU-5: si la migración falla, no se despliega la nueva versión | **Sin test ni prueba real. Deuda conocida, ver abajo.** | No hay paso manual |
+| HU-5: si la migración falla, no se despliega la nueva versión | Prueba real hecha el 17/10/2026 (KAN-60), ver "Prueba real: migración que falla no despliega" abajo. | No hay paso manual |
 | HU-5: el criterio del hito se verifica desde el celular | Es esta sub-tarea | Parte A completa |
 | Épico KAN-1: "abro la URL de staging, inicio sesión y veo el saludo; un PR mergeado llega solo a staging" | Ver filas anteriores | A3, A4 y C1 a C5 |
 
 Las pruebas del backend corren con `docker compose up -d` y `cd backend && uv run pytest`; las del frontend, con `cd frontend && npm test`.
 
-### Deuda conocida: migración que falla no despliega
+### Prueba real: migración que falla no despliega (KAN-60)
 
-Este criterio de HU-5 se da por cubierto por la **revisión de `infra/scripts/cd_deploy.sh`**, no por una prueba. Nunca se ejecutó con una migración rota. La lectura del script (números de línea al 17/10/2026):
+Antes de KAN-60 este criterio de HU-5 solo estaba cubierto por la lectura de `infra/scripts/cd_deploy.sh`. Se probó de verdad el 17/10/2026 (hora local; 18/10 UTC), en `kanza-stg`:
 
-- Las migraciones (pasos 2 y 3, desde la línea 142) corren **antes** de la revisión nueva del servicio (paso 4, línea 189).
-- Líneas 177 a 181: si la ejecución del job falla (`exec_ok == 0`) o no hay al menos una tarea completada (`succeededCount`), el script escribe la nota "Falló la migración" y llama a `die`, que corta la corrida con el mensaje "La migración falló ... No se despliega; la revisión ... sigue sirviendo". `set -euo pipefail` impide continuar.
-- Línea 136: con Cloud SQL en un estado de transición también corta antes del paso 4.
-- Líneas 183 a 184: si la ejecución usó otra imagen, también corta.
-- El tráfico solo se mueve en el paso 6, así que la revisión anterior sigue sirviendo.
+- **Migración rota:** archivo temporal **sin trackear** `0003` (`0002 -> 0003`) con `CREATE TABLE kan60_probe (id int)` seguido de `SELECT 1/0`. Imagen `finance-api:kan60-broken-migration`, digest `sha256:f89e84c8...`. Si la tabla no existía después, todo se había revertido.
+- **Línea base:** servicio `finance-api-stg` en `finance-api-stg-00023-vat` con 100 % del tráfico, 15 revisiones, `/health` 200; `alembic_version = 0002` y `kan60_probe = NULL` (Cloud SQL Studio).
+- **Corrida real de `cd_deploy.sh`** (local, con la sesión de gcloud del humano): el paso 3 terminó en rojo, "La migración falló (ejecución finance-migrate-stg-pgfzv): Task ... failed with exit code: 1 ... No se despliega; la revisión finance-api-stg-00023-vat sigue sirviendo." Salida con código 1; los pasos 4 a 6 no corrieron.
+- **Ejecución del job:** `finance-migrate-stg-pgfzv`, succeeded 0, failed 1. Log: "Running upgrade 0002 -> 0003" y `asyncpg.exceptions.DivisionByZeroError: division by zero`.
+- **Servicio intacto:** `latestReady = latestCreated = 00023-vat`, 100 % del tráfico en esa revisión, 15 revisiones (ninguna nueva) y `/health` 200 `{"status":"ok"}`.
+- **BD sin migración a medias:** después, `alembic_version = 0002` y `kan60_probe = NULL`: la tabla creada dentro de la migración se revirtió (DDL transaccional de Postgres y una sola transacción de Alembic por corrida).
+- **Limpieza:** el job volvió a su imagen anterior (`sha256:7e9d6fa0...`, verificado), el archivo temporal se borró (`alembic heads = 0002`, `git status` limpio). La imagen temporal `kan60-broken-migration` se borró en Artifact Registry (el humano, en la Consola, 17/10/2026; ya no aparece en `docker images list` y la vigente `sha256:7e9d6fa0...` sigue). Cloud SQL quedó apagada (`STOPPED/NEVER`, verificado).
 
-Queda registrada como deuda: probarla de verdad exigiría una imagen con una migración rota y la sesión de gcloud del humano (el WIF solo deja entrar a `main`). No es parte de esta aceptación.
+**Límite de la evidencia:** se probó `cd_deploy.sh` en local con la sesión de gcloud del humano (owner), no el workflow de GitHub (WIF solo deja entrar a `main`). Es la misma lógica del script; el workflow solo lo invoca.
+
+La lectura del script que se hizo antes sigue siendo válida: las migraciones (pasos 2 y 3) corren antes de la revisión nueva (paso 4), `die` corta la corrida y el tráfico solo se mueve en el paso 6.
 
 ## 5. Cierre
 
