@@ -21,6 +21,28 @@ async def get(
     return await session.scalar(_in_space(space_id).where(Category.id == category_id))
 
 
+async def get_for_share(
+    session: AsyncSession, *, space_id: uuid.UUID, category_id: uuid.UUID
+) -> Category | None:
+    """Like `get`, but locks the row `FOR SHARE` until the end of the transaction.
+
+    For a writer that checks the state of a category (is the principal still active?) before it
+    writes a row that depends on it. `FOR SHARE` conflicts with the UPDATE of that row, which an
+    FK check (`FOR KEY SHARE`) does not: if an archive is in flight it waits for it and, in READ
+    COMMITTED, then reads the archived row; if the writer goes first, the archive waits for the
+    writer to end and its cascade then sees the row the writer committed.
+
+    `populate_existing` makes the read reflect the row as it is now, not as the session saw it.
+    """
+    stmt = (
+        _in_space(space_id)
+        .where(Category.id == category_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
+    )
+    return await session.scalar(stmt)
+
+
 async def list_for_space(
     session: AsyncSession, *, space_id: uuid.UUID, include_archived: bool
 ) -> list[Category]:

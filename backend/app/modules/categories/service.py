@@ -81,7 +81,9 @@ async def create_category(
 
     The parent must be an active principal category of the same space and kind (so there is no
     third level); the database enforces the same structure with a composite foreign key. A parent
-    from another space gives the same error as one that does not exist.
+    from another space gives the same error as one that does not exist. The parent is read
+    `FOR SHARE`, so an archive of it running at the same time cannot leave this subcategory active
+    under an archived principal (see `archive_category`).
     """
     if data.parent_id is not None:
         await _check_parent(session, space_id, data.parent_id, data.kind)
@@ -120,13 +122,20 @@ async def archive_category(
     All of them get the same `archived_at`, which is how `unarchive_category` later tells the
     subcategories archived together from the ones archived on their own. Archiving an archived
     category changes nothing. Old transactions keep their category: it is only hidden from new ones.
+
+    Order matters. The principal row is updated (flushed) **before** the cascade: that UPDATE takes
+    the row lock that `create_category` and `unarchive_category` wait for when they read the
+    principal `FOR SHARE`. They either finish first, and the cascade (a later statement, so in READ
+    COMMITTED it sees their commit) archives their subcategory too, or they wait for this archive
+    and then see the principal archived and refuse. Either way no subcategory stays active under an
+    archived principal.
     """
     category = await _get_or_raise(session, space_id, category_id)
     if category.archived_at is not None:
         return category
     moment = datetime.now(UTC)
     category.archived_at = moment
-    await session.flush()
+    await session.flush()  # first the principal, then the cascade: see the docstring
     if category.parent_id is None:
         await repository.archive_active_subcategories(
             session, space_id=space_id, parent_id=category.id, archived_at=moment
@@ -139,15 +148,21 @@ async def unarchive_category(
 ) -> Category:
     """Make a category active again. A principal one restores the subcategories archived with it.
 
-    A subcategory cannot come back while its principal category is archived (409). Unarchiving an
-    active category changes nothing.
+    A subcategory cannot come back while its principal category is archived (409). The principal
+    is read `FOR SHARE`, so an archive of it running at the same time either waits for this
+    unarchive (and its cascade then archives the subcategory again) or goes first (and this one
+    gets the 409). Unarchiving an active category changes nothing.
     """
     category = await _get_or_raise(session, space_id, category_id)
     moment = category.archived_at
     if moment is None:
         return category
     if category.parent_id is not None:
-        parent = await _get_or_raise(session, space_id, category.parent_id)
+        parent = await repository.get_for_share(
+            session, space_id=space_id, category_id=category.parent_id
+        )
+        if parent is None:  # not reachable: the composite foreign key guarantees the parent
+            raise NotFoundError("category_not_found", "Category not found")
         if parent.archived_at is not None:
             raise ConflictError(CATEGORY_PARENT_ARCHIVED, "The parent category is archived")
     category.archived_at = None
@@ -178,7 +193,8 @@ async def _get_or_raise(
 async def _check_parent(
     session: AsyncSession, space_id: uuid.UUID, parent_id: uuid.UUID, kind: str
 ) -> None:
-    parent = await repository.get(session, space_id=space_id, category_id=parent_id)
+    # FOR SHARE: the check "is the parent active?" must still hold when the subcategory is written.
+    parent = await repository.get_for_share(session, space_id=space_id, category_id=parent_id)
     if parent is None:
         raise InvalidFieldError(
             ("body", "parent_id"), CATEGORY_PARENT_NOT_FOUND, "Parent category not found"
