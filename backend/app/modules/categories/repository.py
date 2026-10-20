@@ -43,6 +43,29 @@ async def get_for_share(
     return await session.scalar(stmt)
 
 
+async def get_for_update(
+    session: AsyncSession, *, space_id: uuid.UUID, category_id: uuid.UUID
+) -> Category | None:
+    """Like `get`, but locks the row `FOR NO KEY UPDATE` until the end of the transaction.
+
+    For a writer that reads a category and then updates that same row (archive). Two of them on
+    the same category are serialised: the second one waits and, in READ COMMITTED, then reads the
+    row the first one committed, so it decides on the current state instead of overwriting it. It
+    is also the lock the UPDATE takes anyway, so it blocks nothing more than the UPDATE would:
+    `FOR UPDATE` would also stop the foreign key checks of other tables. It conflicts with
+    `FOR SHARE` (see `get_for_share`).
+
+    `populate_existing` makes the read reflect the row as it is now, not as the session saw it.
+    """
+    stmt = (
+        _in_space(space_id)
+        .where(Category.id == category_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    return await session.scalar(stmt)
+
+
 async def list_for_space(
     session: AsyncSession, *, space_id: uuid.UUID, include_archived: bool
 ) -> list[Category]:

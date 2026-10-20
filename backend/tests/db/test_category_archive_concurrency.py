@@ -17,6 +17,12 @@ connections (one engine per actor on a scratch database):
 
 Whoever goes second sees what the first committed (READ COMMITTED), so the four orders end the
 same way: the subcategory is refused, or it is archived with its principal.
+
+Two archives of the same principal at the same time (a double tap) are the other race: both read it
+active, so without a lock the second one overwrites `archived_at` with its own moment after the
+first one's cascade already gave the subcategories theirs, and unarchiving the principal would no
+longer bring them back. Two unarchives at the same time need no lock: both write NULL and both
+look for the subcategories archived at the same moment, so they end in the same state.
 """
 
 import asyncio
@@ -250,4 +256,70 @@ async def test_archiving_a_principal_while_a_subcategory_is_being_unarchived_arc
     assert getattr(archived, "archived_at", None) == main_archived_at
     # The archive waited for the unarchive, so its cascade found the subcategory active again.
     assert await _archived_at(engine, space.sub_id) == main_archived_at
+    assert await _scalar(engine, ACTIVE_UNDER_ARCHIVED) == 0
+
+
+async def _add_an_active_subcategory(engine: AsyncEngine, space: Space, name: str) -> uuid.UUID:
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        data = _create(name, parent_id=space.main_id)
+        sub = await categories_service.create_category(session, space.id, data)
+        await session.commit()
+        return sub.id
+
+
+def _unarchive(space: Space) -> Operation:
+    async def operation(session: AsyncSession) -> object:
+        return await categories_service.unarchive_category(session, space.id, space.main_id)
+
+    return operation
+
+
+async def test_two_simultaneous_archives_of_a_principal_leave_one_moment_for_all_of_them(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    space = await _committed_space(engine)
+    cafes = await _add_an_active_subcategory(engine, space, "Cafés")
+    alone_at = await _archived_at(engine, space.sub_id)
+
+    first, second = await _overlap(engines, _archive(space), _archive(space))
+
+    moment = await _archived_at(engine, space.main_id)
+    assert moment is not None
+    # The second one found the principal already archived: it returns it as it is (200, idempotent).
+    assert getattr(first, "archived_at", None) == moment
+    assert getattr(second, "archived_at", None) == moment
+    assert await _archived_at(engine, cafes) == moment
+    # The subcategory archived on its own keeps its own moment.
+    assert await _archived_at(engine, space.sub_id) == alone_at
+    assert await _scalar(engine, ACTIVE_UNDER_ARCHIVED) == 0
+
+    # Because they share one moment, unarchiving the principal brings back every subcategory that
+    # was archived with it, and leaves the one archived on its own as it was.
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        await categories_service.unarchive_category(session, space.id, space.main_id)
+        await session.commit()
+    assert await _archived_at(engine, space.main_id) is None
+    assert await _archived_at(engine, cafes) is None
+    assert await _archived_at(engine, space.sub_id) == alone_at
+
+
+async def test_two_simultaneous_unarchives_of_a_principal_restore_it_and_its_subcategories(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    space = await _committed_space(engine)
+    cafes = await _add_an_active_subcategory(engine, space, "Cafés")
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        await categories_service.archive_category(session, space.id, space.main_id)
+        await session.commit()
+    alone_at = await _archived_at(engine, space.sub_id)
+
+    first, second = await _overlap(engines, _unarchive(space), _unarchive(space))
+
+    assert getattr(first, "archived_at", "archived") is None
+    assert getattr(second, "archived_at", "archived") is None
+    assert await _archived_at(engine, space.main_id) is None
+    assert await _archived_at(engine, cafes) is None
+    assert await _archived_at(engine, space.sub_id) == alone_at
     assert await _scalar(engine, ACTIVE_UNDER_ARCHIVED) == 0

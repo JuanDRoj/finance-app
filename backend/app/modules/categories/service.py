@@ -129,8 +129,14 @@ async def archive_category(
     COMMITTED it sees their commit) archives their subcategory too, or they wait for this archive
     and then see the principal archived and refuse. Either way no subcategory stays active under an
     archived principal.
+
+    The category is read `FOR NO KEY UPDATE` (the lock its own UPDATE takes anyway), so two archives
+    of the same category at the same time (a double tap) are serialised: the second one waits, finds
+    it archived and returns it as it is. Without the lock it would overwrite `archived_at` with its
+    own moment while the subcategories keep the first one, and unarchiving the principal would no
+    longer bring them back.
     """
-    category = await _get_or_raise(session, space_id, category_id)
+    category = await _get_for_update_or_raise(session, space_id, category_id)
     if category.archived_at is not None:
         return category
     moment = datetime.now(UTC)
@@ -185,6 +191,15 @@ async def _get_or_raise(
     session: AsyncSession, space_id: uuid.UUID, category_id: uuid.UUID
 ) -> Category:
     category = await repository.get(session, space_id=space_id, category_id=category_id)
+    if category is None:
+        raise NotFoundError("category_not_found", "Category not found")
+    return category
+
+
+async def _get_for_update_or_raise(
+    session: AsyncSession, space_id: uuid.UUID, category_id: uuid.UUID
+) -> Category:
+    category = await repository.get_for_update(session, space_id=space_id, category_id=category_id)
     if category is None:
         raise NotFoundError("category_not_found", "Category not found")
     return category
