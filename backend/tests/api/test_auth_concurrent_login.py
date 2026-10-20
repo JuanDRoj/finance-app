@@ -5,7 +5,8 @@ a real pool on a scratch database and the two `POST /auth/session` run with `asy
 The fake Firebase makes both requests wait for each other (a barrier of two) before either one
 touches the database, so they enter the transaction together. How PostgreSQL then orders the
 two inserts is up to it, and the result must be the same every time: one user, one space, one
-owner. The overlap itself is forced at service level in `tests/db/test_first_login_concurrency.py`.
+owner and one set of default categories. The overlap itself is forced at service level in
+`tests/db/test_first_login_concurrency.py`.
 """
 
 import asyncio
@@ -102,6 +103,8 @@ async def test_parallel_first_logins_through_http_leave_one_space(
                 == created
             )
             assert await _scalar(engine, "SELECT count(*) FROM space_members") == created
+            # The default categories are seeded once per space, never twice.
+            assert await _scalar(engine, "SELECT count(*) FROM categories") == created * 34
 
     # One personal space per user, the one the product promises: "Mi espacio", UYU.
     assert (

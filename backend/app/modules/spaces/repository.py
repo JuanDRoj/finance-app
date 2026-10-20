@@ -58,3 +58,9 @@ async def list_for_user(session: AsyncSession, *, user_id: uuid.UUID) -> list[Sp
 
 async def get(session: AsyncSession, *, space_id: uuid.UUID) -> Space | None:
     return await session.get(Space, space_id)
+
+
+async def get_personal_space_id(session: AsyncSession, *, user_id: uuid.UUID) -> uuid.UUID | None:
+    """The id of the personal space the user created; None if they have none."""
+    stmt = select(Space.id).where(Space.created_by == user_id, Space.type == "personal")
+    return await session.scalar(stmt)

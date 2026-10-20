@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import UnauthenticatedError
+from app.modules.categories import service as categories_service
+from app.modules.categories.models import Category
 from app.modules.spaces import service as spaces_service
 from app.modules.spaces.models import Space, SpaceMember
 from app.modules.users.models import User
@@ -89,6 +91,35 @@ async def test_login_sets_the_cookie_and_creates_the_user_and_the_personal_space
     member = await session.scalar(select(SpaceMember).where(SpaceMember.space_id == space.id))
     assert member is not None
     assert (member.user_id, member.role) == (user.id, "owner")
+
+
+async def test_the_first_login_seeds_the_default_categories_of_the_new_space(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    response = await api_client.post(URL, json=BODY, headers={"Origin": LOCAL_ORIGIN})
+
+    assert response.status_code == 204
+    space = await session.scalar(select(Space))
+    assert space is not None
+    categories = list(await session.scalars(select(Category)))
+    assert len(categories) == 34
+    assert {c.space_id for c in categories} == {space.id}
+    assert sum(c.parent_id is None for c in categories) == 15
+
+
+async def test_a_second_login_does_not_duplicate_nor_restore_the_default_categories(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    await api_client.post(URL, json=BODY, headers={"Origin": LOCAL_ORIGIN})
+    mascotas = await session.scalar(select(Category).where(Category.name == "Mascotas"))
+    assert mascotas is not None
+    await session.delete(mascotas)
+    await session.flush()  # a hand-made gap, only to see that a login never refills it
+
+    response = await api_client.post(URL, json=BODY, headers={"Origin": LOCAL_ORIGIN})
+
+    assert response.status_code == 204
+    assert await session.scalar(select(func.count()).select_from(Category)) == 33
 
 
 async def test_local_cookie_is_httponly_lax_not_secure_and_lasts_fourteen_days(
@@ -375,6 +406,25 @@ async def test_user_and_space_are_one_transaction_and_no_cookie_leaves_on_failur
     assert response.status_code == 500
     assert "set-cookie" not in response.headers
     assert await _snapshot(session) == (0, 0, 0)  # the user upsert was rolled back too
+
+
+async def test_user_space_and_categories_are_one_transaction_and_no_cookie_leaves_on_failure(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def failing_seed(*_args: object, **_kwargs: object) -> bool:
+        raise RuntimeError("category insert failed")
+
+    monkeypatch.setattr(categories_service, "seed_default_categories", failing_seed)
+
+    response = await api_client.post(URL, json=BODY, headers={"Origin": LOCAL_ORIGIN})
+
+    assert response.status_code == 500
+    assert "set-cookie" not in response.headers
+    assert await _snapshot(session) == (0, 0, 0)  # the user and the space were rolled back too
+    assert await session.scalar(select(func.count()).select_from(Category)) == 0
 
 
 # --- Logs -----------------------------------------------------------------------------------

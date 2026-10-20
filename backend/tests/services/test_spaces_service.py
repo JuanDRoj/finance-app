@@ -185,3 +185,48 @@ async def test_list_spaces_is_ordered_by_creation_time_not_by_insertion_order(
     spaces = await service.list_spaces(session, user_id)
 
     assert [s.name for s in spaces] == ["Casa", "Mi espacio"]
+
+
+async def test_get_personal_space_id_returns_the_id_of_the_personal_space(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-personal-id")
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    [personal] = await _spaces_of(session, user_id)
+
+    assert await service.get_personal_space_id(session, user_id) == personal.id
+
+
+async def test_get_personal_space_id_ignores_the_households_and_other_users(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-personal-id-a")
+    other_id = await _make_user(session, "uid-personal-id-b")
+    session.add(
+        Space(
+            name="Hogar",
+            type="household",
+            currency="UYU",
+            timezone="UTC",
+            created_by=user_id,
+        )
+    )
+    await session.flush()
+    await service.ensure_personal_space(session, user_id, "America/Montevideo")
+    await service.ensure_personal_space(session, other_id, "America/Bogota")
+    [own] = [s for s in await _spaces_of(session, user_id) if s.type == "personal"]
+    [theirs] = await _spaces_of(session, other_id)
+
+    assert await service.get_personal_space_id(session, user_id) == own.id
+    assert await service.get_personal_space_id(session, other_id) == theirs.id
+
+
+async def test_get_personal_space_id_raises_not_found_when_there_is_none(
+    session: AsyncSession,
+) -> None:
+    user_id = await _make_user(session, "uid-personal-id-none")
+
+    with pytest.raises(NotFoundError) as error:
+        await service.get_personal_space_id(session, user_id)
+
+    assert error.value.code == "space_not_found"

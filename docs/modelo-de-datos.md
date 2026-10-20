@@ -68,6 +68,17 @@ erDiagram
     timestamptz created_at
     timestamptz updated_at
   }
+  CATEGORIES {
+    uuid id PK
+    uuid space_id FK
+    uuid parent_id FK "null = principal"
+    text name
+    enum kind "expense | income"
+    text icon "clave Phosphor, ej. fork-knife"
+    timestamptz archived_at
+    timestamptz created_at
+    timestamptz updated_at
+  }
   TRANSACTIONS {
     uuid id PK
     uuid space_id FK
@@ -116,6 +127,8 @@ erDiagram
 **Los días de cierre y vencimiento son solo de las tarjetas**CHECK `ck_accounts_card_days`: una cuenta `credit_card` tiene `closing_day` y `due_day` (1 a 31), y una `bank` o `cash` no tiene ninguno. Lo validan también la API (422) y la BD.
  
 **Un espacio personal por creador**Índice único parcial `uq_spaces_created_by_personal` sobre `spaces(created_by)` donde `type = 'personal'`. En v1 equivale a un espacio personal por usuario; unirse a un hogar en v2 (`space_members`) no la afecta, porque la regla mira quién creó el espacio, no la membresía.
+ 
+**Categorías en dos niveles, del mismo tipo y con nombre único**Una subcategoría cuelga de una principal de su mismo espacio y su mismo `kind`, y no hay tercer nivel: lo impone una FK compuesta `(parent_id, space_id, kind, has_parent)` → `(id, space_id, kind, is_main)` con dos columnas generadas (`is_main`, `has_parent`). El nombre es único entre hermanas, sin distinguir mayúsculas y contando las archivadas (`uq_categories_main_name` por espacio y tipo, `uq_categories_sub_name` por principal). Por eso la siembra de las predefinidas es idempotente.
  
 ## Tablas
  
@@ -204,15 +217,20 @@ Fechas reales de cada cierre. Se calculan con los días de la cuenta y el usuari
  
 v1
  
-Dos niveles: principal y subcategoría. Se crean predefinidas y el usuario las edita.
+Dos niveles: principal y subcategoría. Se crean predefinidas (34, en español, cada una con su ícono) y el usuario las edita. Las recibe todo espacio personal al crearse (primer login) y la migración `0004` se las dio a los que ya existían.
  
 | idPK | uuid |
 | --- | --- |
-| space_idFK |  |
-| parent_idFK | null = categoría principal |
-| name | en el idioma del usuario: "Comida" |
-| kind | expense · income |
-| archived_at | null = activa |
+| space_idFK | `NOT NULL`, `ON DELETE RESTRICT`; índice `ix_categories_space_id` |
+| parent_idFK | null = categoría principal. FK compuesta `(parent_id, space_id, kind, has_parent)` → `(id, space_id, kind, is_main)`, `ON DELETE RESTRICT`: el padre es del mismo espacio, del mismo `kind` y principal (sin tercer nivel). No se cambia después de crear la categoría |
+| name | "Comida"; `text` sin espacios en los extremos (lo recorta la API), no vacío (`ck_categories_name_not_blank`) y de hasta 80 caracteres (`ck_categories_name_length`). Único entre hermanas, sin distinguir mayúsculas y contando las archivadas: `uq_categories_main_name` `(space_id, kind, lower(name))` donde `parent_id IS NULL`, y `uq_categories_sub_name` `(parent_id, lower(name))` donde `parent_id IS NOT NULL` |
+| kind | expense · income (texto + CHECK `ck_categories_kind`); una subcategoría tiene el de su principal. No se cambia después de crear la categoría |
+| icon | `NOT NULL`; clave de un ícono de Phosphor en kebab-case (`fork-knife`; en React, `ForkKnife`). La BD solo comprueba la forma (`ck_categories_icon_format`: minúsculas, dígitos y guiones, hasta 40 caracteres); la lista fija de 66 íconos vive en la API (`app/modules/categories/icons.py`, un `Literal`), así que agregar uno no pide migración. La lista solo crece: una clave nunca se quita ni se renombra. Las predefinidas traen el suyo y al crear una se elige (decidido el 17/10/2026) |
+| is_main, has_parent | `boolean` generadas (`parent_id IS NULL` y `parent_id IS NOT NULL`), nunca se escriben ni salen en la API: solo existen para que la FK compuesta pueda exigir que el padre sea principal |
+| archived_at | `timestamptz`; null = activa. Archivar una principal archiva también sus subcategorías activas (mismo `archived_at`); desarchivarla restaura las que se archivaron junto con ella. Una archivada no se ofrece para movimientos nuevos, pero los movimientos viejos la conservan |
+| created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger. La lista de la API sale en orden de creación (`created_at`, `id`) |
+ 
+No hay borrado: solo se archiva. La lista de la API oculta las archivadas salvo con `?include_archived=true`, y es plana (cada subcategoría trae su `parent_id`).
  
 ### recurring_templates
  
