@@ -13,8 +13,10 @@ automatically), by constraint/index name against the migrated database:
   created on a temporary table (the part from `USING`, which holds method, columns and WHERE).
 - FK `ON DELETE`: `pg_constraint.confdeltype` against the model's `ondelete`.
 
-Not covered: `ON UPDATE`, `DEFERRABLE`, exclusion constraints, expression indexes with
-non-Postgres dialect options other than `postgresql_where`.
+Indexes may have expressions (`lower(name)`): they are rendered into the probe index too.
+
+Not covered: `ON UPDATE`, `DEFERRABLE`, exclusion constraints, indexes with dialect options other
+than `postgresql_where`.
 """
 
 import asyncio
@@ -27,12 +29,21 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import CheckConstraint, Connection, ForeignKeyConstraint, Index, Table, text
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    Connection,
+    ForeignKeyConstraint,
+    Index,
+    Table,
+    text,
+)
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.db import Base
 from app.modules.accounts import models as accounts_models  # noqa: F401
+from app.modules.categories import models as categories_models  # noqa: F401
 from app.modules.currencies import models as currencies_models  # noqa: F401
 from app.modules.spaces import models as spaces_models  # noqa: F401
 from app.modules.users import models as users_models  # noqa: F401
@@ -66,6 +77,20 @@ def _where(index: Index) -> str | None:
     if where is None:
         return None
     return str(where.compile(dialect=DIALECT, compile_kwargs={"literal_binds": True}))
+
+
+def _index_elements(index: Index) -> str:
+    """The columns and expressions of the index as SQL, e.g. `space_id, kind, lower(name)`."""
+    parts = []
+    for element in index.expressions:
+        if isinstance(element, str):
+            parts.append(_quote(element))
+        elif isinstance(element, Column):
+            parts.append(_quote(element.name))
+        else:
+            compiled = element.compile(dialect=DIALECT, compile_kwargs={"literal_binds": True})
+            parts.append(str(compiled))
+    return ", ".join(parts)
 
 
 def _check_defs_in_db(connection: Connection) -> dict[tuple[str, str], str]:
@@ -125,7 +150,7 @@ def _probe_check_def(connection: Connection, table: Table, check: CheckConstrain
 
 def _probe_index_def(connection: Connection, table: Table, index: Index) -> str:
     probe = "_probe_index"
-    columns = ", ".join(_quote(c.name) for c in index.columns)
+    columns = _index_elements(index)
     unique = "UNIQUE " if index.unique else ""
     where = _where(index)
     suffix = f" WHERE {where}" if where else ""

@@ -21,6 +21,7 @@ from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from app.modules.categories import service as categories_service
 from app.modules.spaces import service as spaces_service
 from app.modules.users import service as users_service
 
@@ -71,6 +72,9 @@ async def test_two_simultaneous_first_logins_leave_one_user_one_space_one_owner(
             created = await spaces_service.ensure_personal_space(
                 session, user.id, "America/Montevideo"
             )
+            if created:
+                space_id = await spaces_service.get_personal_space_id(session, user.id)
+                await categories_service.seed_default_categories(session, space_id)
             if is_a:
                 a_has_written.set()
                 await b_is_waiting.wait()  # B is blocked on A's row until we commit
@@ -99,3 +103,6 @@ async def test_two_simultaneous_first_logins_leave_one_user_one_space_one_owner(
     assert await _count(engine_a, "SELECT count(*) FROM spaces WHERE type = 'personal'") == 1
     assert await _count(engine_a, "SELECT count(*) FROM space_members WHERE role = 'owner'") == 1
     assert await _count(engine_a, "SELECT count(*) FROM space_members") == 1
+    # The winner seeded the default categories once; the loser, which did not create the space,
+    # seeded nothing.
+    assert await _count(engine_a, "SELECT count(*) FROM categories") == 34

@@ -145,6 +145,330 @@
         "title": "AccountUpdate",
         "type": "object"
       },
+      "CategoryCreate": {
+        "additionalProperties": false,
+        "description": "A principal category, or a subcategory when `parent_id` is sent.\n\nA subcategory must have the kind of its principal category, which cannot itself be a\nsubcategory. Those rules depend on stored data, so the service checks them.",
+        "properties": {
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "expense",
+              "income"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "icon"
+        ],
+        "title": "CategoryCreate",
+        "type": "object"
+      },
+      "CategoryRead": {
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "expense",
+              "income"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "required": [
+          "id",
+          "parent_id",
+          "name",
+          "kind",
+          "icon",
+          "archived_at"
+        ],
+        "title": "CategoryRead",
+        "type": "object"
+      },
+      "CategoryUpdate": {
+        "additionalProperties": false,
+        "description": "Fields to change: only the ones sent are updated. The kind and the parent never change.",
+        "properties": {
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "CategoryUpdate",
+        "type": "object"
+      },
       "CurrencyRead": {
         "properties": {
           "code": {
@@ -372,7 +696,7 @@
         ]
       },
       "post": {
-        "description": "Exchange a Firebase ID token (signed in less than 5 minutes ago) for the session cookie.\n\nThe cookie is HttpOnly and lasts 14 days. The first login also creates the user and their\npersonal space \"Mi espacio\" (UYU, in the given timezone).",
+        "description": "Exchange a Firebase ID token (signed in less than 5 minutes ago) for the session cookie.\n\nThe cookie is HttpOnly and lasts 14 days. The first login also creates the user and their\npersonal space \"Mi espacio\" (UYU, in the given timezone) with its default categories.",
         "operationId": "create_session_auth_session_post",
         "requestBody": {
           "content": {
@@ -882,6 +1206,418 @@
         "summary": "Update Account",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/spaces/{space_id}/categories": {
+      "get": {
+        "description": "The categories of the space, principal and sub, flat, in creation order.\n\nThe archived ones only with `include_archived`. A subcategory points at its principal with\n`parent_id`.",
+        "operationId": "list_categories_spaces__space_id__categories_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryRead"
+                  },
+                  "title": "Response List Categories Spaces  Space Id  Categories Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Categories",
+        "tags": [
+          "categories"
+        ]
+      },
+      "post": {
+        "description": "Create a principal category, or a subcategory when `parent_id` is sent.\n\nA subcategory has the kind of its principal category, which must be active and cannot be a\nsubcategory itself (422). The name must be new among its siblings, archived ones included\n(409).",
+        "operationId": "create_category_spaces__space_id__categories_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/spaces/{space_id}/categories/{category_id}": {
+      "patch": {
+        "description": "Rename a category or change its icon. The kind and the parent cannot be changed.",
+        "operationId": "update_category_spaces__space_id__categories__category_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/spaces/{space_id}/categories/{category_id}/archive": {
+      "post": {
+        "description": "Archive a category, and with it the active subcategories of a principal one.\n\nIt is no longer offered for new movements; the old ones keep it. Archiving an archived\ncategory changes nothing.",
+        "operationId": "archive_category_spaces__space_id__categories__category_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/spaces/{space_id}/categories/{category_id}/unarchive": {
+      "post": {
+        "description": "Make a category active again, and the subcategories that were archived with a principal one.\n\nA subcategory whose principal category is archived cannot be unarchived (409).",
+        "operationId": "unarchive_category_spaces__space_id__categories__category_id__unarchive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unarchive Category",
+        "tags": [
+          "categories"
         ]
       }
     }

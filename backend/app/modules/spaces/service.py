@@ -34,6 +34,18 @@ async def ensure_personal_space(session: AsyncSession, user_id: uuid.UUID, timez
     return True
 
 
+async def get_personal_space_id(session: AsyncSession, user_id: uuid.UUID) -> uuid.UUID:
+    """The id of the user's personal space, or `NotFoundError` if they have none.
+
+    For the router that composes the first login: it needs the id of the space that
+    `ensure_personal_space` just created, to give it its default categories.
+    """
+    space_id = await repository.get_personal_space_id(session, user_id=user_id)
+    if space_id is None:
+        raise NotFoundError("space_not_found", "Space not found")
+    return space_id
+
+
 async def require_member(
     session: AsyncSession, space_id: uuid.UUID, user_id: uuid.UUID
 ) -> SpaceMemberRead:

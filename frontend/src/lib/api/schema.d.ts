@@ -18,7 +18,7 @@ export interface paths {
          * @description Exchange a Firebase ID token (signed in less than 5 minutes ago) for the session cookie.
          *
          *     The cookie is HttpOnly and lasts 14 days. The first login also creates the user and their
-         *     personal space "Mi espacio" (UYU, in the given timezone).
+         *     personal space "Mi espacio" (UYU, in the given timezone) with its default categories.
          */
         post: operations["create_session_auth_session_post"];
         /**
@@ -163,6 +163,102 @@ export interface paths {
         patch: operations["update_account_spaces__space_id__accounts__account_id__patch"];
         trace?: never;
     };
+    "/spaces/{space_id}/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Categories
+         * @description The categories of the space, principal and sub, flat, in creation order.
+         *
+         *     The archived ones only with `include_archived`. A subcategory points at its principal with
+         *     `parent_id`.
+         */
+        get: operations["list_categories_spaces__space_id__categories_get"];
+        put?: never;
+        /**
+         * Create Category
+         * @description Create a principal category, or a subcategory when `parent_id` is sent.
+         *
+         *     A subcategory has the kind of its principal category, which must be active and cannot be a
+         *     subcategory itself (422). The name must be new among its siblings, archived ones included
+         *     (409).
+         */
+        post: operations["create_category_spaces__space_id__categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Category
+         * @description Rename a category or change its icon. The kind and the parent cannot be changed.
+         */
+        patch: operations["update_category_spaces__space_id__categories__category_id__patch"];
+        trace?: never;
+    };
+    "/spaces/{space_id}/categories/{category_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Category
+         * @description Archive a category, and with it the active subcategories of a principal one.
+         *
+         *     It is no longer offered for new movements; the old ones keep it. Archiving an archived
+         *     category changes nothing.
+         */
+        post: operations["archive_category_spaces__space_id__categories__category_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/categories/{category_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unarchive Category
+         * @description Make a category active again, and the subcategories that were archived with a principal one.
+         *
+         *     A subcategory whose principal category is archived cannot be unarchived (409).
+         */
+        post: operations["unarchive_category_spaces__space_id__categories__category_id__unarchive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -211,6 +307,66 @@ export interface components {
             closing_day?: number;
             /** Due Day */
             due_day?: number;
+            /** Name */
+            name?: string;
+        };
+        /**
+         * CategoryCreate
+         * @description A principal category, or a subcategory when `parent_id` is sent.
+         *
+         *     A subcategory must have the kind of its principal category, which cannot itself be a
+         *     subcategory. Those rules depend on stored data, so the service checks them.
+         */
+        CategoryCreate: {
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "expense" | "income";
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: string | null;
+        };
+        /** CategoryRead */
+        CategoryRead: {
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "expense" | "income";
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id: string | null;
+        };
+        /**
+         * CategoryUpdate
+         * @description Fields to change: only the ones sent are updated. The kind and the parent never change.
+         */
+        CategoryUpdate: {
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon?: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
             /** Name */
             name?: string;
         };
@@ -696,6 +852,291 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_categories_spaces__space_id__categories_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryRead"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_category_spaces__space_id__categories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_category_spaces__space_id__categories__category_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_category_spaces__space_id__categories__category_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unarchive_category_spaces__space_id__categories__category_id__unarchive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                category_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

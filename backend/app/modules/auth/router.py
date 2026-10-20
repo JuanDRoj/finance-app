@@ -14,6 +14,7 @@ from app.modules.auth.cookies import (
 )
 from app.modules.auth.dependencies import FirebaseDep, require_allowed_origin
 from app.modules.auth.schemas import SessionCreate
+from app.modules.categories import service as categories_service
 from app.modules.spaces import service as spaces_service
 from app.modules.users import service as users_service
 
@@ -42,9 +43,10 @@ async def create_session(
     """Exchange a Firebase ID token (signed in less than 5 minutes ago) for the session cookie.
 
     The cookie is HttpOnly and lasts 14 days. The first login also creates the user and their
-    personal space "Mi espacio" (UYU, in the given timezone).
+    personal space "Mi espacio" (UYU, in the given timezone) with its default categories.
     """
-    # The router composes `auth`, `users` and `spaces` (a service cannot call a later module).
+    # The router composes `auth`, `users`, `spaces` and `categories` (a service cannot call a
+    # later module, and `spaces` cannot call `categories`).
     # Firebase goes first, so no connection of the small pool is held while waiting for Google.
     # It is all one transaction: if anything fails after the cookie was built, the rollback leaves
     # no user behind and no `Set-Cookie` goes out.
@@ -53,6 +55,11 @@ async def create_session(
         session, firebase_uid=new.firebase_uid, email=new.email, display_name=new.display_name
     )
     created = await spaces_service.ensure_personal_space(session, user.id, data.timezone)
+    if created:
+        # Only the request that created the space seeds it, so two simultaneous first logins
+        # cannot both do it (the seed is idempotent anyway).
+        space_id = await spaces_service.get_personal_space_id(session, user.id)
+        await categories_service.seed_default_categories(session, space_id)
     set_session_cookie(response, settings, new.cookie)
     logger.info(
         "session_created", extra={"user_id": str(user.id), "personal_space_created": created}
