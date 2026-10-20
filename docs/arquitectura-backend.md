@@ -1,6 +1,6 @@
 # Arquitectura del backend
 
-Última actualización: 2026-10-18
+Última actualización: 2026-10-20
 
 Patrones y buenas prácticas del backend (FastAPI + SQLAlchemy async + PostgreSQL), con su porqué. Las reglas cortas que se aplican en cada tarea viven en `backend/CLAUDE.md`; este documento explica las razones y apunta al módulo de referencia (`accounts`, §11). **Léelo al crear un módulo, una capa o un patrón nuevo** (errores, paginación, transacciones, tests de BD).
 
@@ -56,6 +56,16 @@ return await service.archive_account(session, space_id, account_id, balance=bala
 
 La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`; el router solo trae el dato. Si un caso de uso necesita muchos datos de arriba, es señal de que pertenece al módulo de arriba.
 
+**Lo mismo vale para un efecto en un módulo posterior.** El primer login crea el espacio personal y le siembra las categorías, pero `spaces` no puede llamar a `categories`. Lo compone el router de `auth` (KAN-65), en la misma transacción:
+
+```python
+# auth/router.py
+created = await spaces_service.ensure_personal_space(session, user.id, data.timezone)
+if created:  # solo quien creó el espacio lo siembra
+    space_id = await spaces_service.get_personal_space_id(session, user.id)
+    await categories_service.seed_default_categories(session, space_id)
+```
+
 ## 3. Transacciones: una por request
 
 - **La dependencia de sesión es la unidad de trabajo.** `get_session` usa `Depends(..., scope="function")`: si el endpoint termina bien hace `commit()`, si lanza una excepción hace `rollback()`, y las dos cosas ocurren **antes** de enviar la respuesta (doc oficial de FastAPI, *dependencies with yield*). El cliente nunca ve un 200 de algo que no se guardó.
@@ -63,7 +73,13 @@ La regla ("saldo distinto de 0 → `ConflictError`") queda en `accounts.service`
 - Una dependencia con `yield` que use `DbSession` debe declararse también con `scope="function"`: FastAPI no deja que una de scope `"request"` dependa de una de scope `"function"`. Las dependencias sin `yield` no tienen esa restricción.
 - **Los services nunca llaman `commit()` ni `rollback()`.** Usan `await session.flush()` cuando necesitan el id generado o detectar una restricción a tiempo.
 - Una operación que cruza módulos es una sola transacción por construcción: todos usan la misma sesión del request.
-- **Restricciones que pueden fallar por datos del usuario** (UNIQUE): el service hace `flush()` dentro de `try/except IntegrityError` y lanza `ConflictError` con su código. El nombre predecible de la restricción (`uq_...`) permite distinguir cuál fue.
+- **Restricciones que pueden fallar por datos del usuario** (UNIQUE): el service hace `flush()` dentro de `try/except IntegrityError` y lanza `ConflictError` con su código. El nombre predecible de la restricción (`uq_...`) permite distinguir cuál fue: asyncpg lo expone como `constraint_name` en el error original (ver `_violated_constraint` en `categories/service.py`). El flush va dentro de `async with session.begin_nested()` (un savepoint): el `IntegrityError` revierte solo ese savepoint y la sesión del request sigue usable. Sin él, la transacción entera queda abortada.
+- **Reglas que leen una fila y luego escriben según su estado** (crear una subcategoría exige la principal activa; un movimiento exigirá la cuenta y la categoría activas): en READ COMMITTED, dos requests pueden leer el mismo estado viejo. Se lee con lock de fila (KAN-65, probado con solapamiento forzado):
+  - **Leer y escribir otra fila que depende de ella:** `FOR SHARE` (`with_for_update(read=True)`). La FK de la fila nueva solo toma `FOR KEY SHARE`, que no choca con el UPDATE que cambia el estado (archivar): por eso, sin el lock, la carrera existe.
+  - **Leer y modificar la misma fila:** `FOR NO KEY UPDATE` (`with_for_update(key_share=True)`), el mismo lock que el UPDATE toma, mientras no cambie columnas de una clave única referenciada por una FK. `FOR UPDATE` frenaría además las FK de otras tablas.
+  - **Nunca UPDATE de una fila leída con `FOR SHARE`** en la misma transacción: dos transacciones con el SHARE que intenten actualizarla se bloquean entre sí (deadlock).
+  - Quien cambia el estado actualiza primero esa fila y después sus dependientes, y todos los caminos toman los locks en el mismo orden (principal y luego subcategoría): así no hay ciclos.
+  - Con `populate_existing()`, la lectura refleja la fila recién bloqueada y no la copia que la sesión ya tenía.
 - Fuera de HTTP (scripts, seeds): se abre `db.sessionmaker()` y se hace commit explícito.
 
 ## 4. Errores (`app/core/errors.py`)
@@ -155,6 +171,12 @@ def _active(space_id: UUID) -> Select[Transaction]:
 
 **Cron idempotente.** `insert(...).on_conflict_do_nothing(constraint="uq_transactions_template_id_period").returning(Transaction.id)` (dialecto `postgresql`). Solo se crean entries para los ids devueltos. Correrlo dos veces el mismo día no duplica nada.
 
+**Siembra idempotente** (`categories.service.seed_default_categories`, KAN-65): mismo recurso. Si el espacio ya tiene alguna fila no hace nada (nunca se borra, solo se archiva). Inserta las principales con `on_conflict_do_nothing()`, que se apoya en el índice único de nombre, y cuelga las subcategorías de los ids que **de verdad** quedaron en la BD, no de los que generó. Dos siembras cruzadas terminan con un solo juego de filas y ninguna FK rota.
+
+**Estructura en la BD con una FK compuesta sobre columnas generadas** (`categories`, KAN-65). La regla "dos niveles, mismo `kind` y mismo espacio que la principal" no la cubre una FK simple. Dos columnas generadas almacenadas (`is_main = parent_id IS NULL`, `has_parent = parent_id IS NOT NULL`), un `UNIQUE (id, space_id, kind, is_main)` y la FK `(parent_id, space_id, kind, has_parent) → (id, space_id, kind, is_main)` hacen que el padre deba ser una principal del mismo espacio y del mismo tipo. Una principal no se valida, porque su `parent_id` es NULL. El service valida lo mismo antes, para responder un 422 con `loc`; la BD es la red de seguridad.
+
+**Migración de datos con copia congelada** (`0004`): una migración que siembra datos lleva su propia copia de la lista y no importa código de `app`. Si la lista cambia en el código, lo que hizo una revisión vieja no cambia. Como lee filas existentes, no se puede renderizar con `--sql`, y lo dice con un error claro.
+
 ## 8. Async y Cloud Run
 
 - **Nunca lazy loading:** toda `relationship()` lleva `lazy="raise"`. Si alguien olvida `selectinload`, el test falla con un error claro en vez de un `MissingGreenlet` confuso (doc de SQLAlchemy asyncio).
@@ -197,6 +219,17 @@ El primer módulo real es `backend/app/modules/accounts` (KAN-64). Para crear un
 | `tests/unit/test_account_schemas.py`, `tests/services/test_accounts_service.py`, `tests/api/test_accounts.py`, `tests/db/test_accounts_migration.py` | Una carpeta por capa (§10). En `api`, los 401 y los dos casos de IDOR: espacio ajeno → `space_not_found`, cuenta ajena desde el propio espacio → `account_not_found` |
 
 Lo que aún no muestra: archivar con saldo 0, que necesita el saldo de `transactions` (el patrón está en §2 y llega con BE-16), y la paginación por cursor (§7), porque una lista de cuentas no se pagina.
+
+`backend/app/modules/categories` (KAN-65) suma los patrones que `accounts` no tiene:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Composición desde el router en el primer login | `auth/router.py` | §2 |
+| `IntegrityError` → 409 por nombre de restricción, en un savepoint | `categories/service.py` (`_flush_checking_the_name`) | §3 |
+| Locks de fila `FOR SHARE` / `FOR NO KEY UPDATE` | `categories/repository.py` (`get_for_share`, `get_for_update`) y `tests/db/test_category_archive_concurrency.py` | §3 |
+| Siembra idempotente y migración de datos con copia congelada | `categories/service.py`, `defaults.py` y `migrations/versions/20261020_0004_create_categories.py` | §7 |
+| FK compuesta sobre columnas generadas e índices únicos parciales por `lower(name)` | `categories/models.py` | §7 |
+| Lista fija como `Literal` en la API y solo formato en la BD (íconos) | `categories/icons.py` | §5 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 
