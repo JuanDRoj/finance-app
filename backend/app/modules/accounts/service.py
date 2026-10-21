@@ -143,14 +143,37 @@ async def get_account_for_share(
 
     For whoever checks an account and then writes something that depends on it being as it was
     read (the entries of a movement: `transactions.service.create_transaction`). Archived ones too.
-    Every operation that changes the balance of an account must read it this way, and the archive
-    (`archive_account`) reads it `FOR NO KEY UPDATE` and only then computes the balance. See
+    Every operation that writes movements must read its accounts this way. Two operations take a
+    stronger lock because they read the balance and decide from it: the archive (`archive_account`)
+    and the reconciliation (`get_account_for_update`) read the account `FOR NO KEY UPDATE` and only
+    then compute the balance. See
     `repository.get_for_share` for why the foreign key is not enough.
     """
     account = await repository.get_for_share(session, space_id=space_id, account_id=account_id)
     if account is None:
         raise NotFoundError("account_not_found", "Account not found")
     return AccountRead.model_validate(account)
+
+
+async def get_account_for_update(
+    session: AsyncSession, space_id: uuid.UUID, account_id: uuid.UUID
+) -> AccountRead:
+    """Like `get_account_for_share`, but locks the account row `FOR NO KEY UPDATE`.
+
+    For whoever reads an account and the balance **to decide how much to write**, so that nobody
+    else can write between the two: the reconciliation (`transactions.service.reconcile_account`)
+    writes `real balance - current balance`. It conflicts with the `FOR SHARE` of every writer of
+    movements and with itself: a movement in flight makes this wait until it commits (and the
+    balance read afterwards includes it), a movement that starts later waits for this transaction,
+    and two reconciliations of the same account run one after the other (the second one reads the
+    balance of the first and finds no difference). It is also the lock the archive takes, so the
+    two are serialised. Archived accounts too.
+
+    It returns a schema, so the caller cannot UPDATE the row; asking for `FOR SHARE` afterwards in
+    the same transaction (`create_transaction` does) is free, because a transaction's own locks
+    never conflict and `FOR NO KEY UPDATE` is the stronger one. See `repository.get_for_update`.
+    """
+    return AccountRead.model_validate(await _get_for_update_or_raise(session, space_id, account_id))
 
 
 async def _get_for_update_or_raise(

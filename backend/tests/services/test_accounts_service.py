@@ -480,3 +480,43 @@ async def test_unarchive_of_an_account_of_another_space_is_not_found_and_changes
 
     assert exc.value.code == "account_not_found"
     assert (await service.get_account(session, space_a, theirs.id)).archived_at is not None
+
+
+# get_account_for_update ---------------------------------------------------------------------
+
+
+async def test_get_for_update_returns_a_schema_and_also_the_archived_account(
+    session: AsyncSession,
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    active = await service.create_account(session, space_id, _create())
+    archived = await _archived(session, space_id, "Vieja")
+
+    first = await service.get_account_for_update(session, space_id, active.id)
+    second = await service.get_account_for_update(session, space_id, archived.id)
+
+    assert isinstance(first, AccountRead)
+    assert (first.id, first.archived_at) == (active.id, None)
+    assert second.archived_at is not None
+
+
+async def test_get_for_update_of_a_missing_account_is_not_found(session: AsyncSession) -> None:
+    space_id = await _make_space(session, "uid-a")
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.get_account_for_update(session, space_id, uuid.uuid4())
+
+    assert exc.value.code == "account_not_found"
+
+
+async def test_get_for_update_of_an_account_of_another_space_is_not_found(
+    session: AsyncSession,
+) -> None:
+    space_a = await _make_space(session, "uid-a")
+    space_b = await _make_space(session, "uid-b")
+    theirs = await service.create_account(session, space_a, _create())
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.get_account_for_update(session, space_b, theirs.id)
+
+    assert exc.value.code == "account_not_found"

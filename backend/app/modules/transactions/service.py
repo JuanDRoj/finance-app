@@ -120,12 +120,16 @@ async def reconcile_account(
     no difference). A difference beyond the safe limit is a 422 on `balance_minor` (the CHECK
     `ck_entries_amount_range` would otherwise answer with a 500).
 
-    The account is read `FOR SHARE` and then the balance, like any writer of movements. Another
-    movement being written at the same time is not waited for (`FOR SHARE` does not conflict with
-    itself): if it commits after the balance was read, the final balance is the real one plus that
-    movement, the same as if it had happened right after the reconciliation.
+    The account is read `FOR NO KEY UPDATE` and only then the balance (the same order as the
+    archive): the adjustment depends on that balance, so nobody else may write between the two. A
+    movement in flight is waited for, and the balance read afterwards includes it, so the account
+    ends at exactly the real balance; a movement that starts later waits for this transaction and
+    goes after it. Two reconciliations at the same time (a double tap) run one after the other: the
+    second one reads the balance the first one committed and, with the same real balance, finds no
+    difference and writes nothing. The `FOR SHARE` that `create_transaction` takes on the same
+    account afterwards does not wait: a transaction's own locks never conflict.
     """
-    account = await accounts_service.get_account_for_share(session, space_id, account_id)
+    account = await accounts_service.get_account_for_update(session, space_id, account_id)
     if account.archived_at is not None:
         raise ConflictError(ACCOUNT_ARCHIVED, "The account is archived")
     current = await repository.balance_of_account(session, space_id=space_id, account_id=account_id)
