@@ -94,8 +94,8 @@ async def create_adjustment(
     `create_transaction`, so the account must exist in the space and be active (a 422 on
     `account_id` otherwise) and is read `FOR SHARE`.
     """
-    space = await spaces_service.get_space(session, space_id)
-    day = now.astimezone(ZoneInfo(space.timezone)).date()
+    timezone = await spaces_service.get_space_timezone(session, space_id)
+    day = now.astimezone(ZoneInfo(timezone)).date()
     data = AdjustmentCreate(
         type="adjustment", date=day, account_id=account_id, amount_minor=amount_minor
     )

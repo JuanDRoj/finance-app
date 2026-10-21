@@ -6,7 +6,8 @@ it sees a backend waiting on a lock, and only then does the first operation comm
 never blocked, the watcher times out and the test fails: it shows the serialisation instead of
 assuming it. Whoever goes second sees what the first one committed (READ COMMITTED).
 
-The same pattern as `test_first_login_concurrency.py` and `test_category_archive_concurrency.py`.
+Used by `test_category_archive_concurrency.py`, `test_account_archive_concurrency.py` and
+`test_account_reconcile_concurrency.py`; `test_first_login_concurrency.py` follows the same pattern.
 """
 
 import asyncio

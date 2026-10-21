@@ -60,6 +60,11 @@ async def get(session: AsyncSession, *, space_id: uuid.UUID) -> Space | None:
     return await session.get(Space, space_id)
 
 
+async def get_timezone(session: AsyncSession, *, space_id: uuid.UUID) -> str | None:
+    """The IANA timezone of the space; None if there is no such space. Reads only that column."""
+    return await session.scalar(select(Space.timezone).where(Space.id == space_id))
+
+
 async def get_personal_space_id(session: AsyncSession, *, user_id: uuid.UUID) -> uuid.UUID | None:
     """The id of the personal space the user created; None if they have none."""
     stmt = select(Space.id).where(Space.created_by == user_id, Space.type == "personal")
