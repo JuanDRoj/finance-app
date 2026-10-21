@@ -10,6 +10,7 @@ from app.modules.accounts.models import Account
 from app.modules.spaces import service as spaces_service
 from app.modules.users import service as users_service
 from tests.fakes import FakeFirebaseAuth, make_identity
+from tests.transactions_helpers import insert_transaction
 
 COOKIE = {"Cookie": "session=valid-cookie"}
 SPACE_NOT_FOUND = {"detail": "Space not found", "code": "space_not_found"}
@@ -72,6 +73,7 @@ async def test_create_a_bank_account(
         "closing_day": None,
         "due_day": None,
         "archived_at": None,
+        "balance_minor": 0,
     }
 
 
@@ -250,6 +252,7 @@ async def test_list_returns_the_accounts_ordered_by_name(
         "closing_day",
         "due_day",
         "archived_at",
+        "balance_minor",
     }
 
 
@@ -509,6 +512,109 @@ async def test_patch_of_a_missing_account_is_404(
 
     assert response.status_code == 404
     assert response.json() == ACCOUNT_NOT_FOUND
+
+
+# balances -----------------------------------------------------------------------------------
+
+
+async def _user_id(session: AsyncSession, uid: str) -> uuid.UUID:
+    user = await users_service.get_by_firebase_uid(session, uid)
+    assert user is not None
+    return user.id
+
+
+async def test_list_shows_the_balance_of_each_account(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(api_client, space_id, type="bank", name="Itaú")
+    cash = await _post(api_client, space_id, type="cash", name="Billetera")
+    card = await _post(
+        api_client, space_id, type="credit_card", name="Visa", closing_day=5, due_day=12
+    )
+    spec = (space_id, user_id)
+    await insert_transaction(session, *spec, entries=[(uuid.UUID(bank["id"]), 100_000, None)])
+    await insert_transaction(session, *spec, entries=[(uuid.UUID(bank["id"]), -2_550, None)])
+    await insert_transaction(session, *spec, entries=[(uuid.UUID(card["id"]), -30_000, None)])
+
+    response = await api_client.get(_url(space_id), headers=COOKIE)
+
+    balances = {a["id"]: a["balance_minor"] for a in response.json()}
+    assert balances == {bank["id"]: 97_450, cash["id"]: 0, card["id"]: -30_000}
+
+
+async def test_the_balance_ignores_pending_skipped_and_deleted_movements(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = uuid.UUID((await _post(api_client, space_id, type="bank", name="Itaú"))["id"])
+    spec = (space_id, user_id)
+    await insert_transaction(session, *spec, entries=[(bank, 1_000, None)])
+    await insert_transaction(session, *spec, entries=[(bank, 7, None)], status="pending")
+    await insert_transaction(session, *spec, entries=[(bank, 70, None)], status="skipped")
+    await insert_transaction(
+        session, *spec, entries=[(bank, 700, None)], deleted_at=datetime.now(UTC)
+    )
+
+    listed = await api_client.get(_url(space_id), headers=COOKIE)
+    detail = await api_client.get(_url(space_id, bank), headers=COOKIE)
+
+    assert [a["balance_minor"] for a in listed.json()] == [1_000]
+    assert detail.json()["balance_minor"] == 1_000
+
+
+async def test_detail_patch_and_archived_list_also_carry_the_balance(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(api_client, space_id, type="bank", name="Itaú")
+    await insert_transaction(
+        session,
+        space_id=space_id,
+        user_id=user_id,
+        entries=[(uuid.UUID(bank["id"]), 4_321, None)],
+    )
+
+    detail = await api_client.get(_url(space_id, bank["id"]), headers=COOKIE)
+    patched = await api_client.patch(
+        _url(space_id, bank["id"]), json={"name": "Itaú Pesos"}, headers=COOKIE
+    )
+    empty_patch = await api_client.patch(_url(space_id, bank["id"]), json={}, headers=COOKIE)
+
+    assert detail.json()["balance_minor"] == 4_321
+    assert patched.json()["balance_minor"] == 4_321
+    assert empty_patch.json()["balance_minor"] == 4_321
+
+
+async def test_the_balance_of_an_account_ignores_the_movements_of_another_space(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_a = await _user_with_space(session, "uid-a")
+    space_b = await _user_with_space(session, "uid-b")
+    user_a = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-b")
+    mine = await _post(api_client, space_b, type="bank", name="Mía")
+    _sign_in_as(fake_firebase, "uid-a")
+    theirs = await _post(api_client, space_a, type="bank", name="De A")
+    await insert_transaction(
+        session,
+        space_id=space_a,
+        user_id=user_a,
+        entries=[(uuid.UUID(theirs["id"]), 99_000, None)],
+    )
+    _sign_in_as(fake_firebase, "uid-b")
+
+    listed = await api_client.get(_url(space_b), headers=COOKIE)
+    stolen = await api_client.get(_url(space_b, theirs["id"]), headers=COOKIE)
+
+    assert [(a["id"], a["balance_minor"]) for a in listed.json()] == [(mine["id"], 0)]
+    assert (stolen.status_code, stolen.json()) == (404, ACCOUNT_NOT_FOUND)
 
 
 # 401 ----------------------------------------------------------------------------------------

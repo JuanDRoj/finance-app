@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     SmallInteger,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -34,6 +35,9 @@ class Account(Base):
             "OR (type <> 'credit_card' AND closing_day IS NULL AND due_day IS NULL)",
             name="card_days",
         ),
+        # Target of the composite foreign keys of `entries`: with it the database itself rejects an
+        # entry whose account is in another space than its transaction.
+        UniqueConstraint("id", "space_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)

@@ -45,6 +45,9 @@ class Category(Base):
         ),
         # Target of the composite foreign key below (PostgreSQL needs a unique key to point at).
         UniqueConstraint("id", "space_id", "kind", "is_main"),
+        # Target of the composite foreign keys of `entries` (their category must be in the same
+        # space as the transaction); the key above also has `kind` and `is_main`, so it cannot be.
+        UniqueConstraint("id", "space_id"),
         ForeignKeyConstraint(
             ["parent_id", "space_id", "kind", "has_parent"],
             ["categories.id", "categories.space_id", "categories.kind", "categories.is_main"],

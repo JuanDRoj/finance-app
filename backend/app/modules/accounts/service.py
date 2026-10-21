@@ -19,11 +19,15 @@ from app.modules.accounts.schemas import (
 
 async def list_accounts(
     session: AsyncSession, space_id: uuid.UUID, *, include_archived: bool = False
-) -> list[Account]:
-    """The accounts of the space by name. Archived ones only with `include_archived`."""
-    return await repository.list_for_space(
+) -> list[AccountRead]:
+    """The accounts of the space by name. Archived ones only with `include_archived`.
+
+    Schemas, not ORM objects: the router and other modules (the balance summary) use the list.
+    """
+    accounts = await repository.list_for_space(
         session, space_id=space_id, include_archived=include_archived
     )
+    return [AccountRead.model_validate(a) for a in accounts]
 
 
 async def create_account(
@@ -72,6 +76,23 @@ async def get_account(
 ) -> AccountRead:
     """For the router and other modules: a schema, never the ORM object."""
     return AccountRead.model_validate(await _get_or_raise(session, space_id, account_id))
+
+
+async def get_account_for_share(
+    session: AsyncSession, space_id: uuid.UUID, account_id: uuid.UUID
+) -> AccountRead:
+    """Like `get_account`, but locks the account row `FOR SHARE` until the transaction ends.
+
+    For whoever checks an account and then writes something that depends on it being as it was
+    read (the entries of a movement: `transactions.service.create_transaction`). Archived ones too.
+    Every operation that changes the balance of an account must read it this way, and the archive
+    reads it `FOR NO KEY UPDATE` and only then computes the balance. See
+    `repository.get_for_share` for why the foreign key is not enough.
+    """
+    account = await repository.get_for_share(session, space_id=space_id, account_id=account_id)
+    if account is None:
+        raise NotFoundError("account_not_found", "Account not found")
+    return AccountRead.model_validate(account)
 
 
 async def _get_or_raise(

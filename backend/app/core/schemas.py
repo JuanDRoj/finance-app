@@ -24,6 +24,20 @@ from pydantic_core import PydanticCustomError
 Amount = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]
 
 
+def _check_not_zero(value: int) -> int:
+    if value == 0:
+        raise PydanticCustomError("amount_zero", "The amount cannot be zero")
+    return value
+
+
+# The only money with a sign in the API: an adjustment is a delta of the balance of an account
+# (negative = the balance goes down; on a credit card, the debt goes up). Same strictness and
+# the same cap as `Amount` in absolute value; zero is refused because it changes nothing.
+SignedAmount = Annotated[
+    int, Field(strict=True, ge=-(2**53 - 1), le=2**53 - 1), AfterValidator(_check_not_zero)
+]
+
+
 @lru_cache
 def _iana_timezones() -> frozenset[str]:
     """The IANA zone names, from the `tzdata` package: the same list on every machine.

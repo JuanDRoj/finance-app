@@ -124,7 +124,7 @@ export interface paths {
         };
         /**
          * List Accounts
-         * @description The accounts of the space by name. The archived ones only with `include_archived`.
+         * @description The accounts of the space by name, each with its balance. Archived ones only on request.
          */
         get: operations["list_accounts_spaces__space_id__accounts_get"];
         put?: never;
@@ -148,7 +148,7 @@ export interface paths {
         };
         /**
          * Read Account
-         * @description One account of the space, archived or not.
+         * @description One account of the space with its balance, archived or not.
          */
         get: operations["read_account_spaces__space_id__accounts__account_id__get"];
         put?: never;
@@ -161,6 +161,26 @@ export interface paths {
          * @description Rename an account or change the days of a card. The type cannot be changed.
          */
         patch: operations["update_account_spaces__space_id__accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/spaces/{space_id}/balance-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Balance Summary
+         * @description Available (bank and cash), card debt and net of the space, in its currency's minor unit.
+         */
+        get: operations["read_balance_summary_spaces__space_id__balance_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/spaces/{space_id}/categories": {
@@ -277,10 +297,32 @@ export interface components {
              */
             type: "bank" | "cash" | "credit_card";
         };
-        /** AccountRead */
-        AccountRead: {
+        /**
+         * AccountUpdate
+         * @description Fields to change: only the ones sent are updated. The type of an account cannot change.
+         */
+        AccountUpdate: {
+            /** Closing Day */
+            closing_day?: number;
+            /** Due Day */
+            due_day?: number;
+            /** Name */
+            name?: string;
+        };
+        /**
+         * AccountWithBalance
+         * @description What the API returns for an account: the account plus its balance.
+         *
+         *     `AccountRead` has no balance because `accounts` cannot ask `transactions` for it (the module
+         *     order): the router composes the two. `balance_minor` is the sum of the confirmed, not deleted
+         *     entries, with its sign, in the minor unit of the currency of the space. On a credit card it is
+         *     negative when you owe (the debt is its opposite).
+         */
+        AccountWithBalance: {
             /** Archived At */
             archived_at: string | null;
+            /** Balance Minor */
+            balance_minor: number;
             /** Closing Day */
             closing_day: number | null;
             /** Due Day */
@@ -299,16 +341,19 @@ export interface components {
             type: "bank" | "cash" | "credit_card";
         };
         /**
-         * AccountUpdate
-         * @description Fields to change: only the ones sent are updated. The type of an account cannot change.
+         * BalanceSummaryRead
+         * @description The balances of the space, in the minor unit of its currency.
+         *
+         *     Only confirmed, not deleted movements count. `card_debt_minor` is positive when the cards are
+         *     owed (and negative if a card is paid in excess: it is not clamped, so the net always adds up).
          */
-        AccountUpdate: {
-            /** Closing Day */
-            closing_day?: number;
-            /** Due Day */
-            due_day?: number;
-            /** Name */
-            name?: string;
+        BalanceSummaryRead: {
+            /** Available Minor */
+            available_minor: number;
+            /** Card Debt Minor */
+            card_debt_minor: number;
+            /** Net Minor */
+            net_minor: number;
         };
         /**
          * CategoryCreate
@@ -681,7 +726,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountRead"][];
+                    "application/json": components["schemas"]["AccountWithBalance"][];
                 };
             };
             /** @description Unauthorized */
@@ -734,7 +779,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountRead"];
+                    "application/json": components["schemas"]["AccountWithBalance"];
                 };
             };
             /** @description Unauthorized */
@@ -784,7 +829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountRead"];
+                    "application/json": components["schemas"]["AccountWithBalance"];
                 };
             };
             /** @description Unauthorized */
@@ -838,7 +883,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountRead"];
+                    "application/json": components["schemas"]["AccountWithBalance"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_balance_summary_spaces__space_id__balance_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BalanceSummaryRead"];
                 };
             };
             /** @description Unauthorized */
