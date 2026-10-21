@@ -168,7 +168,7 @@ Dueño de todos los datos. Cada usuario recibe "Mi espacio" al registrarse.
 
 v1
 
-Monedas soportadas y su exponente ISO 4217 (la unidad menor es 10^−exponente). Sumar una moneda es agregar una fila: `GET /currencies` devuelve todas las filas (KAN-68), y el frontend pone los nombres y decide cuáles muestra.
+Monedas soportadas y su exponente ISO 4217 (la unidad menor es 10^−exponente). Sumar una moneda es agregar una fila: `GET /currencies` devuelve todas las filas (KAN-68), y el frontend pone los nombres y el orden (`lib/core/i18n.ts`). Una moneda sin nombre se muestra con su código.
 
 | codePK | char(3), tres letras mayúsculas: UYU, COP, USD |
 | --- | --- |
