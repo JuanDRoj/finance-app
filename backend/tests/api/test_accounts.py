@@ -1,13 +1,17 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import ConflictError
 from app.modules.accounts.models import Account
 from app.modules.spaces import service as spaces_service
+from app.modules.transactions.models import Entry, Transaction
 from app.modules.users import service as users_service
 from tests.fakes import FakeFirebaseAuth, make_identity
 from tests.transactions_helpers import insert_transaction
@@ -44,7 +48,8 @@ async def _post(client: AsyncClient, space_id: uuid.UUID, **body: Any) -> dict[s
 
 
 async def _archived_account(session: AsyncSession, space_id: uuid.UUID, name: str) -> uuid.UUID:
-    # There is no archive endpoint yet (BE-16): archived rows are inserted directly.
+    # Inserted directly on purpose: it skips the balance rule of the archive endpoint, so it also
+    # gives archived accounts that have a balance.
     account = Account(space_id=space_id, name=name, type="bank", archived_at=datetime.now(UTC))
     session.add(account)
     await session.flush()
@@ -154,9 +159,9 @@ async def test_a_created_account_can_be_read_back(
             ["body", "due_day"],
         ),
         (
-            {"type": "bank", "name": "Itaú", "initial_balance_minor": 1000},
+            {"type": "bank", "name": "Itaú", "balance_minor": 1000},
             "extra_forbidden",
-            ["body", "initial_balance_minor"],
+            ["body", "balance_minor"],
         ),
         (
             {"type": "bank", "name": "Itaú", "archived_at": "2026-01-01T00:00:00Z"},
@@ -713,3 +718,702 @@ async def test_the_list_of_user_b_never_includes_the_accounts_of_user_a(
     assert [a["id"] for a in everything.json()] == [account_b["id"]]
     assert account_a["id"] not in everything.text
     assert str(archived_a) not in everything.text
+
+
+# initial balance ----------------------------------------------------------------------------
+
+ACCOUNT_HAS_BALANCE_CODE = "account_has_balance"
+MAX_SAFE = 2**53 - 1
+
+
+def _summary_url(space_id: uuid.UUID) -> str:
+    return f"/spaces/{space_id}/balance-summary"
+
+
+def _local_today() -> datetime:
+    return datetime.now(ZoneInfo("America/Montevideo"))
+
+
+async def _adjustment_rows(
+    session: AsyncSession, account_id: str | uuid.UUID
+) -> list[tuple[Transaction, list[Entry]]]:
+    """The transactions that have an entry on the account, each with its entries."""
+    transactions = await session.scalars(
+        select(Transaction)
+        .join(Entry, Entry.transaction_id == Transaction.id)
+        .where(Entry.account_id == uuid.UUID(str(account_id)))
+        .order_by(Transaction.id)
+        .execution_options(populate_existing=True)
+    )
+    rows = []
+    for transaction in transactions:
+        entries = await session.scalars(
+            select(Entry)
+            .where(Entry.transaction_id == transaction.id)
+            .execution_options(populate_existing=True)
+        )
+        rows.append((transaction, list(entries)))
+    return rows
+
+
+async def _count_transactions(session: AsyncSession) -> int:
+    return await session.scalar(select(func.count()).select_from(Transaction)) or 0
+
+
+async def test_create_a_bank_account_with_an_initial_balance(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    body = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=1_000_000
+    )
+
+    assert body["balance_minor"] == 1_000_000
+    [(transaction, entries)] = await _adjustment_rows(session, body["id"])
+    assert (transaction.type, transaction.status, transaction.description) == (
+        "adjustment",
+        "confirmed",
+        None,
+    )
+    assert (transaction.created_by, transaction.space_id, transaction.deleted_at) == (
+        user_id,
+        space_id,
+        None,
+    )
+    assert abs(transaction.date - _local_today().date()) <= timedelta(days=1)
+    assert [(e.account_id, e.amount_minor, e.category_id) for e in entries] == [
+        (uuid.UUID(body["id"]), 1_000_000, None)
+    ]
+
+
+async def test_the_initial_balance_shows_in_the_list_and_the_detail(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(
+        api_client, space_id, type="cash", name="Billetera", initial_balance_minor=2_550
+    )
+
+    listed = await api_client.get(_url(space_id), headers=COOKIE)
+    detail = await api_client.get(_url(space_id, created["id"]), headers=COOKIE)
+
+    assert [a["balance_minor"] for a in listed.json()] == [2_550]
+    assert detail.json() == created
+
+
+async def test_the_initial_balance_of_a_credit_card_is_its_current_debt(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    bank = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=1_000_000
+    )
+    card = await _post(
+        api_client,
+        space_id,
+        type="credit_card",
+        name="Visa",
+        closing_day=5,
+        due_day=12,
+        initial_balance_minor=-300_000,
+    )
+
+    assert (bank["balance_minor"], card["balance_minor"]) == (1_000_000, -300_000)
+    summary = await api_client.get(_summary_url(space_id), headers=COOKIE)
+    assert summary.json() == {
+        "available_minor": 1_000_000,
+        "card_debt_minor": 300_000,
+        "net_minor": 700_000,
+    }
+
+
+@pytest.mark.parametrize("omitted", [True, False])
+@pytest.mark.parametrize("value", [None, 0])
+async def test_no_initial_balance_or_a_zero_one_creates_no_adjustment(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    omitted: bool,
+    value: int | None,
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    extra: dict[str, Any] = {} if omitted and value is None else {"initial_balance_minor": value}
+
+    body = await _post(api_client, space_id, type="bank", name="Itaú", **extra)
+
+    assert body["balance_minor"] == 0
+    assert await _count_transactions(session) == 0
+
+
+@pytest.mark.parametrize(
+    ("value", "error_type"),
+    [
+        ("1000", "int_type"),
+        (10.5, "int_type"),
+        (True, "int_type"),
+        (MAX_SAFE + 1, "less_than_equal"),
+        (-MAX_SAFE - 1, "greater_than_equal"),
+    ],
+)
+async def test_an_invalid_initial_balance_is_a_422_and_creates_no_account(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    value: object,
+    error_type: str,
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    response = await api_client.post(
+        _url(space_id),
+        json={"type": "bank", "name": "Itaú", "initial_balance_minor": value},
+        headers=COOKIE,
+    )
+
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert (error["type"], error["loc"]) == (error_type, ["body", "initial_balance_minor"])
+    assert (await api_client.get(_url(space_id), headers=COOKIE)).json() == []
+    assert await _count_transactions(session) == 0
+
+
+async def test_a_failing_adjustment_rolls_back_the_new_account(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    async def failing(*args: object, **kwargs: object) -> None:
+        raise ConflictError("adjustment_failed_for_the_test", "forced failure")
+
+    monkeypatch.setattr("app.modules.transactions.service.create_adjustment", failing)
+
+    response = await api_client.post(
+        _url(space_id),
+        json={"type": "bank", "name": "Itaú", "initial_balance_minor": 5_000},
+        headers=COOKIE,
+    )
+
+    assert response.status_code == 409
+    monkeypatch.undo()
+    assert (await api_client.get(_url(space_id), headers=COOKIE)).json() == []
+    assert (
+        await api_client.get(_url(space_id), params={"include_archived": "true"}, headers=COOKIE)
+    ).json() == []
+
+
+# reconcile ----------------------------------------------------------------------------------
+
+
+def _reconcile_url(space_id: uuid.UUID, account_id: uuid.UUID | str) -> str:
+    return f"{_url(space_id, account_id)}/reconcile"
+
+
+async def test_reconcile_up_registers_an_adjustment_and_the_balance_matches_the_real_one(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=100_000
+    )
+
+    response = await api_client.post(
+        _reconcile_url(space_id, bank["id"]), json={"balance_minor": 112_550}, headers=COOKIE
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {**bank, "balance_minor": 112_550}
+    rows = await _adjustment_rows(session, bank["id"])
+    assert [(t.type, t.status, t.created_by) for t, _ in rows] == [
+        ("adjustment", "confirmed", user_id)
+    ] * 2
+    assert [[e.amount_minor for e in entries] for _, entries in rows] == [[100_000], [12_550]]
+    listed = await api_client.get(_url(space_id), headers=COOKIE)
+    assert [a["balance_minor"] for a in listed.json()] == [112_550]
+
+
+async def test_reconcile_down_registers_a_negative_adjustment(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=100_000
+    )
+
+    response = await api_client.post(
+        _reconcile_url(space_id, bank["id"]), json={"balance_minor": 90_000}, headers=COOKIE
+    )
+
+    assert response.json()["balance_minor"] == 90_000
+    rows = await _adjustment_rows(session, bank["id"])
+    assert [[e.amount_minor for e in entries] for _, entries in rows] == [[100_000], [-10_000]]
+
+
+async def test_reconcile_with_the_same_balance_registers_no_adjustment(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=100_000
+    )
+    before = await _count_transactions(session)
+
+    response = await api_client.post(
+        _reconcile_url(space_id, bank["id"]), json={"balance_minor": 100_000}, headers=COOKIE
+    )
+
+    assert response.status_code == 200
+    assert response.json() == bank
+    assert await _count_transactions(session) == before
+
+
+async def test_reconcile_an_account_without_movements_to_zero_registers_nothing(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    cash = await _post(api_client, space_id, type="cash", name="Billetera")
+
+    response = await api_client.post(
+        _reconcile_url(space_id, cash["id"]), json={"balance_minor": 0}, headers=COOKIE
+    )
+
+    assert response.status_code == 200
+    assert response.json() == cash
+    assert await _count_transactions(session) == 0
+
+
+async def test_reconcile_a_credit_card_to_a_bigger_debt(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    card = await _post(
+        api_client,
+        space_id,
+        type="credit_card",
+        name="Visa",
+        closing_day=5,
+        due_day=12,
+        initial_balance_minor=-300_000,
+    )
+
+    response = await api_client.post(
+        _reconcile_url(space_id, card["id"]), json={"balance_minor": -500_000}, headers=COOKIE
+    )
+
+    assert response.json()["balance_minor"] == -500_000
+    rows = await _adjustment_rows(session, card["id"])
+    assert [[e.amount_minor for e in entries] for _, entries in rows] == [[-300_000], [-200_000]]
+    summary = await api_client.get(_summary_url(space_id), headers=COOKIE)
+    assert summary.json()["card_debt_minor"] == 500_000
+
+
+@pytest.mark.parametrize(
+    ("body", "error_type"),
+    [
+        ({}, "missing"),
+        ({"balance_minor": None}, "int_type"),
+        ({"balance_minor": "1000"}, "int_type"),
+        ({"balance_minor": 10.5}, "int_type"),
+        ({"balance_minor": MAX_SAFE + 1}, "less_than_equal"),
+        ({"balance_minor": -MAX_SAFE - 1}, "greater_than_equal"),
+    ],
+)
+async def test_reconcile_rejects_an_invalid_balance_with_a_422_on_the_field(
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    body: dict[str, Any],
+    error_type: str,
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    cash = await _post(api_client, space_id, type="cash", name="Billetera")
+
+    response = await api_client.post(
+        _reconcile_url(space_id, cash["id"]), json=body, headers=COOKIE
+    )
+
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert (error["type"], error["loc"]) == (error_type, ["body", "balance_minor"])
+    assert await _count_transactions(session) == 0
+
+
+async def test_reconcile_rejects_unknown_fields_and_a_missing_body(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    cash = await _post(api_client, space_id, type="cash", name="Billetera")
+    url = _reconcile_url(space_id, cash["id"])
+
+    extra = await api_client.post(url, json={"balance_minor": 5, "account_id": "x"}, headers=COOKIE)
+    empty = await api_client.post(url, headers=COOKIE)
+
+    assert extra.status_code == 422
+    assert [(e["type"], e["loc"]) for e in extra.json()["detail"]] == [
+        ("extra_forbidden", ["body", "account_id"])
+    ]
+    assert empty.status_code == 422
+    assert await _count_transactions(session) == 0
+
+
+async def test_reconcile_with_a_difference_beyond_the_safe_limit_is_a_422(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    bank = await _post(api_client, space_id, type="bank", name="Itaú")
+    await insert_transaction(
+        session,
+        space_id=space_id,
+        user_id=user_id,
+        entries=[(uuid.UUID(bank["id"]), -MAX_SAFE, None)],
+    )
+    before = await _count_transactions(session)
+
+    response = await api_client.post(
+        _reconcile_url(space_id, bank["id"]), json={"balance_minor": MAX_SAFE}, headers=COOKIE
+    )
+
+    assert response.status_code == 422
+    [error] = response.json()["detail"]
+    assert (error["type"], error["loc"]) == ("balance_out_of_range", ["body", "balance_minor"])
+    assert await _count_transactions(session) == before
+
+
+async def test_reconcile_of_an_archived_account_is_a_409(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    archived_id = await _archived_account(session, space_id, "Vieja")
+
+    response = await api_client.post(
+        _reconcile_url(space_id, archived_id), json={"balance_minor": 100}, headers=COOKIE
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "The account is archived", "code": "account_archived"}
+    assert await _count_transactions(session) == 0
+
+
+async def test_reconcile_of_a_missing_account_is_404(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    response = await api_client.post(
+        _reconcile_url(space_id, uuid.uuid4()), json={"balance_minor": 100}, headers=COOKIE
+    )
+
+    assert response.status_code == 404
+    assert response.json() == ACCOUNT_NOT_FOUND
+
+
+# archive / unarchive ------------------------------------------------------------------------
+
+
+def _archive_url(space_id: uuid.UUID, account_id: uuid.UUID | str) -> str:
+    return f"{_url(space_id, account_id)}/archive"
+
+
+def _unarchive_url(space_id: uuid.UUID, account_id: uuid.UUID | str) -> str:
+    return f"{_url(space_id, account_id)}/unarchive"
+
+
+async def test_archive_an_account_with_a_zero_balance_removes_it_from_the_list(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    old = await _post(api_client, space_id, type="bank", name="Vieja")
+    kept = await _post(api_client, space_id, type="cash", name="Billetera")
+
+    response = await api_client.post(_archive_url(space_id, old["id"]), headers=COOKIE)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["archived_at"] is not None
+    assert {**body, "archived_at": None} == {**old, "archived_at": None}
+    default = await api_client.get(_url(space_id), headers=COOKIE)
+    everything = await api_client.get(
+        _url(space_id), params={"include_archived": "true"}, headers=COOKIE
+    )
+    assert [a["id"] for a in default.json()] == [kept["id"]]
+    assert [(a["id"], a["archived_at"] is not None) for a in everything.json()] == [
+        (kept["id"], False),
+        (old["id"], True),
+    ]
+
+
+@pytest.mark.parametrize("balance", [1_000_000, -300_000])
+async def test_archive_an_account_with_a_balance_is_a_409_that_says_why(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, balance: int
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=balance
+    )
+
+    response = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == ACCOUNT_HAS_BALANCE_CODE
+    assert response.json()["detail"]
+    still = await api_client.get(_url(space_id, created["id"]), headers=COOKIE)
+    assert still.json() == created
+    assert [a["id"] for a in (await api_client.get(_url(space_id), headers=COOKIE)).json()] == [
+        created["id"]
+    ]
+
+
+async def test_an_account_can_be_archived_after_reconciling_it_to_zero(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(
+        api_client, space_id, type="bank", name="Itaú", initial_balance_minor=5_000
+    )
+    refused = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    await api_client.post(
+        _reconcile_url(space_id, created["id"]), json={"balance_minor": 0}, headers=COOKIE
+    )
+    archived = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert refused.status_code == 409
+    assert archived.status_code == 200
+    assert archived.json()["balance_minor"] == 0
+    assert archived.json()["archived_at"] is not None
+
+
+async def test_an_account_with_only_pending_skipped_or_deleted_movements_can_be_archived(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(api_client, space_id, type="bank", name="Itaú")
+    spec = (space_id, user_id)
+    account_id = uuid.UUID(created["id"])
+    await insert_transaction(session, *spec, entries=[(account_id, 7, None)], status="pending")
+    await insert_transaction(session, *spec, entries=[(account_id, 70, None)], status="skipped")
+    await insert_transaction(
+        session, *spec, entries=[(account_id, 700, None)], deleted_at=datetime.now(UTC)
+    )
+
+    response = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is not None
+
+
+async def test_archiving_an_archived_account_changes_nothing(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(api_client, space_id, type="bank", name="Vieja")
+    first = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    second = await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+
+async def test_unarchive_brings_the_account_back_to_the_list(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(api_client, space_id, type="bank", name="Itaú")
+    await api_client.post(_archive_url(space_id, created["id"]), headers=COOKIE)
+
+    response = await api_client.post(_unarchive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert response.status_code == 200
+    assert response.json() == created
+    listed = await api_client.get(_url(space_id), headers=COOKIE)
+    assert [a["id"] for a in listed.json()] == [created["id"]]
+
+
+async def test_unarchive_does_not_look_at_the_balance(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    user_id = await _user_id(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    archived_id = await _archived_account(session, space_id, "Con saldo")
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(archived_id, 900, None)]
+    )
+
+    response = await api_client.post(_unarchive_url(space_id, archived_id), headers=COOKIE)
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is None
+    assert response.json()["balance_minor"] == 900
+
+
+async def test_unarchiving_an_active_account_changes_nothing(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(api_client, space_id, type="bank", name="Itaú", initial_balance_minor=300)
+
+    response = await api_client.post(_unarchive_url(space_id, created["id"]), headers=COOKIE)
+
+    assert response.status_code == 200
+    assert response.json() == created
+
+
+@pytest.mark.parametrize("action", ["archive", "unarchive"])
+async def test_archive_and_unarchive_of_a_missing_account_are_404(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, action: str
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    response = await api_client.post(f"{_url(space_id, uuid.uuid4())}/{action}", headers=COOKIE)
+
+    assert response.status_code == 404
+    assert response.json() == ACCOUNT_NOT_FOUND
+
+
+@pytest.mark.parametrize("action", ["archive", "unarchive", "reconcile"])
+async def test_the_account_actions_reject_an_id_that_is_not_a_uuid(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, action: str
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+
+    response = await api_client.post(
+        f"{_url(space_id, 'not-a-uuid')}/{action}", json={"balance_minor": 0}, headers=COOKIE
+    )
+
+    assert response.status_code == 422
+
+
+async def test_the_account_actions_are_not_served_over_get(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    # Nothing that changes data goes through GET.
+    space_id = await _user_with_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    created = await _post(api_client, space_id, type="bank", name="Itaú")
+
+    responses = [
+        await api_client.get(f"{_url(space_id, created['id'])}/{action}", headers=COOKIE)
+        for action in ("archive", "unarchive", "reconcile")
+    ]
+
+    assert [r.status_code for r in responses] == [405, 405, 405]
+
+
+# 401 and IDOR of the account actions ----------------------------------------------------------
+
+
+async def test_the_account_actions_without_a_session_are_a_401(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_id = await _user_with_space(session, "uid-a")
+    account_id = uuid.uuid4()
+
+    responses = [
+        await api_client.post(_reconcile_url(space_id, account_id), json={"balance_minor": 0}),
+        await api_client.post(_archive_url(space_id, account_id)),
+        await api_client.post(_unarchive_url(space_id, account_id)),
+        await api_client.post(
+            _url(space_id), json={"type": "cash", "name": "x", "initial_balance_minor": 5}
+        ),
+    ]
+
+    assert [r.status_code for r in responses] == [401, 401, 401, 401]
+    assert all(r.json() == NOT_AUTHENTICATED for r in responses)
+    assert not fake_firebase.called
+
+
+async def test_user_b_gets_404_on_the_balance_and_archive_routes_of_the_space_of_user_a(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_a = await _user_with_space(session, "uid-a")
+    await _user_with_space(session, "uid-b")
+    _sign_in_as(fake_firebase, "uid-a")
+    account_a = await _post(
+        api_client, space_a, type="bank", name="De A", initial_balance_minor=5_000
+    )
+    transactions_before = await _count_transactions(session)
+    _sign_in_as(fake_firebase, "uid-b")
+
+    responses = [
+        await api_client.post(
+            _reconcile_url(space_a, account_a["id"]), json={"balance_minor": 0}, headers=COOKIE
+        ),
+        await api_client.post(_archive_url(space_a, account_a["id"]), headers=COOKIE),
+        await api_client.post(_unarchive_url(space_a, account_a["id"]), headers=COOKIE),
+        await api_client.post(
+            _url(space_a),
+            json={"type": "cash", "name": "Intrusa", "initial_balance_minor": 9_000},
+            headers=COOKIE,
+        ),
+    ]
+
+    assert [r.status_code for r in responses] == [404] * 4
+    assert all(r.json() == SPACE_NOT_FOUND for r in responses)
+    _sign_in_as(fake_firebase, "uid-a")
+    after = await api_client.get(_url(space_a), params={"include_archived": "true"}, headers=COOKIE)
+    assert after.json() == [account_a]
+    assert await _count_transactions(session) == transactions_before
+
+
+async def test_an_account_of_space_a_is_a_404_for_the_actions_inside_the_own_space_of_user_b(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    space_a = await _user_with_space(session, "uid-a")
+    space_b = await _user_with_space(session, "uid-b")
+    _sign_in_as(fake_firebase, "uid-a")
+    account_a = await _post(
+        api_client, space_a, type="bank", name="De A", initial_balance_minor=5_000
+    )
+    zero_a = await _post(api_client, space_a, type="cash", name="Vacía de A")
+    transactions_before = await _count_transactions(session)
+    _sign_in_as(fake_firebase, "uid-b")
+
+    responses = [
+        await api_client.post(
+            _reconcile_url(space_b, account_a["id"]), json={"balance_minor": 0}, headers=COOKIE
+        ),
+        await api_client.post(_archive_url(space_b, zero_a["id"]), headers=COOKIE),
+        await api_client.post(_unarchive_url(space_b, account_a["id"]), headers=COOKIE),
+    ]
+
+    assert [r.status_code for r in responses] == [404] * 3
+    assert all(r.json() == ACCOUNT_NOT_FOUND for r in responses)
+    _sign_in_as(fake_firebase, "uid-a")
+    after = await api_client.get(_url(space_a), headers=COOKIE)
+    assert after.json() == [account_a, zero_a]
+    assert await _count_transactions(session) == transactions_before

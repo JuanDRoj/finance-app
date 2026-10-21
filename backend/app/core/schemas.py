@@ -16,12 +16,15 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+# JavaScript's Number.MAX_SAFE_INTEGER, beyond which it loses precision even though `bigint` could
+# hold more: the cap of every money amount of the API (and the CHECK `ck_entries_amount_range`).
+MAX_SAFE_INTEGER = 2**53 - 1
+
 # A money amount in the minor unit of the space's currency (ISO 4217): value x 10^exponent,
 # where the exponent comes from the `currencies` table (USD 15.50 -> 1550, CLP 1500 -> 1500).
 # Strict: rejects "1550", 15.0 and true. Positive: the backend applies the sign according to
-# the movement type. The cap is JavaScript's Number.MAX_SAFE_INTEGER, beyond which it loses
-# precision even though `bigint` could hold more.
-Amount = Annotated[int, Field(strict=True, gt=0, le=2**53 - 1)]
+# the movement type. The cap is `MAX_SAFE_INTEGER`.
+Amount = Annotated[int, Field(strict=True, gt=0, le=MAX_SAFE_INTEGER)]
 
 
 def _check_not_zero(value: int) -> int:
@@ -34,8 +37,16 @@ def _check_not_zero(value: int) -> int:
 # (negative = the balance goes down; on a credit card, the debt goes up). Same strictness and
 # the same cap as `Amount` in absolute value; zero is refused because it changes nothing.
 SignedAmount = Annotated[
-    int, Field(strict=True, ge=-(2**53 - 1), le=2**53 - 1), AfterValidator(_check_not_zero)
+    int,
+    Field(strict=True, ge=-MAX_SAFE_INTEGER, le=MAX_SAFE_INTEGER),
+    AfterValidator(_check_not_zero),
 ]
+
+# A balance as it would be read, with the sign of `balance_minor`: the initial balance of a new
+# account and the real balance of a reconciliation (on a credit card, negative = you owe). Not a
+# movement but a state, so zero is valid: it means "no initial balance" or "the account is at
+# zero". Same strictness and the same cap as `SignedAmount`.
+Balance = Annotated[int, Field(strict=True, ge=-MAX_SAFE_INTEGER, le=MAX_SAFE_INTEGER)]
 
 
 @lru_cache

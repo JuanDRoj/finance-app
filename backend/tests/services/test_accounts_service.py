@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import InvalidFieldError, NotFoundError
+from app.core.errors import ConflictError, InvalidFieldError, NotFoundError
 from app.modules.accounts import service
 from app.modules.accounts.models import Account
 from app.modules.accounts.schemas import AccountCreate, AccountRead, AccountUpdate
@@ -337,3 +337,146 @@ async def test_get_for_share_of_an_account_of_another_space_is_not_found(
         await service.get_account_for_share(session, space_b, theirs.id)
 
     assert exc.value.code == "account_not_found"
+
+
+# archive / unarchive ------------------------------------------------------------------------
+
+
+class BalanceProbe:
+    """A `balance_of` that records whether it was asked, and answers a fixed balance."""
+
+    def __init__(self, balance: int) -> None:
+        self.balance = balance
+        self.calls = 0
+
+    async def __call__(self) -> int:
+        self.calls += 1
+        return self.balance
+
+
+async def test_archive_an_account_with_a_zero_balance(session: AsyncSession) -> None:
+    space_id = await _make_space(session, "uid-a")
+    account = await service.create_account(session, space_id, _create())
+    probe = BalanceProbe(0)
+
+    archived = await service.archive_account(session, space_id, account.id, balance_of=probe)
+
+    assert archived.id == account.id
+    assert archived.archived_at is not None
+    assert probe.calls == 1
+    assert (await service.get_account(session, space_id, account.id)).archived_at is not None
+
+
+@pytest.mark.parametrize("balance", [1, 1_050, -1, -30_000])
+async def test_archive_with_a_balance_is_a_conflict_and_changes_nothing(
+    session: AsyncSession, balance: int
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    account = await service.create_account(session, space_id, _create())
+
+    with pytest.raises(ConflictError) as exc:
+        await service.archive_account(
+            session, space_id, account.id, balance_of=BalanceProbe(balance)
+        )
+
+    assert exc.value.code == "account_has_balance"
+    assert (await service.get_account(session, space_id, account.id)).archived_at is None
+
+
+async def test_archive_an_archived_account_changes_nothing_and_does_not_ask_the_balance(
+    session: AsyncSession,
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    account = await _archived(session, space_id, "Vieja")
+    first_moment = account.archived_at
+    probe = BalanceProbe(500)  # it would be a conflict if it were asked
+
+    again = await service.archive_account(session, space_id, account.id, balance_of=probe)
+
+    assert again.archived_at == first_moment
+    assert probe.calls == 0
+
+
+async def test_archive_of_a_missing_account_is_not_found_and_does_not_ask_the_balance(
+    session: AsyncSession,
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    probe = BalanceProbe(0)
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.archive_account(session, space_id, uuid.uuid4(), balance_of=probe)
+
+    assert exc.value.code == "account_not_found"
+    assert probe.calls == 0
+
+
+async def test_archive_of_an_account_of_another_space_is_not_found_and_changes_nothing(
+    session: AsyncSession,
+) -> None:
+    space_a = await _make_space(session, "uid-a")
+    space_b = await _make_space(session, "uid-b")
+    theirs = await service.create_account(session, space_a, _create())
+    probe = BalanceProbe(0)
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.archive_account(session, space_b, theirs.id, balance_of=probe)
+
+    assert exc.value.code == "account_not_found"
+    assert probe.calls == 0
+    assert (await service.get_account(session, space_a, theirs.id)).archived_at is None
+
+
+async def test_archive_leaves_the_other_accounts_of_the_space_alone(
+    session: AsyncSession,
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    target = await service.create_account(session, space_id, _create(name="A archivar"))
+    other = await service.create_account(session, space_id, _create(name="Otra"))
+
+    await service.archive_account(session, space_id, target.id, balance_of=BalanceProbe(0))
+
+    assert (await service.get_account(session, space_id, other.id)).archived_at is None
+    assert [a.name for a in await service.list_accounts(session, space_id)] == ["Otra"]
+
+
+async def test_unarchive_makes_the_account_active_again(session: AsyncSession) -> None:
+    space_id = await _make_space(session, "uid-a")
+    account = await _archived(session, space_id, "Vieja")
+
+    unarchived = await service.unarchive_account(session, space_id, account.id)
+
+    assert unarchived.archived_at is None
+    assert [a.id for a in await service.list_accounts(session, space_id)] == [account.id]
+
+
+async def test_unarchive_an_active_account_changes_nothing(session: AsyncSession) -> None:
+    space_id = await _make_space(session, "uid-a")
+    account = await service.create_account(session, space_id, _create())
+
+    unarchived = await service.unarchive_account(session, space_id, account.id)
+
+    assert unarchived.id == account.id
+    assert unarchived.archived_at is None
+
+
+async def test_unarchive_of_a_missing_account_is_not_found(session: AsyncSession) -> None:
+    space_id = await _make_space(session, "uid-a")
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.unarchive_account(session, space_id, uuid.uuid4())
+
+    assert exc.value.code == "account_not_found"
+
+
+async def test_unarchive_of_an_account_of_another_space_is_not_found_and_changes_nothing(
+    session: AsyncSession,
+) -> None:
+    space_a = await _make_space(session, "uid-a")
+    space_b = await _make_space(session, "uid-b")
+    theirs = await _archived(session, space_a, "Vieja")
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.unarchive_account(session, space_b, theirs.id)
+
+    assert exc.value.code == "account_not_found"
+    assert (await service.get_account(session, space_a, theirs.id)).archived_at is not None

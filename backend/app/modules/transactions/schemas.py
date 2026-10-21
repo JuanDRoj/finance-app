@@ -20,6 +20,7 @@ TransactionStatus = Literal["pending", "confirmed", "skipped"]
 # Stable error types raised by the service or the schemas: the frontend translates them.
 ACCOUNT_NOT_FOUND = "account_not_found"
 ACCOUNT_ARCHIVED = "account_archived"
+BALANCE_OUT_OF_RANGE = "balance_out_of_range"
 CATEGORY_NOT_FOUND = "category_not_found"
 CATEGORY_ARCHIVED = "category_archived"
 CATEGORY_KIND_MISMATCH = "transaction_category_kind_mismatch"
