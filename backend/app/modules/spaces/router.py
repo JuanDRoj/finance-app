@@ -14,7 +14,7 @@ from app.modules.transactions import service as transactions_service
 router = APIRouter(prefix="/spaces", tags=["spaces"], responses={401: {"model": ErrorResponse}})
 
 
-async def _with_lock(session: AsyncSession, space: SpaceBase) -> SpaceRead:
+async def _with_currency_locked(session: AsyncSession, space: SpaceBase) -> SpaceRead:
     """The router composes `spaces` with `transactions` (the owner of the movements).
 
     The currency of a space is locked once it has any transaction; `spaces` cannot ask (a later
@@ -28,7 +28,7 @@ async def _with_lock(session: AsyncSession, space: SpaceBase) -> SpaceRead:
 async def list_spaces(user: CurrentUser, session: DbSession) -> list[SpaceRead]:
     """The spaces where the user is a member."""
     spaces = await service.list_spaces(session, user.id)
-    return [await _with_lock(session, space) for space in spaces]
+    return [await _with_currency_locked(session, space) for space in spaces]
 
 
 # Every route of a single space goes here: the sub-router carries the membership guard.
@@ -42,7 +42,7 @@ space_router = APIRouter(
 @space_router.get("", status_code=status.HTTP_200_OK)
 async def read_space(space_id: uuid.UUID, session: DbSession) -> SpaceRead:
     """A space the user belongs to, with its currency and ISO 4217 exponent."""
-    return await _with_lock(session, await service.get_space(session, space_id))
+    return await _with_currency_locked(session, await service.get_space(session, space_id))
 
 
 @space_router.patch("", status_code=status.HTTP_200_OK, responses={409: {"model": ErrorResponse}})
@@ -59,7 +59,7 @@ async def update_space(space_id: uuid.UUID, data: SpaceUpdate, session: DbSessio
         return await transactions_service.space_has_transactions(session, space_id)
 
     space = await service.update_space(session, space_id, data, has_transactions=has_transactions)
-    return await _with_lock(session, space)
+    return await _with_currency_locked(session, space)
 
 
 router.include_router(space_router)

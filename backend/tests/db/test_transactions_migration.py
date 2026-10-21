@@ -577,3 +577,25 @@ async def test_downgrade_removes_the_tables_and_the_new_unique_keys_and_upgrade_
     await asyncio.to_thread(command.upgrade, config, "head")
     assert await _rows(engine, tables) == [("entries",), ("transactions",)]
     assert len(await _rows(engine, unique_keys)) == 2
+
+
+async def test_downgrade_of_the_space_index_keeps_the_listing_index_and_upgrade_recreates_it(
+    engine: AsyncEngine,
+) -> None:
+    config = _config()
+    indexes = (
+        "SELECT indexname FROM pg_indexes WHERE indexname IN "
+        "('ix_transactions_space_id', 'ix_transactions_space_id_date_id_active') ORDER BY 1"
+    )
+    both = [("ix_transactions_space_id",), ("ix_transactions_space_id_date_id_active",)]
+    await _world(engine)
+    assert await _rows(engine, indexes) == both
+
+    await asyncio.to_thread(command.downgrade, config, "0005")
+
+    # Only the complete index goes; the partial one of the listing and the data stay.
+    assert await _rows(engine, indexes) == [("ix_transactions_space_id_date_id_active",)]
+    assert await _rows(engine, "SELECT count(*) FROM transactions") == [(1,)]
+
+    await asyncio.to_thread(command.upgrade, config, "head")
+    assert await _rows(engine, indexes) == both
