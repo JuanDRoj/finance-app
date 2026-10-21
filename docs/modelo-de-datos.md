@@ -207,8 +207,8 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
 El saldo no es una columna: se calcula con los `entries` (ver "Reglas que el modelo garantiza"). La API lo devuelve en cada cuenta como `balance_minor`, con signo: en una tarjeta es negativo cuando se debe. La lista de la API oculta las archivadas salvo con `?include_archived=true`.
 
 **Saldo inicial y cuadre (KAN-67).** Los dos se guardan como un `adjustment` y usan el signo de `balance_minor` en cualquier tipo de cuenta:
-- Al crear la cuenta, `initial_balance_minor` (opcional; null o 0 = nada) genera un ajuste por ese monto en la misma transacción. "Itaú" con $ 10.000 se manda como `1000000`; "Visa" con una deuda de $ 3.000, como `-300000`.
-- `POST .../accounts/{id}/reconcile` recibe el saldo real y genera un ajuste por `real − saldo actual`, o ninguno si la diferencia es 0. Una cuenta archivada no se cuadra (409).
+- Al crear la cuenta, `initial_balance_minor` (opcional; null o 0 = nada) genera un ajuste por ese monto en la misma transacción. En un espacio en UYU (exponente 2), "Itaú" con $ 10.000 se manda como `1000000` y "Visa" con una deuda de $ 3.000, como `-300000`.
+- `POST .../accounts/{id}/reconcile` recibe el saldo real y genera un ajuste por `real − saldo actual`, o ninguno si la diferencia es 0. Una cuenta archivada no se cuadra (409 `account_archived`), y una diferencia mayor que el tope da 422 `balance_out_of_range`.
  
 ### card_statements
  
