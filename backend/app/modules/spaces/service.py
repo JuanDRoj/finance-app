@@ -88,3 +88,15 @@ async def get_space(session: AsyncSession, space_id: uuid.UUID) -> SpaceRead:
     if space is None:
         raise NotFoundError("space_not_found", "Space not found")
     return _to_read(space, await _currencies(session))
+
+
+async def get_space_timezone(session: AsyncSession, space_id: uuid.UUID) -> str:
+    """The IANA timezone of a space (`America/Montevideo`), or `NotFoundError`.
+
+    For whoever only needs to know which local day it is in the space (the date of an adjustment),
+    without loading the currencies that `get_space` brings. Membership is checked by the caller.
+    """
+    timezone = await repository.get_timezone(session, space_id=space_id)
+    if timezone is None:
+        raise NotFoundError("space_not_found", "Space not found")
+    return timezone

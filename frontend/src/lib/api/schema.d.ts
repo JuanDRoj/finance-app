@@ -131,6 +131,10 @@ export interface paths {
         /**
          * Create Account
          * @description Create a bank, cash or credit card account (the cards need closing and due days).
+         *
+         *     With `initial_balance_minor` (other than 0) the account is born with that balance: an
+         *     adjustment, neither income nor expense, written in the same transaction. On a credit card it is
+         *     the current debt, negative. If the adjustment fails, the account is not created.
          */
         post: operations["create_account_spaces__space_id__accounts_post"];
         delete?: never;
@@ -161,6 +165,73 @@ export interface paths {
          * @description Rename an account or change the days of a card. The type cannot be changed.
          */
         patch: operations["update_account_spaces__space_id__accounts__account_id__patch"];
+        trace?: never;
+    };
+    "/spaces/{space_id}/accounts/{account_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Account
+         * @description Archive an account whose balance is zero (409 `account_has_balance` otherwise).
+         *
+         *     It stops showing in the list and in the selectors; its old movements stay. Archiving an
+         *     archived account changes nothing.
+         */
+        post: operations["archive_account_spaces__space_id__accounts__account_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/accounts/{account_id}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Account
+         * @description Match the balance of the account to the real one (what the bank says).
+         *
+         *     An adjustment (neither income nor expense) for the difference is registered; if there is none,
+         *     nothing is. `balance_minor` has the sign of the balance of the account: on a credit card,
+         *     negative = you owe. An archived account cannot be reconciled (409).
+         */
+        post: operations["reconcile_account_spaces__space_id__accounts__account_id__reconcile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/accounts/{account_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unarchive Account
+         * @description Make an archived account active again, whatever its balance (an active one: no change).
+         */
+        post: operations["unarchive_account_spaces__space_id__accounts__account_id__unarchive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/spaces/{space_id}/balance-summary": {
@@ -289,6 +360,8 @@ export interface components {
             closing_day?: number | null;
             /** Due Day */
             due_day?: number | null;
+            /** Initial Balance Minor */
+            initial_balance_minor?: number | null;
             /** Name */
             name: string;
             /**
@@ -296,6 +369,17 @@ export interface components {
              * @enum {string}
              */
             type: "bank" | "cash" | "credit_card";
+        };
+        /**
+         * AccountReconcile
+         * @description The real balance of an account (what the bank says), to match the app to it.
+         *
+         *     Same sign as `balance_minor`: on a credit card, negative = you owe. The app registers an
+         *     adjustment for the difference, or nothing if there is none. Zero is a valid balance.
+         */
+        AccountReconcile: {
+            /** Balance Minor */
+            balance_minor: number;
         };
         /**
          * AccountUpdate
@@ -876,6 +960,178 @@ export interface operations {
                 "application/json": components["schemas"]["AccountUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountWithBalance"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_account_spaces__space_id__accounts__account_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountWithBalance"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_account_spaces__space_id__accounts__account_id__reconcile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountReconcile"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountWithBalance"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unarchive_account_spaces__space_id__accounts__account_id__unarchive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.errors import InvalidFieldError
+from app.core.errors import ConflictError, InvalidFieldError, NotFoundError
 from app.modules.categories import service as categories_service
 from app.modules.transactions import service
 from app.modules.transactions.models import Entry, Transaction
@@ -27,6 +27,7 @@ from tests.transactions_helpers import (
 adapter: TypeAdapter[Any] = TypeAdapter(TransactionCreate)
 DAY = "2026-10-20"
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
+MAX_SAFE = 2**53 - 1
 
 
 def _data(kind: str, **fields: Any) -> TransactionCreate:
@@ -704,3 +705,358 @@ async def test_a_refused_transaction_does_not_touch_the_balances(session: AsyncS
     )
 
     assert await service.get_account_balances(session, space_id) == {}
+
+
+# create_adjustment: initial balance and reconciliation write through it -----------------------
+
+# 01:00 UTC of the 21st is still the 20th in Montevideo (UTC-3), where the test spaces live.
+LATE_UTC = datetime(2026, 10, 21, 1, 0, tzinfo=UTC)
+
+
+async def _stored(session: AsyncSession, transaction_id: uuid.UUID) -> Transaction:
+    stored = await session.scalar(
+        select(Transaction)
+        .where(Transaction.id == transaction_id)
+        .options(selectinload(Transaction.entries))
+        .execution_options(populate_existing=True)
+    )
+    assert stored is not None
+    return stored
+
+
+async def test_create_adjustment_writes_a_confirmed_adjustment_without_category(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+
+    result = await service.create_adjustment(
+        session, space_id, user_id, account.id, 1_000_000, now=NOW
+    )
+
+    assert isinstance(result, TransactionRead)
+    assert (result.type, result.status, result.description) == ("adjustment", "confirmed", None)
+    assert [(e.account_id, e.amount_minor, e.category_id) for e in result.entries] == [
+        (account.id, 1_000_000, None)
+    ]
+    stored = await _stored(session, result.id)
+    assert (stored.space_id, stored.created_by, stored.deleted_at) == (space_id, user_id, None)
+    assert [e.space_id for e in stored.entries] == [space_id]
+    assert await service.get_account_balance(session, space_id, account.id) == 1_000_000
+
+
+async def test_create_adjustment_dates_it_with_the_local_day_of_the_space(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")  # America/Montevideo
+    account = await make_account(session, space_id)
+
+    late = await service.create_adjustment(session, space_id, user_id, account.id, 10, now=LATE_UTC)
+    noon = await service.create_adjustment(session, space_id, user_id, account.id, 10, now=NOW)
+
+    assert late.date == date(2026, 10, 20)  # the UTC day is the 21st
+    assert noon.date == date(2026, 10, 20)
+
+
+async def test_create_adjustment_keeps_the_sign_on_a_credit_card(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    card = await make_account(session, space_id, type_="credit_card", name="Visa")
+
+    await service.create_adjustment(session, space_id, user_id, card.id, -300_000, now=NOW)
+
+    assert await service.get_account_balance(session, space_id, card.id) == -300_000
+    summary = await service.get_balance_summary(session, space_id)
+    assert (summary.available_minor, summary.card_debt_minor, summary.net_minor) == (
+        0,
+        300_000,
+        -300_000,
+    )
+
+
+async def test_create_adjustment_refuses_an_archived_account(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    old = await make_account(session, space_id, archived=True)
+
+    with pytest.raises(InvalidFieldError) as exc:
+        await service.create_adjustment(session, space_id, user_id, old.id, 100, now=NOW)
+
+    assert exc.value.code == "account_archived"
+    assert await service.get_account_balances(session, space_id) == {}
+
+
+async def test_create_adjustment_refuses_an_account_of_another_space(
+    session: AsyncSession,
+) -> None:
+    user_a, space_a = await make_user_and_space(session, "uid-a")
+    _, space_b = await make_user_and_space(session, "uid-b")
+    theirs = await make_account(session, space_b)
+
+    with pytest.raises(InvalidFieldError) as exc:
+        await service.create_adjustment(session, space_a, user_a, theirs.id, 100, now=NOW)
+
+    assert exc.value.code == "account_not_found"
+    assert await service.get_account_balances(session, space_b) == {}
+
+
+# reconcile_account ----------------------------------------------------------------------------
+
+
+async def test_reconcile_up_writes_an_adjustment_for_the_difference(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, 10_000, None)]
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=12_550, now=NOW
+    )
+
+    assert result is not None
+    assert (result.type, result.status) == ("adjustment", "confirmed")
+    assert [(e.account_id, e.amount_minor, e.category_id) for e in result.entries] == [
+        (account.id, 2_550, None)
+    ]
+    assert await service.get_account_balance(session, space_id, account.id) == 12_550
+
+
+async def test_reconcile_down_writes_a_negative_adjustment(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, 10_000, None)]
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=9_000, now=NOW
+    )
+
+    assert result is not None
+    assert [e.amount_minor for e in result.entries] == [-1_000]
+    assert await service.get_account_balance(session, space_id, account.id) == 9_000
+
+
+async def test_reconcile_with_no_difference_writes_nothing(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, 10_000, None)]
+    )
+    before = await _counts(session)
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=10_000, now=NOW
+    )
+
+    assert result is None
+    assert await _counts(session) == before
+    assert await service.get_account_balance(session, space_id, account.id) == 10_000
+
+
+async def test_reconcile_an_account_without_movements_to_zero_writes_nothing(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=0, now=NOW
+    )
+
+    assert result is None
+    assert await _counts(session) == (0, 0)
+
+
+async def test_reconcile_to_zero_clears_the_balance(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, 4_321, None)]
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=0, now=NOW
+    )
+
+    assert result is not None
+    assert [e.amount_minor for e in result.entries] == [-4_321]
+    assert await service.get_account_balance(session, space_id, account.id) == 0
+
+
+async def test_reconcile_a_credit_card_whose_debt_grew(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    card = await make_account(session, space_id, type_="credit_card", name="Visa")
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(card.id, -300_000, None)]
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, card.id, balance_minor=-500_000, now=NOW
+    )
+
+    assert result is not None
+    assert [e.amount_minor for e in result.entries] == [-200_000]  # the debt goes up
+    summary = await service.get_balance_summary(session, space_id)
+    assert summary.card_debt_minor == 500_000
+
+
+async def test_reconcile_a_credit_card_whose_debt_shrank_or_became_a_credit(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    card = await make_account(session, space_id, type_="credit_card", name="Visa")
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(card.id, -300_000, None)]
+    )
+
+    smaller = await service.reconcile_account(
+        session, space_id, user_id, card.id, balance_minor=-100_000, now=NOW
+    )
+    in_favour = await service.reconcile_account(
+        session, space_id, user_id, card.id, balance_minor=50_000, now=NOW
+    )
+
+    assert smaller is not None
+    assert in_favour is not None
+    assert [e.amount_minor for e in smaller.entries] == [200_000]
+    assert [e.amount_minor for e in in_favour.entries] == [150_000]
+    assert await service.get_account_balance(session, space_id, card.id) == 50_000
+
+
+async def test_reconcile_only_counts_confirmed_movements_that_are_not_deleted(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    spec = (space_id, user_id)
+    await insert_transaction(session, *spec, entries=[(account.id, 1_000, None)])
+    await insert_transaction(session, *spec, entries=[(account.id, 7, None)], status="pending")
+    await insert_transaction(session, *spec, entries=[(account.id, 70, None)], status="skipped")
+    await insert_transaction(
+        session, *spec, entries=[(account.id, 700, None)], deleted_at=datetime.now(UTC)
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=1_500, now=NOW
+    )
+
+    assert result is not None
+    assert [e.amount_minor for e in result.entries] == [500]  # 1_500 - the 1_000 that counts
+    assert await service.get_account_balance(session, space_id, account.id) == 1_500
+
+
+async def test_reconcile_twice_with_the_same_balance_writes_one_adjustment(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+
+    first = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=2_000, now=NOW
+    )
+    second = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=2_000, now=NOW
+    )
+
+    assert first is not None
+    assert second is None
+    assert await _counts(session) == (1, 1)
+
+
+async def test_reconcile_touches_only_its_account_and_dates_the_adjustment_locally(
+    session: AsyncSession,
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    other = await make_account(session, space_id, name="Otra")
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=300, now=LATE_UTC
+    )
+
+    assert result is not None
+    assert result.date == date(2026, 10, 20)
+    assert await service.get_account_balances(session, space_id) == {account.id: 300}
+    assert await service.get_account_balance(session, space_id, other.id) == 0
+
+
+@pytest.mark.parametrize("balance", [0, 100])
+async def test_reconcile_of_an_archived_account_is_a_conflict_even_without_difference(
+    session: AsyncSession, balance: int
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    old = await make_account(session, space_id, archived=True)
+
+    with pytest.raises(ConflictError) as exc:
+        await service.reconcile_account(
+            session, space_id, user_id, old.id, balance_minor=balance, now=NOW
+        )
+
+    assert exc.value.code == "account_archived"
+    assert await _counts(session) == (0, 0)
+
+
+async def test_reconcile_of_a_missing_account_is_not_found(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.reconcile_account(
+            session, space_id, user_id, uuid.uuid4(), balance_minor=100, now=NOW
+        )
+
+    assert exc.value.code == "account_not_found"
+
+
+async def test_reconcile_of_an_account_of_another_space_is_not_found_and_writes_nothing(
+    session: AsyncSession,
+) -> None:
+    user_a, space_a = await make_user_and_space(session, "uid-a")
+    _, space_b = await make_user_and_space(session, "uid-b")
+    theirs = await make_account(session, space_b)
+
+    with pytest.raises(NotFoundError) as exc:
+        await service.reconcile_account(
+            session, space_a, user_a, theirs.id, balance_minor=100, now=NOW
+        )
+
+    assert exc.value.code == "account_not_found"
+    assert await _counts(session) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [(-MAX_SAFE, MAX_SAFE), (MAX_SAFE, -MAX_SAFE), (-1, MAX_SAFE), (1, -MAX_SAFE)],
+)
+async def test_reconcile_with_a_difference_beyond_the_safe_limit_is_a_422_that_writes_nothing(
+    session: AsyncSession, current: int, target: int
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, current, None)]
+    )
+    before = await _counts(session)
+
+    with pytest.raises(InvalidFieldError) as exc:
+        await service.reconcile_account(
+            session, space_id, user_id, account.id, balance_minor=target, now=NOW
+        )
+
+    assert (exc.value.code, exc.value.loc) == ("balance_out_of_range", ["body", "balance_minor"])
+    assert await _counts(session) == before
+    assert await service.get_account_balance(session, space_id, account.id) == current
+
+
+async def test_reconcile_accepts_the_largest_difference_that_fits(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session, space_id=space_id, user_id=user_id, entries=[(account.id, 1, None)]
+    )
+
+    result = await service.reconcile_account(
+        session, space_id, user_id, account.id, balance_minor=MAX_SAFE, now=NOW
+    )
+
+    assert result is not None
+    assert [e.amount_minor for e in result.entries] == [MAX_SAFE - 1]

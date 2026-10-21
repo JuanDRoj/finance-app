@@ -47,7 +47,9 @@ async def make_account(
         session, space_id, AccountCreate.model_validate({"type": type_, "name": name, **days})
     )
     if archived:
-        account.archived_at = datetime.now(UTC)  # there is no archive service yet (BE-16)
+        # Written directly on purpose: it skips the zero-balance rule of `archive_account`, so a
+        # test can have an archived account that still has a balance.
+        account.archived_at = datetime.now(UTC)
         await session.flush()
     return account
 

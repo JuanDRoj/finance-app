@@ -5,10 +5,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.modules.accounts.schemas import AccountCreate, AccountUpdate
+from app.modules.accounts.schemas import AccountCreate, AccountReconcile, AccountUpdate
 
 
-def _errors(model: type[AccountCreate] | type[AccountUpdate], data: dict[str, Any]) -> list[Any]:
+def _errors(
+    model: type[AccountCreate] | type[AccountUpdate] | type[AccountReconcile],
+    data: dict[str, Any],
+) -> list[Any]:
     with pytest.raises(ValidationError) as exc:
         model.model_validate(data)
     return [(e["type"], e["loc"]) for e in exc.value.errors()]
@@ -122,9 +125,84 @@ def test_days_must_be_real_integers(day: object) -> None:
     assert [loc for _, loc in _errors(AccountCreate, data)] == [("closing_day",)]
 
 
-@pytest.mark.parametrize("field", ["archived_at", "space_id", "id", "initial_balance_minor"])
+@pytest.mark.parametrize("field", ["archived_at", "space_id", "id", "balance_minor"])
 def test_create_rejects_fields_that_are_not_part_of_the_contract(field: str) -> None:
     errors = _errors(AccountCreate, {"type": "cash", "name": "x", field: "anything"})
+
+    assert errors == [("extra_forbidden", (field,))]
+
+
+# AccountCreate: initial balance -------------------------------------------------------------
+
+MAX_SAFE = 2**53 - 1
+
+
+def test_the_initial_balance_is_optional_and_defaults_to_none() -> None:
+    account = AccountCreate.model_validate({"type": "cash", "name": "x"})
+
+    assert account.initial_balance_minor is None
+
+
+@pytest.mark.parametrize("value", [1_000_000, -300_000, 0, MAX_SAFE, -MAX_SAFE])
+def test_the_initial_balance_accepts_any_integer_with_its_sign(value: int) -> None:
+    account = AccountCreate.model_validate(
+        {"type": "bank", "name": "Itaú", "initial_balance_minor": value}
+    )
+
+    assert account.initial_balance_minor == value
+
+
+def test_the_initial_balance_of_a_credit_card_is_negative_when_you_owe() -> None:
+    card = AccountCreate.model_validate(
+        {
+            "type": "credit_card",
+            "name": "Visa",
+            "closing_day": 5,
+            "due_day": 12,
+            "initial_balance_minor": -300_000,
+        }
+    )
+
+    assert card.initial_balance_minor == -300_000
+
+
+def test_an_explicit_null_initial_balance_means_no_initial_balance() -> None:
+    account = AccountCreate.model_validate(
+        {"type": "cash", "name": "x", "initial_balance_minor": None}
+    )
+
+    assert account.initial_balance_minor is None
+
+
+@pytest.mark.parametrize("value", ["1000", 10.5, 10.0, True, MAX_SAFE + 1, -MAX_SAFE - 1])
+def test_an_invalid_initial_balance_is_rejected_on_its_own_field(value: object) -> None:
+    errors = _errors(AccountCreate, {"type": "cash", "name": "x", "initial_balance_minor": value})
+
+    assert [loc for _, loc in errors] == [("initial_balance_minor",)]
+
+
+# AccountReconcile ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", [0, 1_000_000, -300_000, MAX_SAFE, -MAX_SAFE])
+def test_reconcile_accepts_any_integer_balance_including_zero(value: int) -> None:
+    assert AccountReconcile.model_validate({"balance_minor": value}).balance_minor == value
+
+
+def test_reconcile_requires_the_balance() -> None:
+    assert _errors(AccountReconcile, {}) == [("missing", ("balance_minor",))]
+
+
+@pytest.mark.parametrize("value", [None, "1000", 10.5, 10.0, True, MAX_SAFE + 1, -MAX_SAFE - 1])
+def test_reconcile_rejects_a_balance_that_is_not_a_safe_integer(value: object) -> None:
+    errors = _errors(AccountReconcile, {"balance_minor": value})
+
+    assert [loc for _, loc in errors] == [("balance_minor",)]
+
+
+@pytest.mark.parametrize("field", ["account_id", "amount_minor", "type", "date"])
+def test_reconcile_rejects_unknown_fields(field: str) -> None:
+    errors = _errors(AccountReconcile, {"balance_minor": 0, field: "x"})
 
     assert errors == [("extra_forbidden", (field,))]
 

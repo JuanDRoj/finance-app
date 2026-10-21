@@ -3,11 +3,13 @@
 Creating a movement reads the account ("is it active?") and then writes entries that depend on it.
 The foreign key of an entry only takes `FOR KEY SHARE` on the account, which does not conflict with
 the `UPDATE` that archives it, so without an explicit lock an archive can run between the read and
-the write and leave an archived account with a balance. The archive (BE-16) will read the account
-`FOR NO KEY UPDATE`, compute the balance and then update; these tests prove the other half of that
-contract deterministically, with `NOWAIT` instead of timing: while a creation is in flight, a
-`FOR NO KEY UPDATE` on its accounts is refused at once. The control cases show the probe is not
-vacuous (nothing in flight, or the creation already committed: the lock is granted).
+the write and leave an archived account with a balance. The archive
+(`accounts.service.archive_account`) reads the account `FOR NO KEY UPDATE`, computes the balance and
+then updates; these tests prove the creation half of that contract deterministically, with `NOWAIT`
+instead of timing (the overlap of both halves is in `test_account_archive_concurrency.py`): while a
+creation is in flight, a `FOR NO KEY UPDATE` on its accounts is refused at once. The control cases
+show the probe is not vacuous (nothing in flight, or the creation already committed: the
+lock is granted).
 
 Two creations at the same time must not wait for each other: `FOR SHARE` is compatible with itself.
 """

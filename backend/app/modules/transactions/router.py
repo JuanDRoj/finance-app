@@ -8,7 +8,10 @@ from app.modules.spaces.dependencies import require_space_member
 from app.modules.transactions import service
 from app.modules.transactions.schemas import BalanceSummaryRead
 
-# The routes of the movements themselves (create, list, edit, delete) arrive with BE-16 and BE-18.
+# Only the balance summary is served here so far. The movements themselves have no routes yet:
+# `service.create_transaction` exists (the accounts router writes initial balances and
+# reconciliations through it), but creating, listing, editing and deleting movements over HTTP is
+# still to do.
 router = APIRouter(
     prefix="/spaces/{space_id}/balance-summary",
     tags=["balances"],

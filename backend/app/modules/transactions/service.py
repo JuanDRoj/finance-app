@@ -1,19 +1,25 @@
 import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import InvalidFieldError, NotFoundError
+from app.core.errors import ConflictError, InvalidFieldError, NotFoundError
+from app.core.schemas import MAX_SAFE_INTEGER
 from app.modules.accounts import service as accounts_service
 from app.modules.categories import service as categories_service
+from app.modules.spaces import service as spaces_service
 from app.modules.transactions import repository
 from app.modules.transactions.entries import build_entries, referenced_accounts
 from app.modules.transactions.models import Entry, Transaction
 from app.modules.transactions.schemas import (
     ACCOUNT_ARCHIVED,
     ACCOUNT_NOT_FOUND,
+    BALANCE_OUT_OF_RANGE,
     CATEGORY_ARCHIVED,
     CATEGORY_KIND_MISMATCH,
     CATEGORY_NOT_FOUND,
+    AdjustmentCreate,
     BalanceSummaryRead,
     ExpenseCreate,
     IncomeCreate,
@@ -67,6 +73,76 @@ async def create_transaction(
     # One flush writes the transaction and then its entries (the relationship orders them).
     await session.flush()
     return TransactionRead.model_validate(transaction)
+
+
+async def create_adjustment(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    amount_minor: int,
+    *,
+    now: datetime,
+) -> TransactionRead:
+    """Create a confirmed adjustment of the balance of one account: initial balance, reconciliation.
+
+    `amount_minor` is the change of the balance with its sign, never zero and within the safe
+    limit (the callers guarantee both; otherwise it is a bug and Pydantic raises). On a credit card
+    a negative amount raises the debt. An adjustment is neither income nor expense: no category,
+    no description (the UI labels it by type). Its date is the local day of the space at `now`
+    (`spaces.timezone`), so the same code dates every adjustment. It goes through
+    `create_transaction`, so the account must exist in the space and be active (a 422 on
+    `account_id` otherwise) and is read `FOR SHARE`.
+    """
+    timezone = await spaces_service.get_space_timezone(session, space_id)
+    day = now.astimezone(ZoneInfo(timezone)).date()
+    data = AdjustmentCreate(
+        type="adjustment", date=day, account_id=account_id, amount_minor=amount_minor
+    )
+    return await create_transaction(session, space_id, user_id, data)
+
+
+async def reconcile_account(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    *,
+    balance_minor: int,
+    now: datetime,
+) -> TransactionRead | None:
+    """Match the balance of an account to the real one with an adjustment for the difference.
+
+    `balance_minor` is the real balance with the sign of `balance_minor` of the API (on a credit
+    card, negative = you owe), so the adjustment is always `real - current`, whatever the type of
+    the account. If there is no difference nothing is written and the result is None. The account
+    must exist in the space (404) and be active (409 `account_archived`, checked even when there is
+    no difference). A difference beyond the safe limit is a 422 on `balance_minor` (the CHECK
+    `ck_entries_amount_range` would otherwise answer with a 500).
+
+    The account is read `FOR NO KEY UPDATE` and only then the balance (the same order as the
+    archive): the adjustment depends on that balance, so nobody else may write between the two. A
+    movement in flight is waited for, and the balance read afterwards includes it, so the account
+    ends at exactly the real balance; a movement that starts later waits for this transaction and
+    goes after it. Two reconciliations at the same time (a double tap) run one after the other: the
+    second one reads the balance the first one committed and, with the same real balance, finds no
+    difference and writes nothing. The `FOR SHARE` that `create_transaction` takes on the same
+    account afterwards does not wait: a transaction's own locks never conflict.
+    """
+    account = await accounts_service.get_account_for_update(session, space_id, account_id)
+    if account.archived_at is not None:
+        raise ConflictError(ACCOUNT_ARCHIVED, "The account is archived")
+    current = await repository.balance_of_account(session, space_id=space_id, account_id=account_id)
+    difference = balance_minor - current
+    if difference == 0:
+        return None
+    if abs(difference) > MAX_SAFE_INTEGER:
+        raise InvalidFieldError(
+            ("body", "balance_minor"),
+            BALANCE_OUT_OF_RANGE,
+            "The difference with the current balance is too large",
+        )
+    return await create_adjustment(session, space_id, user_id, account_id, difference, now=now)
 
 
 async def get_account_balance(

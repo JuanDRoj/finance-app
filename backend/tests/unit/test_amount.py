@@ -1,7 +1,8 @@
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from app.core.schemas import Amount, SignedAmount
+from app.core.schemas import MAX_SAFE_INTEGER as CORE_MAX_SAFE_INTEGER
+from app.core.schemas import Amount, Balance, SignedAmount
 
 MAX_SAFE_INTEGER = 2**53 - 1
 adapter = TypeAdapter(Amount)
@@ -41,3 +42,27 @@ def test_signed_amount_rejects_zero_with_a_stable_error_type() -> None:
         signed_adapter.validate_python(0)
 
     assert [e["type"] for e in exc.value.errors()] == ["amount_zero"]
+
+
+def test_the_safe_integer_constant_is_the_javascript_limit() -> None:
+    assert CORE_MAX_SAFE_INTEGER == MAX_SAFE_INTEGER
+
+
+# Balance: a balance as it would be read (initial balance, the real balance of a reconciliation).
+# Same sign as `balance_minor`; unlike SignedAmount, zero is a valid balance.
+
+balance_adapter = TypeAdapter(Balance)
+
+
+@pytest.mark.parametrize("value", [0, 1, -1, 1550, -1550, MAX_SAFE_INTEGER, -MAX_SAFE_INTEGER])
+def test_balance_accepts_any_integer_up_to_the_js_safe_limit_including_zero(value: int) -> None:
+    assert balance_adapter.validate_python(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [MAX_SAFE_INTEGER + 1, -MAX_SAFE_INTEGER - 1, "1550", "-5", "0", 15.0, -2.0, 0.0, True, None],
+)
+def test_balance_rejects_too_large_and_non_integer_values(value: object) -> None:
+    with pytest.raises(ValidationError):
+        balance_adapter.validate_python(value)

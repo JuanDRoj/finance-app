@@ -7,7 +7,7 @@ creating or unarchiving a subcategory reads its principal `FOR SHARE`, which con
 archive's UPDATE of that row (an FK check alone only takes `FOR KEY SHARE`, which does not).
 
 As in `test_first_login_concurrency.py`, the overlap is forced instead of hoped for, on two real
-connections (one engine per actor on a scratch database):
+connections (one engine per actor on a scratch database), with `tests/overlap.py`:
 
 1. The first operation writes but does not commit.
 2. The second one starts. It has to wait for the first one's row lock.
@@ -27,7 +27,7 @@ look for the subcategories archived at the same moment, so they end in the same 
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,28 +42,20 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.errors import AppError, ConflictError, InvalidFieldError
+from app.core.errors import ConflictError, InvalidFieldError
 from app.modules.categories import service as categories_service
 from app.modules.categories.schemas import CategoryCreate
 from app.modules.spaces import service as spaces_service
 from app.modules.users import service as users_service
+from tests.overlap import Operation, overlap
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-TIMEOUT_SECONDS = 20
-
-WAITING_ON_A_LOCK = text(
-    "SELECT count(*) FROM pg_stat_activity"
-    " WHERE datname = current_database() AND pid <> pg_backend_pid()"
-    " AND wait_event_type = 'Lock'"
-)
 
 # Principal categories that have a subcategory under an archived principal one. It must stay empty.
 ACTIVE_UNDER_ARCHIVED = (
     "SELECT count(*) FROM categories sub JOIN categories main ON main.id = sub.parent_id"
     " WHERE sub.archived_at IS NULL AND main.archived_at IS NOT NULL"
 )
-
-Operation = Callable[[AsyncSession], Awaitable[object]]
 
 
 @dataclass(frozen=True)
@@ -112,53 +104,6 @@ async def _scalar(engine: AsyncEngine, sql: str, **params: object) -> int:
         return value
 
 
-async def _overlap(
-    engines: tuple[AsyncEngine, ...], first: Operation, second: Operation
-) -> tuple[object, object]:
-    """Run `first` (it writes, does not commit) and `second` (it has to block on it).
-
-    Returns what each one returned; an `AppError` raised by `second` is returned, not raised.
-    """
-    engine_a, engine_b, watcher = engines
-    first_has_written = asyncio.Event()
-    second_is_waiting = asyncio.Event()
-
-    async def run_first() -> object:
-        async with async_sessionmaker(engine_a, expire_on_commit=False)() as session:
-            result = await first(session)
-            first_has_written.set()
-            await second_is_waiting.wait()  # the second one is blocked on our row until we commit
-            await session.commit()
-            return result
-
-    async def run_second() -> object:
-        async with async_sessionmaker(engine_b, expire_on_commit=False)() as session:
-            await first_has_written.wait()
-            try:
-                result = await second(session)
-            except AppError as error:
-                return error  # the session closes without committing
-            await session.commit()
-            return result
-
-    async def watch_for_the_blocked_one() -> None:
-        # AUTOCOMMIT: inside a transaction PostgreSQL caches the pg_stat_activity snapshot, so a
-        # polling loop would keep seeing the first answer.
-        async with watcher.connect() as raw:
-            conn = await raw.execution_options(isolation_level="AUTOCOMMIT")
-            # Polling a database condition (there is no event to await), bounded by the timeout.
-            while (await conn.execute(WAITING_ON_A_LOCK)).scalar_one() == 0:  # noqa: ASYNC110
-                await asyncio.sleep(0.01)
-        second_is_waiting.set()
-
-    async with asyncio.timeout(TIMEOUT_SECONDS):
-        async with asyncio.TaskGroup() as group:
-            task_first = group.create_task(run_first())
-            task_second = group.create_task(run_second())
-            group.create_task(watch_for_the_blocked_one())
-    return task_first.result(), task_second.result()
-
-
 def _archive(space: Space) -> Operation:
     async def operation(session: AsyncSession) -> object:
         return await categories_service.archive_category(session, space.id, space.main_id)
@@ -193,7 +138,7 @@ async def test_creating_a_subcategory_while_its_principal_is_being_archived_is_r
     engine = engines[0]
     space = await _committed_space(engine)
 
-    archived, created = await _overlap(engines, _archive(space), _create_a_subcategory(space))
+    archived, created = await overlap(engines, _archive(space), _create_a_subcategory(space))
 
     assert getattr(archived, "archived_at", None) is not None
     assert isinstance(created, InvalidFieldError)
@@ -208,7 +153,7 @@ async def test_archiving_a_principal_while_a_subcategory_is_being_created_archiv
     engine = engines[0]
     space = await _committed_space(engine)
 
-    created, archived = await _overlap(engines, _create_a_subcategory(space), _archive(space))
+    created, archived = await overlap(engines, _create_a_subcategory(space), _archive(space))
 
     new_id = getattr(created, "id", None)
     assert isinstance(new_id, uuid.UUID)
@@ -228,7 +173,7 @@ async def test_unarchiving_a_subcategory_while_its_principal_is_being_archived_i
     space = await _committed_space(engine)
     sub_archived_at = await _archived_at(engine, space.sub_id)
 
-    archived, unarchived = await _overlap(
+    archived, unarchived = await overlap(
         engines, _archive(space), _unarchive_the_subcategory(space)
     )
 
@@ -246,7 +191,7 @@ async def test_archiving_a_principal_while_a_subcategory_is_being_unarchived_arc
     engine = engines[0]
     space = await _committed_space(engine)
 
-    unarchived, archived = await _overlap(
+    unarchived, archived = await overlap(
         engines, _unarchive_the_subcategory(space), _archive(space)
     )
 
@@ -282,7 +227,7 @@ async def test_two_simultaneous_archives_of_a_principal_leave_one_moment_for_all
     cafes = await _add_an_active_subcategory(engine, space, "Cafés")
     alone_at = await _archived_at(engine, space.sub_id)
 
-    first, second = await _overlap(engines, _archive(space), _archive(space))
+    first, second = await overlap(engines, _archive(space), _archive(space))
 
     moment = await _archived_at(engine, space.main_id)
     assert moment is not None
@@ -315,7 +260,7 @@ async def test_two_simultaneous_unarchives_of_a_principal_restore_it_and_its_sub
         await session.commit()
     alone_at = await _archived_at(engine, space.sub_id)
 
-    first, second = await _overlap(engines, _unarchive(space), _unarchive(space))
+    first, second = await overlap(engines, _unarchive(space), _unarchive(space))
 
     assert getattr(first, "archived_at", "archived") is None
     assert getattr(second, "archived_at", "archived") is None

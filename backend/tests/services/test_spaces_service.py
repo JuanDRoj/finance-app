@@ -161,6 +161,37 @@ async def test_get_space_returns_the_currency_exponent(session: AsyncSession) ->
     assert space.currency.exponent == 2
 
 
+async def test_get_space_timezone_returns_the_zone_of_the_space(session: AsyncSession) -> None:
+    user_id = await _make_user(session, "uid-tz-1")
+    await service.ensure_personal_space(session, user_id, "America/Bogota")
+    space_id = await service.get_personal_space_id(session, user_id)
+
+    assert await service.get_space_timezone(session, space_id) == "America/Bogota"
+
+
+async def test_get_space_timezone_is_the_one_of_each_space(session: AsyncSession) -> None:
+    ana = await _make_user(session, "uid-tz-ana")
+    luis = await _make_user(session, "uid-tz-luis")
+    await service.ensure_personal_space(session, ana, "America/Montevideo")
+    await service.ensure_personal_space(session, luis, "Asia/Tokyo")
+
+    assert await service.get_space_timezone(
+        session, await service.get_personal_space_id(session, ana)
+    ) == ("America/Montevideo")
+    assert await service.get_space_timezone(
+        session, await service.get_personal_space_id(session, luis)
+    ) == ("Asia/Tokyo")
+
+
+async def test_get_space_timezone_raises_not_found_for_an_unknown_id(
+    session: AsyncSession,
+) -> None:
+    with pytest.raises(NotFoundError) as error:
+        await service.get_space_timezone(session, uuid.uuid4())
+
+    assert error.value.code == "space_not_found"
+
+
 async def test_list_spaces_is_ordered_by_creation_time_not_by_insertion_order(
     session: AsyncSession,
 ) -> None:

@@ -30,6 +30,19 @@
             ],
             "title": "Due Day"
           },
+          "initial_balance_minor": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": -9007199254740991.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Balance Minor"
+          },
           "name": {
             "maxLength": 80,
             "minLength": 1,
@@ -51,6 +64,23 @@
           "name"
         ],
         "title": "AccountCreate",
+        "type": "object"
+      },
+      "AccountReconcile": {
+        "additionalProperties": false,
+        "description": "The real balance of an account (what the bank says), to match the app to it.\n\nSame sign as `balance_minor`: on a credit card, negative = you owe. The app registers an\nadjustment for the difference, or nothing if there is none. Zero is a valid balance.",
+        "properties": {
+          "balance_minor": {
+            "maximum": 9007199254740991.0,
+            "minimum": -9007199254740991.0,
+            "title": "Balance Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "balance_minor"
+        ],
+        "title": "AccountReconcile",
         "type": "object"
       },
       "AccountUpdate": {
@@ -1011,7 +1041,7 @@
         ]
       },
       "post": {
-        "description": "Create a bank, cash or credit card account (the cards need closing and due days).",
+        "description": "Create a bank, cash or credit card account (the cards need closing and due days).\n\nWith `initial_balance_minor` (other than 0) the account is born with that balance: an\nadjustment, neither income nor expense, written in the same transaction. On a credit card it is\nthe current debt, negative. If the adjustment fails, the account is not created.",
         "operationId": "create_account_spaces__space_id__accounts_post",
         "parameters": [
           {
@@ -1234,6 +1264,258 @@
           }
         },
         "summary": "Update Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/spaces/{space_id}/accounts/{account_id}/archive": {
+      "post": {
+        "description": "Archive an account whose balance is zero (409 `account_has_balance` otherwise).\n\nIt stops showing in the list and in the selectors; its old movements stay. Archiving an\narchived account changes nothing.",
+        "operationId": "archive_account_spaces__space_id__accounts__account_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountWithBalance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/spaces/{space_id}/accounts/{account_id}/reconcile": {
+      "post": {
+        "description": "Match the balance of the account to the real one (what the bank says).\n\nAn adjustment (neither income nor expense) for the difference is registered; if there is none,\nnothing is. `balance_minor` has the sign of the balance of the account: on a credit card,\nnegative = you owe. An archived account cannot be reconciled (409).",
+        "operationId": "reconcile_account_spaces__space_id__accounts__account_id__reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountReconcile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountWithBalance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/spaces/{space_id}/accounts/{account_id}/unarchive": {
+      "post": {
+        "description": "Make an archived account active again, whatever its balance (an active one: no change).",
+        "operationId": "unarchive_account_spaces__space_id__accounts__account_id__unarchive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountWithBalance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unarchive Account",
         "tags": [
           "accounts"
         ]

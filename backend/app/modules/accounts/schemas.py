@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import Field, StringConstraints, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
-from app.core.schemas import InputModel, PatchModel, ReadModel, unset
+from app.core.schemas import Balance, InputModel, PatchModel, ReadModel, unset
 
 AccountType = Literal["bank", "cash", "credit_card"]
 
@@ -31,6 +31,11 @@ class AccountCreate(InputModel):
     # Validated even when omitted, so a card without days fails on the day's own field.
     closing_day: MonthDay | None = Field(default=None, validate_default=True)
     due_day: MonthDay | None = Field(default=None, validate_default=True)
+    # What the account holds when it is created, with the sign of `balance_minor`: on a credit card
+    # it is the current debt, negative. Omitted, null or 0 = nothing to register. Otherwise the
+    # router writes it as an adjustment (not income, not expense) in the same transaction; the
+    # service of `accounts` does not read it (the entries belong to `transactions`).
+    initial_balance_minor: Balance | None = None
 
     @field_validator("closing_day", "due_day")
     @classmethod
@@ -56,6 +61,16 @@ class AccountUpdate(PatchModel):
     name: AccountName = unset()
     closing_day: MonthDay = unset()
     due_day: MonthDay = unset()
+
+
+class AccountReconcile(InputModel):
+    """The real balance of an account (what the bank says), to match the app to it.
+
+    Same sign as `balance_minor`: on a credit card, negative = you owe. The app registers an
+    adjustment for the difference, or nothing if there is none. Zero is a valid balance.
+    """
+
+    balance_minor: Balance
 
 
 class AccountRead(ReadModel):
