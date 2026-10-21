@@ -1,9 +1,9 @@
 # Personal Finance App — Decisiones de producto
  
-Última actualización: 2026-10-18
+Última actualización: 2026-10-21
  
 ## Visión
-App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero (pensada para celular), app móvil después.
+App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero, **pensada para escritorio** y adaptada al celular (decidido el 2026-10-21); app móvil después.
  
 ## Decisiones
  
@@ -20,7 +20,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Categorías | Predefinidas y editables, con subcategorías (2 niveles). Cada una lleva un ícono de una lista fija (columna `icon`): las predefinidas traen el suyo y al crear una se elige. |
 | Primer uso | Sin onboarding guiado ni cuentas creadas solas: el Inicio vacío invita a crear la primera cuenta con su saldo actual (se registra como ajuste), y "+" sin cuentas lleva al mismo formulario. |
 | Espacios | Los datos pertenecen a un **espacio**; los usuarios son miembros. "Mi espacio" privado + espacios de hogar con cuentas propias. Aporte personal → hogar = gasto "Aporte al hogar" + ingreso en el hogar (enlazados). Sin división de deudas. |
-| Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. |
+| Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. En escritorio, además, la evolución del neto (6 meses) e ingresos y gastos por mes (decidido el 2026-10-21, H1). |
 | Presupuestos | Límite mensual por categoría con barra de progreso. |
 | Metas de ahorro | Apartados virtuales **repartidos en una o varias cuentas** (solo banco/efectivo, nunca tarjeta). Libre para gastar = Disponible − apartado. Al registrar un gasto/transferencia desde una cuenta con apartados, la app pregunta si usa dinero de una meta y libera el apartado con un toque. Si el saldo queda por debajo de lo apartado, se permite y se avisa. |
 | Editar/borrar | Edición libre de transacciones confirmadas; borrado suave (`deleted_at`) con "Deshacer". Historial de cambios en v2. |
@@ -31,7 +31,7 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 - **v1.1:** presupuestos y metas de ahorro.
 - **v2:** hogares compartidos, historial de cambios.
 - **Futuro:** multimoneda, app móvil (React Native), importar extractos, dividir compras (UI).
-Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito). Reparto acordado el 2026-10-17: H1 registro diario (cuentas, categorías, movimientos, dashboard A y B) · H2 pendientes y cuotas (plantillas, cron, dashboard D) · H3 tarjetas, Ajustes y producción · H4 v1.1 · H5 v2.
+Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito). Reparto acordado el 2026-10-17: H1 registro diario (cuentas, categorías, movimientos, dashboard A y B con sus gráficos de escritorio) · H2 pendientes y cuotas (plantillas, cron, dashboard D) · H3 tarjetas, Ajustes y producción · H4 v1.1 · H5 v2.
  
 ## Decisiones técnicas
 Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proyecto personal/de aprendizaje con miras a producto real.
