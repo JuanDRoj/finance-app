@@ -1,7 +1,7 @@
 # Frontend — Next.js
 
 Next.js (App Router) · TypeScript **strict** · React Server Components · Tailwind CSS v4 · shadcn/ui con Base UI · Phosphor · TanStack Query · react-hook-form + zod · Firebase Auth (cliente) · openapi-typescript + openapi-fetch · vitest + Testing Library · Playwright (E2E, _pendiente_).
-Despliegue: Vercel (funciones en `gru1`). Diseño **web responsive**: se diseña a 360 px (mobile-first) y se amplía hasta escritorio, con la barra lateral desde 1024 px (`docs/diseno.md` D17). Interfaz en **español**.
+Despliegue: Vercel (funciones en `gru1`). Diseño **web responsive, escritorio primero**: las pantallas se diseñan para escritorio (1280 y 1440 px) y cada una tiene su versión de celular en el lienzo (mínimo garantizado 360 px). La barra lateral ancha aparece desde 1024 px (`docs/diseno.md` D15 y D17). En el código, Tailwind se escribe como siempre: la base es el celular y `lg:` el escritorio. Interfaz en **español**.
 
 **Diseño y librerías de UI:** [`docs/diseno.md`](docs/diseno.md) — decisiones aprobadas (estilos, componentes, tokens, datos, formularios, modo oscuro, viewport) y checklist para empezar una pantalla. Léelo antes de crear o cambiar cualquier pantalla o componente.
 
@@ -23,7 +23,7 @@ Node **24** (`.nvmrc`, `engines`), Next.js **16**, React 19, TypeScript **5.9** 
 | Build | `npm run build` (su `prebuild` borra `.next/dev` para que los tipos de rutas del modo dev, que incluyen `/catalog`, no rompan el build) |
 | Regenerar tipos de la API | `npm run gen:api` (lee `../backend/openapi.json` y escribe `src/lib/api/schema.d.ts`; idempotente) |
 | Tests (lógica y componentes) | `npm test` (vitest, una pasada) · `npm run test:watch` |
-| E2E | `npx playwright test` _(pendiente: se instala con la primera sub-tarea de E2E; proyectos "iPhone" WebKit y "Pixel" Chromium a 360 px, y comparar la salida de `Intl` de Node con la de WebKit y Chromium; ver `docs/diseno.md` §4)_ |
+| E2E | `npx playwright test` _(pendiente: se instala con la primera sub-tarea de E2E; proyectos "Escritorio" Chromium a 1280 px (el principal), "iPhone" WebKit y "Pixel" Chromium a 360 px, y comparar la salida de `Intl` de Node con la de WebKit y Chromium; ver `docs/diseno.md` §4)_ |
 
 `lint`, `typecheck`, `format:check` y `test` no necesitan variables de entorno; `dev`, `build` y `start` sí. `build` no necesita red: las fuentes están versionadas en `src/app/fonts/` y se cargan con `next/font/local` (KAN-42; ESLint prohíbe `next/font/google`).
 
@@ -43,12 +43,12 @@ frontend/
 │   ├── proxy.ts                # (KAN-27) redirige a /login si no hay cookie de sesión (el nombre, de `serverEnv.SESSION_COOKIE_NAME`; solo mira que exista). Toda ruta es privada por defecto: las públicas están en `PUBLIC_PATHS` (`/login`, `/catalog`) y el `matcher` deja fuera `/api`, `/_next/static`, `/_next/image` y los archivos de `public/` (solo los de su raíz y los de `public/brand/`, por extensión). Next 16 renombró `middleware.ts` a `proxy.ts`
 │   ├── components/
 │   │   ├── providers.tsx       # QueryClientProvider (un QueryClient por request en servidor); un 401 de cualquier query lleva a /login (KAN-59)
-│   │   ├── app-shell.tsx       # (servidor, KAN-41) marco de una pantalla con sesión, como el lienzo: encabezado plano (`h1` a la izquierda; a la derecha `actions` y el avatar) dentro de la columna de contenido, en todos los anchos. Bajo 1024 px, columna de hasta 640 px; desde 1024 px (`lg`), la `Sidebar` y el contenido son un grupo de hasta 1440 px contando la barra, centrado. Siempre lleva el menú del avatar y `BfcacheGuard`; recibe `user` (el de `GET /me`, opcional); safe areas con `max()`, fondo
-│   │   ├── sidebar.tsx         # (servidor, KAN-41) barra lateral desde 1024 px: tarjeta flotante de 76 px (radio 28 px, `sticky`, alto de una pantalla menos el padding del grupo) con el logo y `SidebarNav`; oscura en los dos temas (tokens `sidebar*`, uno por tema). Sin avatar
+│   │   ├── app-shell.tsx       # (servidor, KAN-41; desde 1024 px cambia en FE-15: avatar en la barra lateral, D17 › Escritorio v2) marco de una pantalla con sesión, como el lienzo: encabezado plano (`h1` a la izquierda; a la derecha `actions` y el avatar) dentro de la columna de contenido, en todos los anchos. Bajo 1024 px, columna de hasta 640 px; desde 1024 px (`lg`), la `Sidebar` y el contenido son un grupo de hasta 1440 px contando la barra, centrado. Siempre lleva el menú del avatar y `BfcacheGuard`; recibe `user` (el de `GET /me`, opcional); safe areas con `max()`, fondo
+│   │   ├── sidebar.tsx         # (servidor, KAN-41; FE-15 la cambia a 240 px con nombres, D17 › Escritorio v2) barra lateral desde 1024 px: tarjeta flotante de 76 px (radio 28 px, `sticky`, alto de una pantalla menos el padding del grupo) con el logo y `SidebarNav`; oscura en los dos temas (tokens `sidebar*`, uno por tema). Sin avatar
 │   │   ├── shell-layout.ts     # (KAN-41) las clases verticales que la barra y el grupo de `AppShell` comparten (padding de arriba y abajo, y posición y alto de la tarjeta); `shell-layout.test.ts` comprueba que suman una pantalla con cualquier inset
-│   │   ├── sidebar-nav.tsx     # (cliente, KAN-41) `<nav aria-label="Principal">`: un enlace de 48 px por sección con `aria-label`, `aria-current` y globo (`Tooltip`: mouse y foco de teclado, nunca táctil)
+│   │   ├── sidebar-nav.tsx     # (cliente, KAN-41; FE-15 la cambia a enlaces de 44 px con nombre y sin globo, D17 › Escritorio v2) `<nav aria-label="Principal">`: un enlace de 48 px por sección con `aria-label`, `aria-current` y globo (`Tooltip`: mouse y foco de teclado, nunca táctil)
 │   │   ├── nav-sections.ts     # (KAN-41) `NAV_SECTIONS` (la lista de secciones: solo Inicio en Hito 0) e `isSectionActive(pathname, href)`
-│   │   ├── user-menu.tsx       # (cliente, KAN-41) el único avatar (en el encabezado, todos los anchos) con su menú (`DropdownMenu`): nombre y correo, y "Cerrar sesión". Dos iniciales; bajo 768 px un tile glass de 44 px, desde 768 px 48 px en `secondary`. Llama a `useLogout()`
+│   │   ├── user-menu.tsx       # (cliente, KAN-41; desde FE-15, en escritorio va en la barra lateral) el único avatar (en el encabezado, todos los anchos) con su menú (`DropdownMenu`): nombre y correo, y "Cerrar sesión". Dos iniciales; bajo 768 px un tile glass de 44 px, desde 768 px 48 px en `secondary`. Llama a `useLogout()`
 │   │   ├── use-logout.ts       # (cliente, KAN-27; era `logout-button.tsx`) `useLogout()` → `{ logout, busy }`: `DELETE /api/auth/session` y carga completa de `/login` (ver "Sesión"). Lo llama `UserMenu`
 │   │   ├── bfcache-guard.tsx   # (cliente, KAN-27) recarga una página que el navegador restaura de su caché atrás/adelante; `markSessionEnded()` oculta la página al cerrar sesión
 │   │   ├── brand/              # identidad Kanza (KAN-40): `KanzaBrand` (ícono + nombre en Bricolage 800, componente de servidor) y `brand-font.ts` (la fuente, solo aquí)

@@ -1,6 +1,6 @@
 # Personal Finance App
 
-App de finanzas personales: web responsive (se diseña desde el celular y se amplía hasta escritorio); la app móvil nativa llega después. Monorepo:
+App de finanzas personales: web responsive, **escritorio primero** (se diseña para escritorio y se adapta al celular con pantallas propias); la app móvil nativa llega después. Monorepo:
 - `/backend` — FastAPI + SQLAlchemy 2.0 async + Alembic + PostgreSQL (Cloud Run + Cloud SQL)
 - `/frontend` — Next.js + TypeScript (Vercel)
 - `/infra` — scripts gcloud, notas de infraestructura
