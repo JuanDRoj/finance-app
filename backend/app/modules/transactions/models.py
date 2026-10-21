@@ -111,5 +111,6 @@ class Entry(Base):
     space_id: Mapped[uuid.UUID] = mapped_column()
     account_id: Mapped[uuid.UUID] = mapped_column(index=True)
     amount_minor: Mapped[int] = mapped_column(BigInteger)
-    # Indexed like the other two: deleting or archiving a category checks its entries by this key.
+    # Indexed like the other two: deleting a category checks its entries by this key (RESTRICT),
+    # and the reports by category (budgets, dashboard) filter by it.
     category_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
