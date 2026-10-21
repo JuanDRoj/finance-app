@@ -84,16 +84,18 @@ erDiagram
     uuid space_id FK
     enum type "expense | income | transfer | adjustment"
     enum status "pending | confirmed | skipped"
-    date date
-    text description
-    uuid template_id FK
-    text period "2026-10"
-    int installment_number
-    timestamp deleted_at
+    date date "fecha local"
+    text description "nullable"
+    uuid created_by FK "→ users.id"
+    uuid template_id FK "H2"
+    text period "H2, 2026-10"
+    int installment_number "H2"
+    timestamptz deleted_at
   }
   ENTRIES {
     uuid id PK
     uuid transaction_id FK
+    uuid space_id FK "el de su transacción"
     uuid account_id FK
     bigint amount_minor "con signo"
     uuid category_id FK "null en transfer"
@@ -127,6 +129,8 @@ erDiagram
 **Los días de cierre y vencimiento son solo de las tarjetas**CHECK `ck_accounts_card_days`: una cuenta `credit_card` tiene `closing_day` y `due_day` (1 a 31), y una `bank` o `cash` no tiene ninguno. Lo validan también la API (422) y la BD.
  
 **Un espacio personal por creador**Índice único parcial `uq_spaces_created_by_personal` sobre `spaces(created_by)` donde `type = 'personal'`. En v1 equivale a un espacio personal por usuario; unirse a un hogar en v2 (`space_members`) no la afecta, porque la regla mira quién creó el espacio, no la membresía.
+ 
+**Un asiento no cruza espacios**`entries` repite `space_id` y sus tres FK son compuestas: `(transaction_id, space_id)`, `(account_id, space_id)` y `(category_id, space_id)` apuntan a `(id, space_id)`, que es único en `transactions`, `accounts` y `categories`. La BD rechaza un entry cuya transacción, cuenta o categoría estén en otro espacio, aunque el service lo olvide. Las tablas futuras que referencien filas del espacio siguen el mismo patrón.
  
 **Categorías en dos niveles, del mismo tipo y con nombre único**Una subcategoría cuelga de una principal de su mismo espacio y su mismo `kind`, y no hay tercer nivel: lo impone una FK compuesta `(parent_id, space_id, kind, has_parent)` → `(id, space_id, kind, is_main)` con dos columnas generadas (`is_main`, `has_parent`). El nombre es único entre hermanas, sin distinguir mayúsculas y contando las archivadas (`uq_categories_main_name` por espacio y tipo, `uq_categories_sub_name` por principal). Por eso la siembra de las predefinidas es idempotente.
  
@@ -198,7 +202,9 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
 | archived_at | `timestamptz`; null = activa. Archivar con saldo 0 y sin apartados lo aplica el service de archivar (BE-16); la tabla solo guarda la fecha |
 | created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger |
 
-El saldo no es una columna: se calcula con los `entries` (ver "Reglas que el modelo garantiza"). La lista de la API oculta las archivadas salvo con `?include_archived=true`.
+`UNIQUE (id, space_id)` (`uq_accounts_id_space_id`) es el destino de la FK compuesta de `entries`.
+
+El saldo no es una columna: se calcula con los `entries` (ver "Reglas que el modelo garantiza"). La API lo devuelve en cada cuenta como `balance_minor`, con signo: en una tarjeta es negativo cuando se debe. La lista de la API oculta las archivadas salvo con `?include_archived=true`.
  
 ### card_statements
  
@@ -230,7 +236,7 @@ Dos niveles: principal y subcategoría. Se crean predefinidas (34, en español, 
 | archived_at | `timestamptz`; null = activa. Archivar una principal archiva también sus subcategorías activas (mismo `archived_at`); desarchivarla restaura las que se archivaron junto con ella. Una archivada no se ofrece para movimientos nuevos, pero los movimientos viejos la conservan |
 | created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger. La lista de la API sale en orden de creación (`created_at`, `id`) |
  
-No hay borrado: solo se archiva. La lista de la API oculta las archivadas salvo con `?include_archived=true`, y es plana (cada subcategoría trae su `parent_id`).
+No hay borrado: solo se archiva. La lista de la API oculta las archivadas salvo con `?include_archived=true`, y es plana (cada subcategoría trae su `parent_id`). Además de la clave de `parent_id`, `UNIQUE (id, space_id)` (`uq_categories_id_space_id`) es el destino de la FK compuesta de `entries`. Un movimiento puede ir a una principal aunque tenga subcategorías (decidido en KAN-66).
  
 ### recurring_templates
  
@@ -259,18 +265,20 @@ El "qué pasó". Una línea en la lista de movimientos.
  
 | idPK | uuid |
 | --- | --- |
-| space_idFK |  |
-| type | expense · income · transfer · adjustment |
-| status | pending · confirmed · skipped |
-| date |  |
-| description |  |
-| template_idFK | null si es manual |
-| period | único junto con template_id |
-| installment_number | "cuota 3 de 6" |
-| linked_transaction_idFK | aporte al hogar (v2) |
-| created_byFK | usuario; útil en hogares |
-| updated_at | al editar, el backend rehace los entries |
-| deleted_at | borrado suave; excluida de saldos y reportes |
+| space_idFK | `NOT NULL`, `ON DELETE RESTRICT` |
+| type | expense · income · transfer · adjustment (texto + CHECK `ck_transactions_type`) |
+| status | pending · confirmed · skipped (texto + CHECK `ck_transactions_status`, sin default). Un movimiento creado a mano nace `confirmed`; pendientes y saltados vienen de las plantillas (H2) |
+| date | `date` NOT NULL: el día local del usuario según `spaces.timezone`, no un momento. La API solo acepta `YYYY-MM-DD` |
+| description | `text` opcional (NULL); si viene, sin espacios en los extremos, no vacía (`ck_transactions_description_not_blank`) y de hasta 200 caracteres (`ck_transactions_description_length`). Los ajustes del sistema la dejan en NULL y la UI los rotula por tipo |
+| template_idFK | **H2, todavía no existe.** null si es manual |
+| period | **H2, todavía no existe.** Único junto con template_id |
+| installment_number | **H2, todavía no existe.** "cuota 3 de 6" |
+| linked_transaction_idFK | **v2, todavía no existe.** Aporte al hogar |
+| created_byFK | `NOT NULL`, `ON DELETE RESTRICT`; usuario, útil en hogares |
+| created_at, updated_at | `timestamptz` (UTC). Al editar, el backend rehace los entries |
+| deleted_at | `timestamptz`; borrado suave, excluida de saldos y reportes |
+
+Índices y claves: `UNIQUE (id, space_id)` (`uq_transactions_id_space_id`), destino de la FK compuesta de `entries`, e índice parcial `ix_transactions_space_id_date_id_active` sobre `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`, para la lista con cursor. Las columnas marcadas H2 o v2 se agregan con los módulos que las usan (decidido en KAN-66): un `ADD COLUMN` nullable en PostgreSQL no reescribe la tabla.
  
 ### entries
  
@@ -280,10 +288,13 @@ Los asientos: cómo afecta cada cuenta. Una transacción tiene uno o más.
  
 | idPK | uuid |
 | --- | --- |
-| transaction_idFK |  |
-| account_idFK |  |
-| amount_minor | bigint con signo |
-| category_idFK | obligatoria en expense/income; null en transfer y adjustment |
+| transaction_idFK | FK compuesta `(transaction_id, space_id)` → `transactions`, `ON DELETE CASCADE` (la app nunca borra en duro); índice `ix_entries_transaction_id` |
+| space_id | `NOT NULL`; el de su transacción, repetido a propósito para las FK compuestas (ver "Un asiento no cruza espacios") |
+| account_idFK | FK compuesta `(account_id, space_id)` → `accounts`, `ON DELETE RESTRICT`; índice `ix_entries_account_id` |
+| amount_minor | `bigint` con signo, distinto de 0 (`ck_entries_amount_not_zero`) y con valor absoluto ≤ 2^53 − 1 (`ck_entries_amount_range`, el entero seguro de JavaScript) |
+| category_idFK | obligatoria en expense/income; null en transfer y adjustment. FK compuesta `(category_id, space_id)` → `categories`, `ON DELETE RESTRICT`; si es NULL la FK no se evalúa. Índice `ix_entries_category_id` |
+
+Sin `created_at`: los entries se derivan de la transacción y se rehacen al editarla. No hay `UNIQUE (transaction_id, account_id)`, porque dividir una compra en varias categorías de la misma cuenta lo rompería. Qué tipo lleva categoría y que una transferencia sume cero no lo controla la BD (el entry no conoce su tipo): lo garantiza `build_entries`, con tests.
  
 ### budgets
  
@@ -328,5 +339,6 @@ Cada vez que el usuario aparta o libera dinero, y en qué cuenta. No toca entrie
  
 - **Inglés en el código, español en la interfaz.** Los valores como `pending` o `expense` nunca se muestran tal cual: la UI los traduce. Los nombres que escribe el usuario ("Comida", "Itaú") se guardan como él los escribió.
 - **La moneda vive en el espacio**: un hogar necesita su propia moneda. Cada transacción la hereda de su espacio.
+- **Disponible, Deuda tarjetas y Neto** (`GET /spaces/{id}/balance-summary`, KAN-66): Disponible = suma de los saldos de las cuentas `bank` y `cash`; Deuda tarjetas = el opuesto de la suma de los saldos de las `credit_card` (positivo = se debe; sin recortar a 0, así que una tarjeta pagada de más da deuda negativa); Neto = Disponible − Deuda = suma de todos los saldos. Incluye las cuentas archivadas y solo cuenta movimientos `confirmed` sin `deleted_at`.
 - **Libre para gastar** = Disponible − suma de `goal_allocations` de metas activas. Por cuenta: saldo − lo apartado en esa cuenta.
 - **Cuotas futuras comprometidas** = monto de las plantillas con cuotas restantes × cuotas que faltan. No se crean transacciones por adelantado.
