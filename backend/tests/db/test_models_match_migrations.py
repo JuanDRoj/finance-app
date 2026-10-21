@@ -46,6 +46,7 @@ from app.modules.accounts import models as accounts_models  # noqa: F401
 from app.modules.categories import models as categories_models  # noqa: F401
 from app.modules.currencies import models as currencies_models  # noqa: F401
 from app.modules.spaces import models as spaces_models  # noqa: F401
+from app.modules.transactions import models as transactions_models  # noqa: F401
 from app.modules.users import models as users_models  # noqa: F401
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]

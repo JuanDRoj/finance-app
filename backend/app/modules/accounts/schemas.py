@@ -65,3 +65,15 @@ class AccountRead(ReadModel):
     closing_day: int | None
     due_day: int | None
     archived_at: datetime | None
+
+
+class AccountWithBalance(AccountRead):
+    """What the API returns for an account: the account plus its balance.
+
+    `AccountRead` has no balance because `accounts` cannot ask `transactions` for it (the module
+    order): the router composes the two. `balance_minor` is the sum of the confirmed, not deleted
+    entries, with its sign, in the minor unit of the currency of the space. On a credit card it is
+    negative when you owe (the debt is its opposite).
+    """
+
+    balance_minor: int

@@ -53,7 +53,34 @@
         "title": "AccountCreate",
         "type": "object"
       },
-      "AccountRead": {
+      "AccountUpdate": {
+        "additionalProperties": false,
+        "description": "Fields to change: only the ones sent are updated. The type of an account cannot change.",
+        "properties": {
+          "closing_day": {
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Closing Day",
+            "type": "integer"
+          },
+          "due_day": {
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Due Day",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "AccountUpdate",
+        "type": "object"
+      },
+      "AccountWithBalance": {
+        "description": "What the API returns for an account: the account plus its balance.\n\n`AccountRead` has no balance because `accounts` cannot ask `transactions` for it (the module\norder): the router composes the two. `balance_minor` is the sum of the confirmed, not deleted\nentries, with its sign, in the minor unit of the currency of the space. On a credit card it is\nnegative when you owe (the debt is its opposite).",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -66,6 +93,10 @@
               }
             ],
             "title": "Archived At"
+          },
+          "balance_minor": {
+            "title": "Balance Minor",
+            "type": "integer"
           },
           "closing_day": {
             "anyOf": [
@@ -114,35 +145,34 @@
           "type",
           "closing_day",
           "due_day",
-          "archived_at"
+          "archived_at",
+          "balance_minor"
         ],
-        "title": "AccountRead",
+        "title": "AccountWithBalance",
         "type": "object"
       },
-      "AccountUpdate": {
-        "additionalProperties": false,
-        "description": "Fields to change: only the ones sent are updated. The type of an account cannot change.",
+      "BalanceSummaryRead": {
+        "description": "The balances of the space, in the minor unit of its currency.\n\nOnly confirmed, not deleted movements count. `card_debt_minor` is positive when the cards are\nowed (and negative if a card is paid in excess: it is not clamped, so the net always adds up).",
         "properties": {
-          "closing_day": {
-            "maximum": 31.0,
-            "minimum": 1.0,
-            "title": "Closing Day",
+          "available_minor": {
+            "title": "Available Minor",
             "type": "integer"
           },
-          "due_day": {
-            "maximum": 31.0,
-            "minimum": 1.0,
-            "title": "Due Day",
+          "card_debt_minor": {
+            "title": "Card Debt Minor",
             "type": "integer"
           },
-          "name": {
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
+          "net_minor": {
+            "title": "Net Minor",
+            "type": "integer"
           }
         },
-        "title": "AccountUpdate",
+        "required": [
+          "available_minor",
+          "card_debt_minor",
+          "net_minor"
+        ],
+        "title": "BalanceSummaryRead",
         "type": "object"
       },
       "CategoryCreate": {
@@ -905,7 +935,7 @@
     },
     "/spaces/{space_id}/accounts": {
       "get": {
-        "description": "The accounts of the space by name. The archived ones only with `include_archived`.",
+        "description": "The accounts of the space by name, each with its balance. Archived ones only on request.",
         "operationId": "list_accounts_spaces__space_id__accounts_get",
         "parameters": [
           {
@@ -935,7 +965,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/AccountRead"
+                    "$ref": "#/components/schemas/AccountWithBalance"
                   },
                   "title": "Response List Accounts Spaces  Space Id  Accounts Get",
                   "type": "array"
@@ -1010,7 +1040,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountRead"
+                  "$ref": "#/components/schemas/AccountWithBalance"
                 }
               }
             },
@@ -1055,7 +1085,7 @@
     },
     "/spaces/{space_id}/accounts/{account_id}": {
       "get": {
-        "description": "One account of the space, archived or not.",
+        "description": "One account of the space with its balance, archived or not.",
         "operationId": "read_account_spaces__space_id__accounts__account_id__get",
         "parameters": [
           {
@@ -1084,7 +1114,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountRead"
+                  "$ref": "#/components/schemas/AccountWithBalance"
                 }
               }
             },
@@ -1166,7 +1196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountRead"
+                  "$ref": "#/components/schemas/AccountWithBalance"
                 }
               }
             },
@@ -1206,6 +1236,70 @@
         "summary": "Update Account",
         "tags": [
           "accounts"
+        ]
+      }
+    },
+    "/spaces/{space_id}/balance-summary": {
+      "get": {
+        "description": "Available (bank and cash), card debt and net of the space, in its currency's minor unit.",
+        "operationId": "read_balance_summary_spaces__space_id__balance_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Balance Summary",
+        "tags": [
+          "balances"
         ]
       }
     },
