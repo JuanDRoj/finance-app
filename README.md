@@ -1,6 +1,6 @@
 # finance-app
 
-App de finanzas personales (web mobile-first). Monorepo: `backend/` (FastAPI), `frontend/` (Next.js), `infra/` (scripts y notas), `docs/` (decisiones y modelo de datos).
+App de finanzas personales (web responsive, escritorio primero). Monorepo: `backend/` (FastAPI), `frontend/` (Next.js), `infra/` (scripts y notas), `docs/` (decisiones y modelo de datos).
 
 ## Levantar todo en local
 
