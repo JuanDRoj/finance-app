@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -6,9 +7,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFoundError
+from app.core.errors import ConflictError, InvalidFieldError, NotFoundError
 from app.modules.spaces import service
 from app.modules.spaces.models import Space, SpaceMember
+from app.modules.spaces.schemas import SpaceUpdate
 from app.modules.users import service as users_service
 
 
@@ -261,3 +263,140 @@ async def test_get_personal_space_id_raises_not_found_when_there_is_none(
         await service.get_personal_space_id(session, user_id)
 
     assert error.value.code == "space_not_found"
+
+
+# update_space: the currency ---------------------------------------------------------------------
+
+
+def _asks(answer: bool) -> tuple[Callable[[], Awaitable[bool]], list[int]]:
+    """A `has_transactions` that answers `answer` and counts how many times it was asked."""
+    calls: list[int] = []
+
+    async def has_transactions() -> bool:
+        calls.append(1)
+        return answer
+
+    return has_transactions, calls
+
+
+def _update(**fields: object) -> SpaceUpdate:
+    return SpaceUpdate.model_validate(fields)
+
+
+async def _currency_in_db(session: AsyncSession, space_id: UUID) -> str:
+    space = await session.get(Space, space_id, populate_existing=True)
+    assert space is not None
+    return space.currency
+
+
+async def _space_of(session: AsyncSession, uid: str) -> UUID:
+    return await _personal_space_id(session, await _make_user(session, uid))
+
+
+async def test_update_space_changes_the_currency_when_there_are_no_transactions(
+    session: AsyncSession,
+) -> None:
+    space_id = await _space_of(session, "uid-upd-1")
+    has_transactions, calls = _asks(False)
+
+    space = await service.update_space(
+        session, space_id, _update(currency="CLP"), has_transactions=has_transactions
+    )
+
+    assert (space.currency.code, space.currency.exponent) == ("CLP", 0)
+    assert (space.id, space.name, space.timezone) == (space_id, "Mi espacio", "America/Montevideo")
+    assert await _currency_in_db(session, space_id) == "CLP"
+    assert calls == [1]
+
+
+async def test_update_space_refuses_when_there_are_transactions(session: AsyncSession) -> None:
+    space_id = await _space_of(session, "uid-upd-2")
+    has_transactions, calls = _asks(True)
+
+    with pytest.raises(ConflictError) as error:
+        await service.update_space(
+            session, space_id, _update(currency="USD"), has_transactions=has_transactions
+        )
+
+    assert error.value.code == service.SPACE_HAS_TRANSACTIONS == "space_has_transactions"
+    assert error.value.detail == "The currency cannot be changed once the space has transactions"
+    assert await _currency_in_db(session, space_id) == "UYU"
+    assert calls == [1]
+
+
+async def test_update_space_with_the_same_currency_changes_nothing_and_does_not_ask(
+    session: AsyncSession,
+) -> None:
+    space_id = await _space_of(session, "uid-upd-3")
+    has_transactions, calls = _asks(True)
+
+    space = await service.update_space(
+        session, space_id, _update(currency="UYU"), has_transactions=has_transactions
+    )
+
+    assert space.currency.code == "UYU"
+    assert calls == []
+
+
+async def test_update_space_with_nothing_to_change_does_not_ask(session: AsyncSession) -> None:
+    space_id = await _space_of(session, "uid-upd-4")
+    has_transactions, calls = _asks(True)
+
+    space = await service.update_space(
+        session, space_id, _update(), has_transactions=has_transactions
+    )
+
+    assert space == await service.get_space(session, space_id)
+    assert calls == []
+
+
+async def test_update_space_with_an_unsupported_currency_is_a_field_error_and_does_not_ask(
+    session: AsyncSession,
+) -> None:
+    space_id = await _space_of(session, "uid-upd-5")
+    has_transactions, calls = _asks(True)
+
+    with pytest.raises(InvalidFieldError) as error:
+        await service.update_space(
+            session, space_id, _update(currency="XXX"), has_transactions=has_transactions
+        )
+
+    assert (error.value.code, error.value.loc) == ("currency_unsupported", ["body", "currency"])
+    assert calls == []
+    assert await _currency_in_db(session, space_id) == "UYU"
+
+
+async def test_update_space_raises_not_found_for_an_unknown_space(session: AsyncSession) -> None:
+    has_transactions, calls = _asks(False)
+
+    with pytest.raises(NotFoundError) as error:
+        await service.update_space(
+            session, uuid.uuid4(), _update(currency="USD"), has_transactions=has_transactions
+        )
+
+    assert error.value.code == "space_not_found"
+    assert calls == []
+
+
+async def test_update_space_only_touches_the_space_it_was_asked_for(session: AsyncSession) -> None:
+    mine = await _space_of(session, "uid-upd-6a")
+    other = await _space_of(session, "uid-upd-6b")
+    has_transactions, _ = _asks(False)
+
+    await service.update_space(
+        session, mine, _update(currency="EUR"), has_transactions=has_transactions
+    )
+
+    assert await _currency_in_db(session, mine) == "EUR"
+    assert await _currency_in_db(session, other) == "UYU"
+
+
+async def test_get_space_and_list_spaces_do_not_know_whether_the_currency_is_locked(
+    session: AsyncSession,
+) -> None:
+    # `currency_locked` needs `transactions`, a later module: the router adds it (`SpaceRead`).
+    space_id = await _space_of(session, "uid-upd-7")
+
+    space = await service.get_space(session, space_id)
+
+    assert "currency_locked" not in type(space).model_fields

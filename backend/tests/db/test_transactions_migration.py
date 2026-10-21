@@ -210,6 +210,7 @@ async def test_the_expected_indexes_and_constraints_exist(engine: AsyncEngine) -
     constraints = {r[0] for r in await _rows(engine, "SELECT conname FROM pg_constraint")}
 
     assert {
+        "ix_transactions_space_id",
         "ix_transactions_space_id_date_id_active",
         "ix_entries_transaction_id",
         "ix_entries_account_id",
@@ -245,6 +246,35 @@ async def test_the_listing_index_is_partial_and_ordered_newest_first(engine: Asy
     assert isinstance(definition, str)
     assert "(space_id, date DESC, id DESC)" in definition
     assert "WHERE (deleted_at IS NULL)" in definition
+
+
+async def test_the_space_index_is_complete_so_it_also_finds_the_deleted_transactions(
+    engine: AsyncEngine,
+) -> None:
+    # "Does the space have any transaction, deleted ones included?" (the currency lock) cannot use
+    # the partial listing index, which skips the deleted ones.
+    [(definition,)] = await _rows(
+        engine, "SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_transactions_space_id'"
+    )
+
+    assert isinstance(definition, str)
+    assert "(space_id)" in definition
+    assert "WHERE" not in definition
+
+
+async def test_the_space_index_can_answer_whether_a_space_has_any_transaction(
+    engine: AsyncEngine,
+) -> None:
+    world = await _world(engine)
+    query = "EXPLAIN SELECT EXISTS (SELECT 1 FROM transactions WHERE space_id = :space_id)"
+
+    async with engine.begin() as conn:
+        # With sequential scans off the planner uses any index that can answer the query: only
+        # the complete one can (the partial one skips the deleted transactions).
+        await conn.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = (await conn.execute(text(query), {"space_id": world.space_id})).all()
+
+    assert "ix_transactions_space_id" in "\n".join(str(row[0]) for row in plan)
 
 
 # transactions: valid rows and checks ------------------------------------------------------------

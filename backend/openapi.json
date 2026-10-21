@@ -616,9 +616,14 @@
         "type": "object"
       },
       "SpaceRead": {
+        "description": "What the API answers: the space and whether its currency can still be changed.\n\n`currency_locked` is true once the space has any transaction (pending, skipped or deleted\nincluded): from then on `PATCH /spaces/{id}` refuses a different currency with a 409. It is\nthe same rule, asked the same way (`transactions.service.space_has_transactions`).",
         "properties": {
           "currency": {
             "$ref": "#/components/schemas/CurrencyRead"
+          },
+          "currency_locked": {
+            "title": "Currency Locked",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",
@@ -647,9 +652,23 @@
           "name",
           "type",
           "currency",
-          "timezone"
+          "timezone",
+          "currency_locked"
         ],
         "title": "SpaceRead",
+        "type": "object"
+      },
+      "SpaceUpdate": {
+        "additionalProperties": false,
+        "description": "Fields to change: only the ones sent are updated. Only the currency can be changed so far.",
+        "properties": {
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "title": "SpaceUpdate",
         "type": "object"
       },
       "UserRead": {
@@ -809,6 +828,42 @@
         ]
       }
     },
+    "/currencies": {
+      "get": {
+        "description": "The supported currencies by code, each with its ISO 4217 exponent (the minor unit).",
+        "operationId": "list_currencies_currencies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CurrencyRead"
+                  },
+                  "title": "Response List Currencies Currencies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "List Currencies",
+        "tags": [
+          "currencies"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "description": "Liveness probe: no database or external dependencies.",
@@ -958,6 +1013,88 @@
           }
         },
         "summary": "Read Space",
+        "tags": [
+          "spaces"
+        ]
+      },
+      "patch": {
+        "description": "Change the currency of the space (409 `space_has_transactions` once it has movements).\n\nOnly while the space has no transactions, deleted ones included; the same currency it already\nhas changes nothing. `currency_locked` in the answer tells whether it can still be changed.",
+        "operationId": "update_space_spaces__space_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpaceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Space",
         "tags": [
           "spaces"
         ]

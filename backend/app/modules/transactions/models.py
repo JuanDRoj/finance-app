@@ -50,8 +50,12 @@ class Transaction(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid7)
-    # RESTRICT: money data must never disappear through a cascade from its space.
-    space_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("spaces.id", ondelete="RESTRICT"))
+    # RESTRICT: money data must never disappear through a cascade from its space. The complete
+    # index (the listing one is partial) answers "does the space have any transaction, deleted ones
+    # included?", which locks the currency of the space.
+    space_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("spaces.id", ondelete="RESTRICT"), index=True
+    )
     type: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text)
     date: Mapped[dt.date] = mapped_column(Date)

@@ -35,6 +35,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Currencies
+         * @description The supported currencies by code, each with its ISO 4217 exponent (the minor unit).
+         */
+        get: operations["list_currencies_currencies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -112,7 +132,14 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Space
+         * @description Change the currency of the space (409 `space_has_transactions` once it has movements).
+         *
+         *     Only while the space has no transactions, deleted ones included; the same currency it already
+         *     has changes nothing. `currency_locked` in the answer tells whether it can still be changed.
+         */
+        patch: operations["update_space_spaces__space_id__patch"];
         trace?: never;
     };
     "/spaces/{space_id}/accounts": {
@@ -536,9 +563,18 @@ export interface components {
             /** Timezone */
             timezone: string;
         };
-        /** SpaceRead */
+        /**
+         * SpaceRead
+         * @description What the API answers: the space and whether its currency can still be changed.
+         *
+         *     `currency_locked` is true once the space has any transaction (pending, skipped or deleted
+         *     included): from then on `PATCH /spaces/{id}` refuses a different currency with a 409. It is
+         *     the same rule, asked the same way (`transactions.service.space_has_transactions`).
+         */
         SpaceRead: {
             currency: components["schemas"]["CurrencyRead"];
+            /** Currency Locked */
+            currency_locked: boolean;
             /**
              * Id
              * Format: uuid
@@ -553,6 +589,14 @@ export interface components {
              * @enum {string}
              */
             type: "personal" | "household";
+        };
+        /**
+         * SpaceUpdate
+         * @description Fields to change: only the ones sent are updated. Only the currency can be changed so far.
+         */
+        SpaceUpdate: {
+            /** Currency */
+            currency?: string;
         };
         /** UserRead */
         UserRead: {
@@ -655,6 +699,35 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_currencies_currencies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrencyRead"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -773,6 +846,68 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_space_spaces__space_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpaceUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpaceRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
