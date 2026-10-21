@@ -61,11 +61,11 @@ Dudas abiertas para el humano: <lista o "ninguna">
 - La protección de rutas sin sesión vive en el middleware.
 
 ## Reglas de interfaz
-- **Mobile-first**: diseña para **360 px** de ancho (el mínimo que garantizamos, iPhone y Android) y revisa también 375, ~393 y ~430 px antes de ampliar.
+- **Escritorio primero** (`frontend/docs/diseno.md` D15 y D17 › Escritorio v2): cada pantalla parte de sus dos artboards del lienzo, escritorio (`K-V2-*`, 1440 px) y celular (`K-H1-*`, 360 px). Revisa 1280 y 1440 px, luego 1024 y 768, y al final 360, 375, ~393 y ~430 px (360 es el mínimo que garantizamos). En el código, la base de Tailwind es el celular y `lg:` el escritorio.
 - Interfaz **en español**. Los valores del backend (`expense`, `pending`, `credit_card`…) **nunca se muestran crudos**: se traducen en un único mapa de traducciones.
 - Dinero: el backend envía **enteros en la unidad menor de la moneda** (ISO 4217) junto con su `exponent`; nunca asumas ×100. Formatea solo para mostrar (`Intl.NumberFormat` con la moneda y el exponente del espacio) y **nunca hagas aritmética con floats**.
 - Cada pantalla contempla estados de carga, vacío y error.
-- Accesibilidad: contraste WCAG AA (texto 4,5:1; íconos y bordes de controles 3:1), foco visible, áreas táctiles de al menos 44 px, labels en inputs y botones con texto o `aria-label`.
+- Accesibilidad: contraste WCAG AA (texto 4,5:1; íconos y bordes de controles 3:1), foco visible, áreas táctiles de al menos 44 px (excepción: desde 1024 px y solo con `pointer: fine`, los controles secundarios miden de 34 a 40 px; D17 › Escritorio v2), labels en inputs y botones con texto o `aria-label`.
 
 ## Skills
 - Tienes precargadas `mobile-native` (que la web se sienta nativa en iPhone y Android) y `vercel-react-best-practices` (rendimiento en React y Next.js; lee cada regla en `.claude/skills/vercel-react-best-practices/rules/` cuando la necesites).
