@@ -229,14 +229,58 @@ def test_a_blank_too_long_or_non_string_description_is_rejected(description: obj
 
 # date ---------------------------------------------------------------------------------------
 
+# 2026-10-20 written with Arabic-Indic and with full-width digits (escaped: ruff flags look-alikes).
+ARABIC_INDIC_DATE = "\u0662\u0660\u0662\u0666-\u0661\u0660-\u0662\u0660"
+FULL_WIDTH_DATE = "\uff12\uff10\uff12\uff16-\uff11\uff10-\uff12\uff10"
+
 
 @pytest.mark.parametrize(
-    "value", [1760918400, "2026-10-20T00:00:00", "20/10/2026", "2026-13-01", "", None]
+    "value",
+    [
+        1760918400,
+        "2026-10-20T00:00:00",
+        "20/10/2026",
+        "2026-13-01",
+        "",
+        None,
+        "2026-10-20\n",  # `$` would accept a trailing newline
+        " 2026-10-20",
+        ARABIC_INDIC_DATE,  # `\d` matches Unicode digits, `[0-9]` does not
+        FULL_WIDTH_DATE,  # full-width digits
+    ],
 )
 def test_the_date_must_be_a_plain_iso_date(value: object) -> None:
     errors = _errors(_body("expense", date=value))
 
     assert [loc for _, loc in errors] == [("expense", "date")]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        1760918400,
+        "2026-10-20T00:00:00",
+        "20/10/2026",
+        "",
+        None,
+        "2026-10-20\n",
+        " 2026-10-20",
+        ARABIC_INDIC_DATE,
+        FULL_WIDTH_DATE,
+    ],
+)
+def test_anything_that_is_not_a_yyyy_mm_dd_string_is_our_date_invalid_error(
+    value: object,
+) -> None:
+    # Our own check runs first, so a stray newline or a non-ASCII digit is reported with the same
+    # stable type as any other wrong format (not Pydantic's `date_parsing`).
+    assert _errors(_body("expense", date=value)) == [("date_invalid", ("expense", "date"))]
+
+
+def test_a_well_formed_date_that_does_not_exist_is_left_to_pydantic() -> None:
+    errors = _errors(_body("expense", date="2026-13-01"))
+
+    assert [(t != "date_invalid", loc) for t, loc in errors] == [(True, ("expense", "date"))]
 
 
 # ids ----------------------------------------------------------------------------------------

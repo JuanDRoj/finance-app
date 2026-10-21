@@ -25,7 +25,8 @@ CATEGORY_ARCHIVED = "category_archived"
 CATEGORY_KIND_MISMATCH = "transaction_category_kind_mismatch"
 TRANSFER_SAME_ACCOUNT = "transfer_same_account"
 
-_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# `[0-9]` and `fullmatch`: `\d` also matches Unicode digits and `$` a trailing newline.
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 def _plain_date(value: Any) -> Any:
@@ -36,7 +37,7 @@ def _plain_date(value: Any) -> Any:
     """
     if isinstance(value, dt.date) and not isinstance(value, dt.datetime):
         return value
-    if isinstance(value, str) and _ISO_DATE.match(value):
+    if isinstance(value, str) and _ISO_DATE.fullmatch(value):
         return value
     raise PydanticCustomError("date_invalid", "Input should be a date in YYYY-MM-DD format")
 

@@ -18,7 +18,8 @@ stored: it is the sum of the entries of a `confirmed`, not deleted transaction.
   entry whose account or category is in another space than its transaction. For that, `accounts`,
   `categories` and `transactions` get `UNIQUE (id, space_id)` (the target of those keys). A NULL
   `category_id` skips its key (MATCH SIMPLE). The amount cannot be 0 and is capped to JavaScript's
-  safe integers, like the API.
+  safe integers, like the API. The three keys of an entry are indexed (`transaction_id`,
+  `account_id`, `category_id`): the restricting foreign keys look its entries up by them.
 - Deleting a transaction deletes its entries (CASCADE); an account or a category with entries
   cannot be deleted (RESTRICT), nor a space or a user with transactions.
 
@@ -136,9 +137,11 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_entries_transaction_id"), "entries", ["transaction_id"], unique=False)
     op.create_index(op.f("ix_entries_account_id"), "entries", ["account_id"], unique=False)
+    op.create_index(op.f("ix_entries_category_id"), "entries", ["category_id"], unique=False)
 
 
 def downgrade() -> None:
+    op.drop_index(op.f("ix_entries_category_id"), table_name="entries")
     op.drop_index(op.f("ix_entries_account_id"), table_name="entries")
     op.drop_index(op.f("ix_entries_transaction_id"), table_name="entries")
     op.drop_table("entries")

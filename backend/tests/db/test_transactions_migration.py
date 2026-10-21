@@ -213,6 +213,7 @@ async def test_the_expected_indexes_and_constraints_exist(engine: AsyncEngine) -
         "ix_transactions_space_id_date_id_active",
         "ix_entries_transaction_id",
         "ix_entries_account_id",
+        "ix_entries_category_id",
     } <= indexes
     assert {
         "pk_transactions",
