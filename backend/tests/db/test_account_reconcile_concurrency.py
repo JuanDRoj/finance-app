@@ -184,7 +184,7 @@ async def test_a_movement_waits_for_a_reconciliation_in_flight_and_goes_after_it
     assert await _adjustments(engine) == 3
 
 
-async def test_archiving_while_a_reconciliation_is_in_flight_sees_the_new_balance_and_refuses(
+async def test_archiving_while_a_reconciliation_is_in_flight_sees_the_zero_balance_and_archives(
     engines: tuple[AsyncEngine, ...],
 ) -> None:
     engine = engines[0]
