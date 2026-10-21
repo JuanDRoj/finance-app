@@ -55,13 +55,31 @@ balances = await transactions_service.get_account_balances(session, space_id)  #
 return [_with_balance(a, balances.get(a.id, 0)) for a in accounts]
 ```
 
-**Si la regla depende de ese dato, importa el orden de los locks.** Archivar una cuenta exige saldo 0 (BE-16). Si el router lee el saldo y **después** el service bloquea y archiva, un movimiento confirmado entre medio deja una cuenta archivada con saldo. El orden correcto, dentro de la transacción del request:
+**Si la regla depende de ese dato, importa el orden de los locks.** Archivar una cuenta exige saldo 0 (KAN-67). Si el router lee el saldo y **después** el service bloquea y archiva, un movimiento confirmado entre medio deja una cuenta archivada con saldo. El orden correcto, dentro de la transacción del request:
 
 1. Bloquear la cuenta con `FOR NO KEY UPDATE` (`accounts`).
 2. Recién entonces leer el saldo (`transactions`). Quien crea un movimiento lee la cuenta con `FOR SHARE`, así que espera a que termine el archivado o el archivado lo espera a él, y nunca se cruzan.
 3. Aplicar la regla ("saldo distinto de 0 → `ConflictError`") y archivar (`accounts`).
 
-BE-16 decide la forma, por ejemplo una función de `accounts.service` que bloquea y otra que archiva, o un `archive_account` que recibe un callable para calcular el saldo ya con el lock tomado. La regla siempre queda en `accounts.service`, y el router solo trae el dato. Si un caso de uso necesita muchos datos de arriba, es señal de que pertenece al módulo de arriba.
+La forma elegida (KAN-67): `archive_account` recibe un callable que calcula el saldo, y el service lo llama recién con el lock tomado. El orden queda fijo en un solo lugar y el router no puede equivocarlo:
+
+```python
+# accounts/router.py
+async def balance_of() -> int:
+    return await transactions_service.get_account_balance(session, space_id, account_id)
+
+account = await service.archive_account(session, space_id, account_id, balance_of=balance_of)
+
+# accounts/service.py
+account = await _get_for_update_or_raise(session, space_id, account_id)  # 1. FOR NO KEY UPDATE
+if account.archived_at is not None:
+    return account                                                       # ya archivada: nada
+if await balance_of() != 0:                                              # 2. saldo, con el lock
+    raise ConflictError(ACCOUNT_HAS_BALANCE, "...")                      # 3. regla
+account.archived_at = datetime.now(UTC)
+```
+
+La regla siempre queda en `accounts.service`, y el router solo trae el dato. Si un caso de uso necesita muchos datos de arriba, es señal de que pertenece al módulo de arriba: el cuadre de saldo (`reconcile_account`) decide cuánto escribir a partir del saldo y escribe entries, así que vive en `transactions.service` y pide el lock a `accounts.service.get_account_for_update`.
 
 **Lo mismo vale para un efecto en un módulo posterior.** El primer login crea el espacio personal y le siembra las categorías, pero `spaces` no puede llamar a `categories`. Lo compone el router de `auth` (KAN-65), en la misma transacción:
 
@@ -84,6 +102,7 @@ if created:  # solo quien creó el espacio lo siembra
 - **Reglas que leen una fila y luego escriben según su estado** (crear una subcategoría exige la principal activa; un movimiento exigirá la cuenta y la categoría activas): en READ COMMITTED, dos requests pueden leer el mismo estado viejo. Se lee con lock de fila (KAN-65, probado con solapamiento forzado):
   - **Leer y escribir otra fila que depende de ella:** `FOR SHARE` (`with_for_update(read=True)`). La FK de la fila nueva solo toma `FOR KEY SHARE`, que no choca con el UPDATE que cambia el estado (archivar): por eso, sin el lock, la carrera existe.
   - **Leer y modificar la misma fila:** `FOR NO KEY UPDATE` (`with_for_update(key_share=True)`), el mismo lock que el UPDATE toma, mientras no cambie columnas de una clave única referenciada por una FK. `FOR UPDATE` frenaría además las FK de otras tablas.
+  - **Leer un dato derivado para decidir cuánto escribir** (el cuadre escribe `saldo real − saldo actual`): también `FOR NO KEY UPDATE`, aunque no se haga UPDATE de la fila. `FOR SHARE` es compatible consigo mismo, así que dos cuadres simultáneos leerían el mismo saldo y escribirían el ajuste dos veces (KAN-67). Pedir después `FOR SHARE` sobre la misma fila en la misma transacción no espera: los locks propios no chocan.
   - **Nunca UPDATE de una fila leída con `FOR SHARE`** en la misma transacción: dos transacciones con el SHARE que intenten actualizarla se bloquean entre sí (deadlock).
   - Quien cambia el estado actualiza primero esa fila y después sus dependientes, y todos los caminos toman los locks en el mismo orden (principal y luego subcategoría): así no hay ciclos.
   - Con `populate_existing()`, la lectura refleja la fila recién bloqueada y no la copia que la sesión ya tenía.
@@ -116,6 +135,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
   - `strict` rechaza `"1550"`, `15.0` y `true` (verificado con Pydantic 2.13).
   - El tope es `Number.MAX_SAFE_INTEGER`: JavaScript pierde precisión por encima, aunque `bigint` admita más.
   - El signo lo pone el backend según el tipo de movimiento, nunca el cliente. Si un caso necesita monto con signo (ajustes), se define un tipo aparte con el mismo tope en valor absoluto.
+  - Los tres tipos comparten el tope `MAX_SAFE_INTEGER`: `Amount` (> 0, un monto de movimiento), `SignedAmount` (con signo y distinto de 0, un delta del saldo) y `Balance` (con signo y **admite 0**, un saldo como se lee: el `initial_balance_minor` al crear una cuenta y el `balance_minor` del cuadre, KAN-67). `Balance` lleva el signo de `balance_minor`: en una tarjeta, deuda = negativo.
 - **Crear una transacción:** unión discriminada por `type`. Cada tipo valida solo sus campos y el OpenAPI y los tipos TS lo reflejan:
 
   ```python
@@ -177,7 +197,7 @@ La lista de movimientos (BE-19) tendrá su propia base `_active` (espacio + sin 
 
 **Mismo espacio garantizado por la BD (FK compuestas por espacio).** Una tabla que referencia filas de otras tablas del espacio repite `space_id` y apunta a `(id, space_id)`, no solo a `id`. En `entries` (KAN-66), las FK `(transaction_id, space_id)`, `(account_id, space_id)` y `(category_id, space_id)` exigen un `UNIQUE (id, space_id)` en `transactions`, `accounts` y `categories`. Si un service olvida validar, la BD rechaza un entry que mezcle espacios en lugar de dejar que falsee un saldo o filtre datos ajenos (IDOR). El service igual valida antes, para responder un 422 con `loc`. Un `category_id` NULL salta su FK (MATCH SIMPLE). Las tablas futuras con referencias (`recurring_templates`, `budgets`, `goal_allocations`) lo adoptan al crearse; `goal_allocations` necesitará su propia columna `space_id`.
 
-**Locks de saldo.** Toda operación que escribe movimientos o cambia el saldo de una cuenta (crear, confirmar, restaurar, editar) lee las cuentas afectadas con `FOR SHARE` (`accounts.service.get_account_for_share`), en orden fijo por id, y no hace UPDATE de esas filas en la misma transacción. Archivar toma `FOR NO KEY UPDATE` y solo después calcula el saldo (§2). La categoría de un movimiento se lee sin lock: los movimientos viejos conservan las categorías archivadas, así que no hay invariante que proteger. Se prueba sin depender de tiempos con `NOWAIT` (`tests/db/test_transaction_account_lock.py`).
+**Locks de saldo.** Toda operación que escribe movimientos o cambia el saldo de una cuenta (crear, confirmar, restaurar, editar) lee las cuentas afectadas con `FOR SHARE` (`accounts.service.get_account_for_share`), en orden fijo por id, y no hace UPDATE de esas filas en la misma transacción. Las dos operaciones que deciden a partir del saldo, archivar y cuadrar (KAN-67), toman `FOR NO KEY UPDATE` y solo después calculan el saldo (§2, §3): un movimiento en vuelo las hace esperar, uno posterior las espera a ellas, y dos cuadres o dos archivados de la misma cuenta van en fila. Se prueba con solapamiento forzado (`tests/overlap.py`, `tests/db/test_account_archive_concurrency.py` y `test_account_reconcile_concurrency.py`). La categoría de un movimiento se lee sin lock: los movimientos viejos conservan las categorías archivadas, así que no hay invariante que proteger. Se prueba sin depender de tiempos con `NOWAIT` (`tests/db/test_transaction_account_lock.py`).
 
 **Paginación por cursor** (orden `date desc, id desc`):
 - Parámetros como modelo de query: `filters: Annotated[TransactionFilters, Query()]`, con `extra="forbid"`, `limit` entre 1 y 100 (50 por defecto) y `cursor` opcional.
@@ -236,7 +256,7 @@ El primer módulo real es `backend/app/modules/accounts` (KAN-64). Para crear un
 | `migrations/versions/20261018_0003_create_accounts.py` | Migración autogenerada y revisada a mano: nombres con `op.f(...)` y downgrade real |
 | `tests/unit/test_account_schemas.py`, `tests/services/test_accounts_service.py`, `tests/api/test_accounts.py`, `tests/db/test_accounts_migration.py` | Una carpeta por capa (§10). En `api`, los 401 y los dos casos de IDOR: espacio ajeno → `space_not_found`, cuenta ajena desde el propio espacio → `account_not_found` |
 
-Lo que aún no muestra: archivar con saldo 0, que necesita el saldo de `transactions` (el patrón está en §2 y llega con BE-16), y la paginación por cursor (§7), porque una lista de cuentas no se pagina.
+Lo que aún no muestra: la paginación por cursor (§7), porque una lista de cuentas no se pagina. Archivar con saldo 0 llegó con KAN-67 (tabla de abajo).
 
 `backend/app/modules/categories` (KAN-65) suma los patrones que `accounts` no tiene:
 
@@ -260,6 +280,17 @@ Lo que aún no muestra: archivar con saldo 0, que necesita el saldo de `transact
 | FK compuestas por espacio y `UNIQUE (id, space_id)` | `transactions/models.py` y `migrations/versions/20261021_0005_create_transactions_and_entries.py` | §7 |
 | `FOR SHARE` sobre las cuentas al escribir movimientos, probado con `NOWAIT` | `transactions/service.py` y `tests/db/test_transaction_account_lock.py` | §7 |
 | Helper que inserta movimientos en estados sin ruta de creación (pendiente, saltado, borrado) | `tests/transactions_helpers.py` (`insert_transaction`) | §10 |
+
+Saldo inicial, cuadre y archivado de cuentas (KAN-67) suman:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Router que compone un efecto en un módulo posterior en la misma transacción (cuenta + ajuste del saldo inicial) | `accounts/router.py` (`create_account`) | §2 |
+| Regla con un dato de un módulo posterior, pedido con el lock tomado (callable `balance_of`) | `accounts/service.py` (`archive_account`) | §2 |
+| `FOR NO KEY UPDATE` para decidir cuánto escribir a partir del saldo | `transactions/service.py` (`reconcile_account`) y `accounts/service.py` (`get_account_for_update`) | §3 |
+| Un solo lugar que fecha los ajustes (día local según `spaces.timezone`, con `now` inyectado) | `transactions/service.py` (`create_adjustment`) | §7 |
+| Guarda de rango antes de un CHECK de la BD, para dar 422 y no 500 | `transactions/service.py` (`balance_out_of_range`) | §4 |
+| Helper de solapamiento forzado con `pg_stat_activity`, sin sleeps | `tests/overlap.py` | §10 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 
