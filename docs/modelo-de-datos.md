@@ -118,7 +118,7 @@ erDiagram
  
 **Expense e income siempre clasificados**Cada entry lleva categoría. Permite dividir una compra a futuro.
  
-**Adjustment no es ingreso ni gasto**Saldo inicial y cuadre con el banco. No aparece en los reportes.
+**Adjustment no es ingreso ni gasto**Saldo inicial y cuadre con el banco. No aparece en los reportes. Nace `confirmed`, sin categoría ni descripción, con la fecha local del espacio.
  
 **Un pendiente por plantilla y periodo**Restricción única (`template_id`, `period`). Así el cron es idempotente.
  
@@ -199,12 +199,16 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
 | type | bank · cash · credit_card (texto + CHECK `ck_accounts_type`); no se cambia después de crear la cuenta (decidido en KAN-63: el PATCH no lo acepta) |
 | closing_day | `smallint`, solo credit_card, obligatorio ahí; 1 a 31 (`ck_accounts_closing_day_range`, y `ck_accounts_card_days` para "solo y obligatorio en tarjeta") |
 | due_day | `smallint`, igual que `closing_day` (`ck_accounts_due_day_range`) |
-| archived_at | `timestamptz`; null = activa. Archivar con saldo 0 y sin apartados lo aplica el service de archivar (BE-16); la tabla solo guarda la fecha |
+| archived_at | `timestamptz`; null = activa. Archivar exige saldo 0 (409 `account_has_balance`); lo aplica `accounts.service.archive_account` (KAN-67), con la cuenta bloqueada antes de leer el saldo. "Sin apartados" se sumará cuando existan las metas (v1.1). Desarchivar no mira el saldo. La tabla solo guarda la fecha |
 | created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger |
 
 `UNIQUE (id, space_id)` (`uq_accounts_id_space_id`) es el destino de la FK compuesta de `entries`.
 
 El saldo no es una columna: se calcula con los `entries` (ver "Reglas que el modelo garantiza"). La API lo devuelve en cada cuenta como `balance_minor`, con signo: en una tarjeta es negativo cuando se debe. La lista de la API oculta las archivadas salvo con `?include_archived=true`.
+
+**Saldo inicial y cuadre (KAN-67).** Los dos se guardan como un `adjustment` y usan el signo de `balance_minor` en cualquier tipo de cuenta:
+- Al crear la cuenta, `initial_balance_minor` (opcional; null o 0 = nada) genera un ajuste por ese monto en la misma transacción. En un espacio en UYU (exponente 2), "Itaú" con $ 10.000 se manda como `1000000` y "Visa" con una deuda de $ 3.000, como `-300000`.
+- `POST .../accounts/{id}/reconcile` recibe el saldo real y genera un ajuste por `real − saldo actual`, o ninguno si la diferencia es 0. Una cuenta archivada no se cuadra (409 `account_archived`), y una diferencia mayor que el tope da 422 `balance_out_of_range`.
  
 ### card_statements
  
