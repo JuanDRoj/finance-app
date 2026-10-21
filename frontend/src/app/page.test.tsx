@@ -38,6 +38,7 @@ const SPACE: SpaceRead = {
   type: "personal",
   currency: { code: "UYU", exponent: 2 },
   timezone: "America/Montevideo",
+  currency_locked: false,
 };
 
 function ok(data: unknown) {
