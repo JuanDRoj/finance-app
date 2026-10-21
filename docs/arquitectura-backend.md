@@ -81,6 +81,26 @@ account.archived_at = datetime.now(UTC)
 
 La regla siempre queda en `accounts.service`, y el router solo trae el dato. Si un caso de uso necesita muchos datos de arriba, es señal de que pertenece al módulo de arriba: el cuadre de saldo (`reconcile_account`) decide cuánto escribir a partir del saldo y escribe entries, así que vive en `transactions.service` y pide el lock a `accounts.service.get_account_for_update`.
 
+**Una regla de ausencia usa el mismo patrón con otro lock.** La moneda de un espacio solo cambia mientras el espacio no tenga ninguna transacción, borradas incluidas (KAN-68). `update_space` recibe el callable `has_transactions` y el orden queda fijo en `spaces.service`:
+
+```python
+# spaces/router.py
+async def has_transactions() -> bool:
+    return await transactions_service.space_has_transactions(session, space_id)
+
+space = await service.update_space(session, space_id, data, has_transactions=has_transactions)
+
+# spaces/service.py
+currency = await currencies_service.get_currency(session, code)       # 422 antes del lock
+space = await repository.get_for_update(session, space_id=space_id)   # 1. FOR UPDATE
+if space.currency != currency.code:                                   # misma moneda: nada
+    if await has_transactions():                                      # 2. con el lock tomado
+        raise ConflictError(SPACE_HAS_TRANSACTIONS, "...")            # 3. regla → 409
+    space.currency = currency.code
+```
+
+Acá el lock es `FOR UPDATE` y no `FOR NO KEY UPDATE`, porque lo que se protege es la **ausencia** de filas hijas (§3). El mismo dato llega a las respuestas: el router agrega `currency_locked` a `SpaceRead` (`_with_currency_locked`), y el service devuelve `SpaceBase`, sin ese campo.
+
 **Lo mismo vale para un efecto en un módulo posterior.** El primer login crea el espacio personal y le siembra las categorías, pero `spaces` no puede llamar a `categories`. Lo compone el router de `auth` (KAN-65), en la misma transacción:
 
 ```python
@@ -103,6 +123,7 @@ if created:  # solo quien creó el espacio lo siembra
   - **Leer y escribir otra fila que depende de ella:** `FOR SHARE` (`with_for_update(read=True)`). La FK de la fila nueva solo toma `FOR KEY SHARE`, que no choca con el UPDATE que cambia el estado (archivar): por eso, sin el lock, la carrera existe.
   - **Leer y modificar la misma fila:** `FOR NO KEY UPDATE` (`with_for_update(key_share=True)`), el mismo lock que el UPDATE toma, mientras no cambie columnas de una clave única referenciada por una FK. `FOR UPDATE` frenaría además las FK de otras tablas.
   - **Leer un dato derivado para decidir cuánto escribir** (el cuadre escribe `saldo real − saldo actual`): también `FOR NO KEY UPDATE`, aunque no se haga UPDATE de la fila. `FOR SHARE` es compatible consigo mismo, así que dos cuadres simultáneos leerían el mismo saldo y escribirían el ajuste dos veces, y tampoco esperaría a un movimiento en vuelo, así que el saldo leído no lo incluiría (KAN-67). Pedir después `FOR SHARE` sobre la misma fila en la misma transacción no espera: los locks propios no chocan.
+  - **Decidir por la ausencia de filas hijas y cambiar el padre** (la moneda del espacio solo cambia sin transacciones, KAN-68): `FOR UPDATE` completo (`with_for_update()`) sobre el padre, y recién después la consulta `EXISTS`. Cada INSERT de un hijo toma `FOR KEY SHARE` sobre el padre por su FK, y solo `FOR UPDATE` choca con ese lock. Si una transacción se está escribiendo, el cambio la espera y la ve (409). Si llega después, espera al cambio y se guarda con la moneda nueva. Con `FOR NO KEY UPDATE`, una transacción en curso pasaría sin ser vista (`tests/db/test_space_currency_concurrency.py` falla con ese lock). El costo: durante el cambio, que dura milisegundos, también esperan los INSERT de cuentas, categorías y miembros del espacio, porque su FK toma el mismo `KEY SHARE`.
   - **Nunca UPDATE de una fila leída con `FOR SHARE`** en la misma transacción: dos transacciones con el SHARE que intenten actualizarla se bloquean entre sí (deadlock).
   - Quien cambia el estado actualiza primero esa fila y después sus dependientes, y todos los caminos toman los locks en el mismo orden (principal y luego subcategoría): así no hay ciclos.
   - Con `populate_existing()`, la lectura refleja la fila recién bloqueada y no la copia que la sesión ya tenía.
@@ -115,7 +136,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 | Error | Status | Cuándo | Respuesta |
 |---|---|---|---|
 | `NotFoundError` | 404 | No existe o no es del espacio (incluye "no eres miembro") | `{"detail": "...", "code": "account_not_found"}` |
-| `ConflictError` | 409 | Choca con el estado actual: duplicado, archivar con saldo, cuadrar una cuenta archivada, confirmar algo ya confirmado | `{"detail": "...", "code": "account_has_balance"}` |
+| `ConflictError` | 409 | Choca con el estado actual: duplicado, archivar con saldo, cuadrar una cuenta archivada, cambiar la moneda de un espacio con movimientos (`space_has_transactions`), confirmar algo ya confirmado | `{"detail": "...", "code": "account_has_balance"}` |
 | `UnauthenticatedError` | 401 | Sin sesión o sesión inválida | `{"detail": "...", "code": "not_authenticated"}` |
 | `InvalidFieldError` | 422 | Validación que necesita la BD: categoría de otro tipo, cuenta archivada | **Mismo formato que la validación de FastAPI**: `{"detail": [{"type": "category_kind_mismatch", "loc": ["body", "category_id"], "msg": "..."}]}` |
 
@@ -206,7 +227,7 @@ La lista de movimientos (BE-19) tendrá su propia base `_active` (espacio + sin 
 - El cursor es opaco: base64 url-safe de `(date, id)` del último elemento. Si no se puede decodificar, 422.
 - Consulta: `where(tuple_(Transaction.date, Transaction.id) < (cursor_date, cursor_id))`, con `order_by(date desc, id desc)` y `limit(limit + 1)`. Si vuelve una fila de más, hay página siguiente.
 - Respuesta genérica: `class Page[T](BaseModel): items: list[T]; next_cursor: str | None`.
-- Índice: `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`.
+- Índice: `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`. Al ser parcial, no le sirve a una consulta que también debe ver las borradas. Por eso "¿el espacio tiene alguna transacción?" (la regla de la moneda, KAN-68) usa el índice completo `ix_transactions_space_id`.
 - El orden es fijo. Si algún día el cliente elige el orden, se mapea un `Literal` a columnas conocidas; nunca `getattr(Model, texto_del_cliente)`.
 
 **Cron idempotente.** `insert(...).on_conflict_do_nothing(constraint="uq_transactions_template_id_period").returning(Transaction.id)` (dialecto `postgresql`). Solo se crean entries para los ids devueltos. Correrlo dos veces el mismo día no duplica nada.
@@ -293,6 +314,14 @@ Saldo inicial, cuadre y archivado de cuentas (KAN-67) suman:
 | Un solo lugar que fecha los ajustes (día local según `spaces.timezone`, con `now` inyectado) | `transactions/service.py` (`create_adjustment`) | §5 |
 | Guarda de rango antes de un CHECK de la BD, para dar 422 y no 500 | `transactions/service.py` (`reconcile_account`, código `balance_out_of_range`) | §4 |
 | Helper de solapamiento forzado: consulta `pg_stat_activity` hasta ver al segundo esperando un lock, sin esperas fijas | `tests/overlap.py` (`overlap`) | §10 |
+
+La moneda del espacio (KAN-68) suma:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Regla de ausencia de filas hijas: `FOR UPDATE` sobre el padre y después el callable `has_transactions` | `spaces/service.py` (`update_space`) y `spaces/repository.py` (`get_for_update`) | §2, §3 |
+| Campo derivado de un módulo posterior en la respuesta: el service devuelve `SpaceBase` y el router agrega `currency_locked` (`SpaceRead`) | `spaces/schemas.py` y `spaces/router.py` (`_with_currency_locked`) | §2 |
+| Índice completo además del parcial del listado, para una consulta que también ve las filas borradas | `migrations/versions/20261021_0006_add_transactions_space_id_index.py` | §7 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 

@@ -159,7 +159,7 @@ Dueño de todos los datos. Cada usuario recibe "Mi espacio" al registrarse.
 | --- | --- |
 | name | "Mi espacio", "Hogar Rodríguez" |
 | type | personal · household (texto + CHECK `ck_spaces_type`) |
-| currency | FK a `currencies.code` (UYU, COP, USD…); define la unidad menor de todos los montos del espacio |
+| currency | FK a `currencies.code` (UYU, COP, USD…); define la unidad menor de todos los montos del espacio. Solo se puede cambiar mientras el espacio no tenga ninguna transacción, de cualquier estado y borradas incluidas (KAN-68). Lo aplica el service y no la BD; la API expone `currency_locked`, un dato derivado que no es columna |
 | timezone | "America/Montevideo"; el cron la usa para saber qué día es |
 | created_by | FK a `users.id` (`ON DELETE RESTRICT`); con `type = personal` es único (ver la regla "Un espacio personal por creador") |
 | created_at, updated_at | `timestamptz` (UTC) |
@@ -168,7 +168,7 @@ Dueño de todos los datos. Cada usuario recibe "Mi espacio" al registrarse.
 
 v1
 
-Monedas soportadas y su exponente ISO 4217 (la unidad menor es 10^−exponente). Sumar una moneda es agregar una fila.
+Monedas soportadas y su exponente ISO 4217 (la unidad menor es 10^−exponente). Sumar una moneda es agregar una fila: `GET /currencies` devuelve todas las filas (KAN-68), y el frontend pone los nombres y el orden (`lib/core/i18n.ts`). Una moneda sin nombre se muestra con su código.
 
 | codePK | char(3), tres letras mayúsculas: UYU, COP, USD |
 | --- | --- |
@@ -282,7 +282,7 @@ El "qué pasó". Una línea en la lista de movimientos.
 | created_at, updated_at | `timestamptz` (UTC). Al editar, el backend rehace los entries |
 | deleted_at | `timestamptz`; borrado suave, excluida de saldos y reportes |
 
-Índices y claves: `UNIQUE (id, space_id)` (`uq_transactions_id_space_id`), destino de la FK compuesta de `entries`, e índice parcial `ix_transactions_space_id_date_id_active` sobre `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`, para la lista con cursor. Las columnas marcadas H2 o v2 se agregan con los módulos que las usan (decidido en KAN-66): un `ADD COLUMN` nullable en PostgreSQL no reescribe la tabla.
+Índices y claves: `UNIQUE (id, space_id)` (`uq_transactions_id_space_id`), destino de la FK compuesta de `entries`, e índice parcial `ix_transactions_space_id_date_id_active` sobre `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`, para la lista con cursor. El índice completo `ix_transactions_space_id` sobre `space_id` responde si el espacio tiene alguna transacción, borradas incluidas (KAN-68), porque el parcial no sirve para eso. También le sirve a la FK `RESTRICT` cuando se borra un espacio. Las columnas marcadas H2 o v2 se agregan con los módulos que las usan (decidido en KAN-66): un `ADD COLUMN` nullable en PostgreSQL no reescribe la tabla.
  
 ### entries
  
