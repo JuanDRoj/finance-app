@@ -1060,3 +1060,65 @@ async def test_reconcile_accepts_the_largest_difference_that_fits(session: Async
 
     assert result is not None
     assert [e.amount_minor for e in result.entries] == [MAX_SAFE - 1]
+
+
+# does the space have transactions? -----------------------------------------------------------
+
+
+async def test_a_space_without_transactions_has_none(session: AsyncSession) -> None:
+    _, space_id = await make_user_and_space(session, "uid-a")
+    await make_account(session, space_id)  # an account is not a movement
+
+    assert await service.space_has_transactions(session, space_id) is False
+
+
+@pytest.mark.parametrize(
+    ("status", "deleted_at"),
+    [
+        ("confirmed", None),
+        ("pending", None),
+        ("skipped", None),
+        ("confirmed", NOW),
+        ("pending", NOW),
+    ],
+    ids=["confirmed", "pending", "skipped", "deleted", "deleted-pending"],
+)
+async def test_every_kind_of_transaction_counts_even_a_deleted_one(
+    session: AsyncSession, status: str, deleted_at: datetime | None
+) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await insert_transaction(
+        session,
+        space_id=space_id,
+        user_id=user_id,
+        entries=[(account.id, 1_000, None)],
+        status=status,
+        deleted_at=deleted_at,
+    )
+
+    assert await service.space_has_transactions(session, space_id) is True
+
+
+async def test_a_transaction_created_by_the_service_counts(session: AsyncSession) -> None:
+    user_id, space_id = await make_user_and_space(session, "uid-a")
+    account = await make_account(session, space_id)
+    await service.create_adjustment(session, space_id, user_id, account.id, 500, now=NOW)
+
+    assert await service.space_has_transactions(session, space_id) is True
+
+
+async def test_the_transactions_of_another_space_do_not_count(session: AsyncSession) -> None:
+    user_a, space_a = await make_user_and_space(session, "uid-a")
+    _, space_b = await make_user_and_space(session, "uid-b")
+    account_a = await make_account(session, space_a)
+    await insert_transaction(
+        session, space_id=space_a, user_id=user_a, entries=[(account_a.id, 1_000, None)]
+    )
+
+    assert await service.space_has_transactions(session, space_a) is True
+    assert await service.space_has_transactions(session, space_b) is False
+
+
+async def test_an_unknown_space_has_no_transactions(session: AsyncSession) -> None:
+    assert await service.space_has_transactions(session, uuid.uuid4()) is False

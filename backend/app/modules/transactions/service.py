@@ -157,6 +157,15 @@ async def get_account_balances(session: AsyncSession, space_id: uuid.UUID) -> di
     return await repository.balances_by_account(session, space_id=space_id)
 
 
+async def space_has_transactions(session: AsyncSession, space_id: uuid.UUID) -> bool:
+    """True if the space has any transaction: pending, skipped and deleted ones included.
+
+    For the rule of the currency of the space (`spaces.service.update_space`): once money has been
+    written in the space, its currency is fixed. Nothing else should read it as "has balance".
+    """
+    return await repository.space_has_transactions(session, space_id=space_id)
+
+
 async def get_balance_summary(session: AsyncSession, space_id: uuid.UUID) -> BalanceSummaryRead:
     """Available (bank and cash), card debt and net of the space.
 

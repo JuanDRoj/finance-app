@@ -60,6 +60,30 @@ async def get(session: AsyncSession, *, space_id: uuid.UUID) -> Space | None:
     return await session.get(Space, space_id)
 
 
+async def get_for_update(session: AsyncSession, *, space_id: uuid.UUID) -> Space | None:
+    """Like `get`, but locks the row `FOR UPDATE` until the end of the transaction.
+
+    For whoever decides from the **absence** of rows that depend on the space, and then changes
+    the space: the currency can only change while the space has no transactions. Every insert into
+    `transactions` (and into any other table that points at the space) takes `FOR KEY SHARE` on
+    this row through its foreign key, and only `FOR UPDATE` conflicts with it: the `FOR NO KEY
+    UPDATE` of the other row locks of the project (`accounts.repository.get_for_update`) would let
+    a movement in flight go unseen. So a movement being written makes this wait until it commits
+    (and the check that follows sees it), and one that starts later waits for this transaction.
+    Two changes at the same time run one after the other. That also stops the foreign key checks
+    of new accounts, categories and movements of this space for the few milliseconds of the change.
+
+    `populate_existing` makes the read reflect the row as it is now, not as the session saw it.
+    """
+    stmt = (
+        select(Space)
+        .where(Space.id == space_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return await session.scalar(stmt)
+
+
 async def get_timezone(session: AsyncSession, *, space_id: uuid.UUID) -> str | None:
     """The IANA timezone of the space; None if there is no such space. Reads only that column."""
     return await session.scalar(select(Space.timezone).where(Space.id == space_id))

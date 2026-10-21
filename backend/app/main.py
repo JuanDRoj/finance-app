@@ -13,6 +13,7 @@ from app.modules.accounts.router import router as accounts_router
 from app.modules.auth.firebase import create_firebase_auth
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
+from app.modules.currencies.router import router as currencies_router
 from app.modules.spaces.router import router as spaces_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.users.router import router as users_router
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(users_router)
+    app.include_router(currencies_router)
     app.include_router(spaces_router)
     app.include_router(accounts_router)
     app.include_router(categories_router)

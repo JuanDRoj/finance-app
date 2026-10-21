@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.transactions.models import Entry, Transaction
@@ -56,3 +56,16 @@ async def balance_of_account(
         .where(Entry.account_id == account_id)
     )
     return int(await session.scalar(stmt) or 0)
+
+
+async def space_has_transactions(session: AsyncSession, *, space_id: uuid.UUID) -> bool:
+    """True if the space has any transaction at all: whatever its status, deleted ones included.
+
+    The opposite of `_counted_entries` on purpose. A balance ignores pending, skipped and deleted
+    movements, but this answers "was money ever written in this space?": a deleted movement keeps
+    its amount in the minor unit of the currency it was written in, and that is what stops the
+    currency from changing. It filters only by the space (the index `ix_transactions_space_id` is
+    complete, the listing one skips the deleted ones).
+    """
+    stmt = select(exists().where(Transaction.space_id == space_id))
+    return bool(await session.scalar(stmt))

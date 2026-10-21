@@ -101,6 +101,7 @@ async def test_first_login_creates_one_personal_space_visible_through_the_api(
         "type": "personal",
         "currency": {"code": "UYU", "exponent": 2},
         "timezone": TIMEZONE,
+        "currency_locked": False,
     }
     # Exactly one user, one space and one membership, and the user is its owner.
     assert await _snapshot(session) == (1, 1, 1)
