@@ -35,13 +35,13 @@ function AlertDialogContent({
     <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal">
       <AlertDialogPrimitive.Backdrop
         data-slot="alert-dialog-overlay"
-        className={cn(OVERLAY_CLASSES, "z-[60]")}
+        className={cn(OVERLAY_CLASSES, "z-60")}
       />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         data-placement={placement}
         className={cn(
-          "fixed z-[60] flex flex-col gap-4 overflow-y-auto overscroll-contain text-popover-foreground",
+          "fixed z-60 flex flex-col gap-4 overflow-y-auto overscroll-contain text-popover-foreground",
           "transition-[opacity,translate,scale] duration-200 ease-out motion-reduce:transition-none",
           "data-ending-style:opacity-0 data-starting-style:opacity-0",
           placement === "center"

@@ -86,6 +86,11 @@ export function useArchiveAccount({
         const fresh = await getAccount(api, spaceId, account.id).catch(() => account);
         setBlocked(fresh);
         setBlockedOpen(true);
+        // The view that "Cuadrar saldo" opens next must start from this balance, not the old one:
+        // the panel reads the accounts query (invalidated here) and the page of a phone gets the
+        // account from the server (refreshed here).
+        refresh();
+        router.refresh();
         return;
       }
       setError(describeApiError(failure));

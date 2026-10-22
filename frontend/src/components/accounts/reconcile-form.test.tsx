@@ -83,6 +83,14 @@ describe("what the form shows", () => {
     expect(preview()).toBe("Escribe el saldo que dice el resumen de tu tarjeta.");
   });
 
+  it("calls a card paid in excess 'Saldo a favor', positive and not in the debt color", () => {
+    renderForm({ ...CARD, balance_minor: 1000 });
+    expect(screen.getByText("Saldo a favor en Kanza")).toBeTruthy();
+    expect(screen.queryByText("Deuda en Kanza")).toBeNull();
+    const amount = screen.getByText("$ 10,00");
+    expect(amount.className).not.toContain("text-debt");
+  });
+
   it("points the field at the live preview, and keeps the currency in its description", () => {
     renderForm();
     const field = screen.getByLabelText("Saldo real en tu banco");

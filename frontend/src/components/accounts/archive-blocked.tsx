@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { WarningCircle } from "@phosphor-icons/react/ssr";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,19 +41,36 @@ export function ArchiveBlocked({
   onReconcile,
 }: ArchiveBlockedProps) {
   const desktop = useIsDesktop();
+  // "Cuadrar saldo" opens the next view (a panel view or a bottom sheet) in the same tick as this one
+  // closes. Closing a dialog gives the focus back to what had it before (the "Archivar cuenta" row,
+  // behind the new view): on that exit path alone the focus is left to the view that opens.
+  const toReconcile = useRef(false);
+  useEffect(() => {
+    if (open) toReconcile.current = false;
+  }, [open]);
   const zero = formatMoney(0, currency);
   const isCard = account.type === "credit_card";
-  const today = formatMoney(displayedAmount(account), currency);
-  const reason = `Para archivar una cuenta, su saldo tiene que ser ${zero}. ${
-    isCard ? `Hoy debes ${today} en esta tarjeta.` : `Hoy tiene ${today}.`
-  }`;
-  const way = isCard
-    ? `Págala con una transferencia o, si ya no la usas, cuadra su saldo en ${zero}.`
-    : `Pasa el dinero a otra cuenta con una transferencia o, si ya no la usas, cuadra su saldo en ${zero}.`;
+  // A card normally owes (negative balance); one paid in excess has a positive balance, a credit in
+  // its favor, and "debes −$ 10" would be nonsense (docs/diseno.md D18).
+  const inFavor = isCard && account.balance_minor > 0;
+  const today = formatMoney(inFavor ? account.balance_minor : displayedAmount(account), currency);
+  let state = `Hoy tiene ${today}.`;
+  if (inFavor) state = `Hoy tienes ${today} a favor en esta tarjeta.`;
+  else if (isCard) state = `Hoy debes ${today} en esta tarjeta.`;
+  const reason = `Para archivar una cuenta, su saldo tiene que ser ${zero}. ${state}`;
+  let way = `Pasa el dinero a otra cuenta con una transferencia o, si ya no la usas, cuadra su saldo en ${zero}.`;
+  if (inFavor) {
+    way = `Usa ese saldo en tus compras o, si ya no la usas, cuadra su saldo en ${zero}.`;
+  } else if (isCard) {
+    way = `Págala con una transferencia o, si ya no la usas, cuadra su saldo en ${zero}.`;
+  }
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent placement={desktop ? "center" : "bottom"}>
+      <AlertDialogContent
+        placement={desktop ? "center" : "bottom"}
+        finalFocus={() => !toReconcile.current}
+      >
         <span
           aria-hidden
           className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-debt/10 text-debt dark:bg-debt/14"
@@ -70,7 +88,13 @@ export function ArchiveBlocked({
           <AlertDialogClose render={<Button variant="outline" size="sm" />}>
             Entendido
           </AlertDialogClose>
-          <Button size="sm" onClick={onReconcile}>
+          <Button
+            size="sm"
+            onClick={() => {
+              toReconcile.current = true;
+              onReconcile();
+            }}
+          >
             Cuadrar saldo
           </Button>
         </AlertDialogFooter>

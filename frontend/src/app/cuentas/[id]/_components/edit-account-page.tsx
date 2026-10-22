@@ -10,6 +10,17 @@ import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { Currency } from "@/lib/core/money";
 
 /**
+ * Where the focus starts in the reconcile sheet: the amount. Explicit, because the alert of archiving
+ * that opens this sheet from its "Cuadrar saldo" closes in the same tick and must not take the focus
+ * back to the row behind (see `ArchiveBlocked`).
+ */
+function amountField(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    "[data-slot='sheet-content'] input[inputmode='decimal']",
+  );
+}
+
+/**
  * The body of `/cuentas/[id]` (below 1024 px): the edit form in its page variant, with the group
  * "Más acciones" under it, and "Cuadrar saldo" as a bottom sheet over the page (docs/diseno.md D18).
  *
@@ -51,7 +62,7 @@ export function EditAccountPage({
         onReconcile={() => setReconcileOpen(true)}
       />
       <Sheet open={reconcileOpen} onOpenChange={setReconcileOpen}>
-        <SheetContent side="bottom">
+        <SheetContent side="bottom" initialFocus={amountField}>
           <SheetHeader showClose={false}>
             <SheetTitle className="text-xl">Cuadrar saldo</SheetTitle>
           </SheetHeader>

@@ -65,6 +65,14 @@ export function ReconcileForm({
   const isCard = account.type === "credit_card";
   const { currency } = space;
 
+  // A card paid in excess has a positive balance: a credit in its favor, not a negative debt.
+  const inFavor = isCard && account.balance_minor > 0;
+  const kanzaLabel = inFavor
+    ? "Saldo a favor en Kanza"
+    : isCard
+      ? "Deuda en Kanza"
+      : "Saldo en Kanza";
+
   const preview = previewReconcile(text, account, currency);
 
   const mutation = useMutation({
@@ -124,16 +132,14 @@ export function ReconcileForm({
         </span>
       </div>
       <div className="flex min-w-0 items-baseline justify-between gap-3 rounded-field bg-foreground/6 px-4 py-3.5">
-        <span className="shrink-0 text-sm font-bold text-muted-foreground">
-          {isCard ? "Deuda en Kanza" : "Saldo en Kanza"}
-        </span>
+        <span className="shrink-0 text-sm font-bold text-muted-foreground">{kanzaLabel}</span>
         <span
           className={cn(
             "min-w-0 text-right font-heading text-lg font-semibold break-all tabular-nums",
-            isCard && "text-debt",
+            isCard && !inFavor && "text-debt",
           )}
         >
-          {formatMoney(displayedAmount(account), currency)}
+          {formatMoney(inFavor ? account.balance_minor : displayedAmount(account), currency)}
         </span>
       </div>
       <MoneyField

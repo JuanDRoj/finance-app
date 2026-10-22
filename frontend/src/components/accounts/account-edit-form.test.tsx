@@ -232,9 +232,11 @@ describe("archiving", () => {
   });
 
   it("Deshacer unarchives, invalidates and refreshes the server data", async () => {
-    const { onArchived } = renderForm();
+    const { onArchived, unmount } = renderForm();
     archive();
     await waitFor(() => expect(onArchived).toHaveBeenCalled());
+    // The panel is gone by the time the person taps Deshacer: the toast has to work on its own.
+    unmount();
     mocks.post.mockClear().mockResolvedValue(ok({ ...BANK, archived_at: null }));
     mocks.toastSuccess.mock.calls[0]![1].action.onClick();
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
@@ -244,9 +246,10 @@ describe("archiving", () => {
   });
 
   it("tells a failed Deshacer in a toast", async () => {
-    const { onArchived } = renderForm();
+    const { onArchived, unmount } = renderForm();
     archive();
     await waitFor(() => expect(onArchived).toHaveBeenCalled());
+    unmount();
     mocks.post.mockResolvedValue(failure(404, { code: "account_not_found", detail: "x" }));
     mocks.toastSuccess.mock.calls[0]![1].action.onClick();
     await waitFor(() =>
@@ -279,6 +282,28 @@ describe("archiving", () => {
         "Pasa el dinero a otra cuenta con una transferencia o, si ya no la usas, cuadra su saldo en $\u00A00,00.",
       );
       expect(onArchived).not.toHaveBeenCalled();
+    });
+
+    it("invalidates the accounts of the space and refreshes the server data, so the reconcile view starts from this balance", async () => {
+      const { invalidate } = renderForm();
+      archive();
+      await screen.findByRole("alertdialog");
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["spaces", "space-1"] });
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not say a card paid in excess owes: it has a balance in its favor", async () => {
+      const overpaid = { ...CARD, balance_minor: 1000 };
+      mocks.get.mockResolvedValue(ok(overpaid));
+      renderForm(overpaid);
+      archive();
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog.textContent).toContain("Hoy tienes $\u00A010,00 a favor en esta tarjeta.");
+      expect(dialog.textContent).not.toContain("debes");
+      expect(dialog.textContent).not.toContain("\u2212");
+      expect(dialog.textContent).toContain(
+        "Usa ese saldo en tus compras o, si ya no la usas, cuadra su saldo en $\u00A00,00.",
+      );
     });
 
     it("says the debt of a card in words", async () => {

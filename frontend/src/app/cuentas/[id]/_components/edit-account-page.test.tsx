@@ -61,13 +61,13 @@ beforeEach(() => {
 });
 
 function renderPage() {
-  render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}
-    >
+  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={client}>
       <EditAccountPage account={ACCOUNT} space={SPACE} />
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 describe("EditAccountPage", () => {
@@ -116,6 +116,51 @@ describe("EditAccountPage", () => {
     mocks.search = "cuenta=cuadrar";
     renderPage();
     expect(await screen.findByRole("dialog", { name: "Cuadrar saldo" })).toBeTruthy();
+  });
+
+  it("the alert's 'Cuadrar saldo' leaves the focus in the amount of the sheet, not on the row behind", async () => {
+    mocks.post.mockResolvedValue(failure(409, { code: "account_has_balance", detail: "x" }));
+    renderPage();
+    const archiveRow = screen.getByRole("button", { name: /Archivar cuenta/ });
+    fireEvent.click(archiveRow);
+    const alert = await screen.findByRole("alertdialog");
+    fireEvent.click(within(alert).getByRole("button", { name: "Cuadrar saldo" }));
+    const sheet = await screen.findByRole("dialog", { name: "Cuadrar saldo" });
+    const amount = within(sheet).getByLabelText("Saldo real en tu banco");
+    await waitFor(() => expect(document.activeElement).toBe(amount));
+    // And it stays there once the alert has finished closing.
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(document.activeElement).toBe(amount);
+    expect(document.activeElement).not.toBe(archiveRow);
+  });
+
+  it("'Entendido' gives the focus back to 'Archivar cuenta'", async () => {
+    mocks.post.mockResolvedValue(failure(409, { code: "account_has_balance", detail: "x" }));
+    renderPage();
+    const archiveRow = screen.getByRole("button", { name: /Archivar cuenta/ });
+    archiveRow.focus();
+    fireEvent.click(archiveRow);
+    const alert = await screen.findByRole("alertdialog");
+    fireEvent.click(within(alert).getByRole("button", { name: "Entendido" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(archiveRow));
+  });
+
+  it("the reconcile sheet shows the balance of the account the page is given: the fresh one after the 409's refresh", async () => {
+    mocks.post.mockResolvedValue(failure(409, { code: "account_has_balance", detail: "x" }));
+    const view = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Archivar cuenta/ }));
+    // The 409 refreshed the server data: the page now receives the new balance.
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    view.rerender(
+      <QueryClientProvider client={view.client}>
+        <EditAccountPage account={{ ...ACCOUNT, balance_minor: 1234500 }} space={SPACE} />
+      </QueryClientProvider>,
+    );
+    const alert = await screen.findByRole("alertdialog");
+    fireEvent.click(within(alert).getByRole("button", { name: "Cuadrar saldo" }));
+    const sheet = await screen.findByRole("dialog", { name: "Cuadrar saldo" });
+    expect(within(sheet).getByText("$ 12.345,00")).toBeTruthy();
   });
 
   it("the 'Cuadrar saldo' of the alert for a balance that is not zero opens the sheet", async () => {
