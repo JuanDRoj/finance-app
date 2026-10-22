@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./data/errors";
 import {
+  CURRENCY_NAMES,
   describeApiError,
+  describeCurrency,
   fieldErrorMessage,
   isErrorResponse,
   isValidationErrorBody,
@@ -131,5 +133,22 @@ describe("body guards", () => {
     expect(isErrorResponse(null)).toBe(false);
     expect(isValidationErrorBody({ detail: [] })).toBe(true);
     expect(isValidationErrorBody({ detail: "x" })).toBe(false);
+  });
+});
+
+describe("describeCurrency", () => {
+  it("names the currency in Spanish, with its code", () => {
+    expect(describeCurrency("UYU")).toBe("Peso uruguayo · UYU");
+    expect(describeCurrency("USD")).toBe("Dólar estadounidense · USD");
+    expect(describeCurrency("EUR")).toBe("Euro · EUR");
+  });
+
+  it("shows only the code when it has no name, and never reads inherited keys", () => {
+    expect(describeCurrency("XYZ")).toBe("XYZ");
+    expect(describeCurrency("constructor")).toBe("constructor");
+  });
+
+  it("keeps the order of the list the user picks from (docs/diseno.md D18)", () => {
+    expect(Object.keys(CURRENCY_NAMES)).toEqual(["UYU", "COP", "USD", "ARS", "BRL", "EUR"]);
   });
 });

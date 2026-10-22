@@ -9,10 +9,20 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["brand", "title-tablet", "title-desktop", "tooltip-label", "avatar"],
+      text: [
+        "brand",
+        "brand-compact",
+        "title-tablet",
+        "title-desktop",
+        "tooltip-label",
+        "avatar",
+        "nav-label",
+        "item",
+        "caption",
+      ],
       tracking: ["brand", "title"],
-      radius: ["tile", "icon", "field", "nav", "sheet", "tooltip", "mark"],
-      shadow: ["tooltip"],
+      radius: ["tile", "icon", "field", "nav", "sheet", "tooltip"],
+      shadow: ["tooltip", "nav", "fab"],
     },
   },
 });

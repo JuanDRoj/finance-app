@@ -69,6 +69,11 @@ const PAIRS: Pair[] = [
   ["sidebar-primary", "sidebar", 3, { light: 10.7, dark: 9.71 }], // active icon and its mark
   ["sidebar-primary-foreground", "sidebar-primary", 4.5, { light: 10.27, dark: 10.27 }], // counter
   ["sidebar-ring", "sidebar", 3, { light: 10.7, dark: 9.71 }], // focus ring on the sidebar
+  // Escritorio v2 (KAN-69): the name of the space and of the user, the name of a section at rest,
+  // and the initial of the space and the avatar on their tile.
+  ["sidebar-title", "sidebar", 4.5, { light: 15.98, dark: 14.51 }],
+  ["sidebar-text", "sidebar", 4.5, { light: 11.56, dark: 10.5 }],
+  ["sidebar-tile-foreground", "sidebar-tile", 4.5, { light: 9.38, dark: 9.38 }],
   ["tooltip-foreground", "tooltip", 4.5, { light: 15.98, dark: 15.98 }], // text of the tooltip
   ["tooltip", "background", 3, { light: 15.84, dark: 17.15 }], // the tooltip stands out of the page
 ];
@@ -210,6 +215,7 @@ const SIDEBAR_STATE_PAIRS: [string, number, { light: number; dark: number }][] =
   ["sidebar-foreground", 4.5, { light: 6.15, dark: 5.45 }], // idle icon under the pointer
   ["sidebar-primary", 3, { light: 7.93, dark: 7.03 }], // active icon on its pill
   ["sidebar-ring", 3, { light: 7.93, dark: 7.03 }], // focus ring next to the pill
+  ["sidebar-text", 4.5, { light: 8.57, dark: 7.59 }], // name of a section at rest, under the pointer
 ];
 
 describe.each([
@@ -224,7 +230,96 @@ describe.each([
   });
 });
 
+// The row of the space (`sidebar-surface`, a 5 % white over the sidebar) holds the name and the
+// currency, so those texts are measured on the composited color.
+const SIDEBAR_SURFACE_PAIRS: [string, number, { light: number; dark: number }][] = [
+  ["sidebar-title", 4.5, { light: 14.15, dark: 12.6 }], // name of the space
+  ["sidebar-foreground", 4.5, { light: 7.35, dark: 6.54 }], // currency, and the email
+];
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("sidebar space row, %s palette", (name, palette) => {
+  it.each(SIDEBAR_SURFACE_PAIRS)("%s reaches %s:1 on the composited row", (token, minimum, doc) => {
+    const row = over(palette, "sidebar-surface", hexOf(palette, "sidebar"));
+    const ratio = contrast(hexOf(palette, token), row);
+    expect(ratio).toBeGreaterThanOrEqual(minimum);
+    expect(ratio).toBeCloseTo(doc[name], 1);
+  });
+});
+
+// The active tab of the bottom bar (KAN-69): its label is `primary` text (11 px, so 4.5:1) on a
+// pill of `primary` at a small alpha, over `glass`, over the page or one of the blobs. The alphas
+// are read from the component, so the test cannot drift from it. The pill is 10 % in the light
+// theme because 12 % gives 4.47:1 over the first blob; that blob is at the top of the page, but
+// the worst case is held anyway.
+describe("active tab of the bottom bar", () => {
+  const source = readFileSync(new URL("../components/bottom-nav.tsx", import.meta.url), "utf8");
+  const lightAlpha = Number(/(?<![:\w])bg-primary\/(\d+)/.exec(source)?.[1]) / 100;
+  const darkAlpha = Number(/dark:bg-primary\/(\d+)/.exec(source)?.[1]) / 100;
+
+  it("reads the alphas of the pill from the component", () => {
+    expect(lightAlpha).toBe(0.1);
+    expect(darkAlpha).toBe(0.14);
+  });
+
+  describe.each([
+    ["light", light, lightAlpha, { background: 5.13, "blob-1": 4.61, "blob-2": 4.95 }],
+    ["dark", dark, darkAlpha, { background: 7.91, "blob-1": 5.21, "blob-2": 6.25 }],
+  ] as const)("%s palette", (_name, palette, alpha, documented) => {
+    it.each(["background", "blob-1", "blob-2"] as const)(
+      "keeps the label at 4.5:1 over %s",
+      (ground) => {
+        const glass = over(palette, "glass", hexOf(palette, ground));
+        const pill = blend(hexOf(palette, "primary"), glass, alpha);
+        const ratio = contrast(hexOf(palette, "primary"), pill);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+        expect(ratio).toBeCloseTo(documented[ground], 1);
+      },
+    );
+  });
+});
+
+describe("bottom bar and toast", () => {
+  it("states the bar's height (68 px) and its distance from the edge (12 px or the safe area)", () => {
+    expect(light.get("bottom-nav-height")).toBe("68px");
+    expect(light.get("bottom-nav-offset")).toBe("max(12px, env(safe-area-inset-bottom, 0px))");
+  });
+
+  it("raises the toast 20 px above the bar, only on a page that has the bar", () => {
+    const rule = /body:has\(\[data-slot="bottom-nav"\]\)\s*\{([^}]*)\}/.exec(css);
+    expect(rule, "a rule for a body that has the bottom bar").not.toBeNull();
+    expect(declarations(rule?.[1] ?? "").get("toast-offset-bottom")).toBe(
+      "calc(var(--bottom-nav-offset) + var(--bottom-nav-height) + 20px)",
+    );
+    // Not defined for every page: a form without the bar keeps the Toaster's own offset.
+    expect(light.has("toast-offset-bottom")).toBe(false);
+  });
+
+  it("is the same variable the Toaster reads", () => {
+    const toaster = readFileSync(new URL("../components/ui/sonner.tsx", import.meta.url), "utf8");
+    expect(toaster).toContain("var(--toast-offset-bottom,");
+  });
+});
+
 describe("tokens", () => {
+  it("defines the colors of Escritorio v2 for the sidebar once, with the same value in both themes", () => {
+    for (const token of [
+      "sidebar-title",
+      "sidebar-text",
+      "sidebar-surface",
+      "sidebar-line",
+      "sidebar-tile",
+      "sidebar-tile-foreground",
+    ]) {
+      expect(light.has(token), `--${token} is in the light block`).toBe(true);
+      expect(declarations(rootBlocks[1] ?? "").has(token), `--${token} is not repeated`).toBe(
+        false,
+      );
+    }
+  });
+
   it("defines the same tokens in the light and dark palettes", () => {
     for (const token of declarations(rootBlocks[1] ?? "").keys()) {
       expect(light.has(token), `--${token} exists in the light palette`).toBe(true);

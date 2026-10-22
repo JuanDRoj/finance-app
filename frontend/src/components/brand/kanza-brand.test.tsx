@@ -33,4 +33,22 @@ describe("KanzaBrand", () => {
     expect(icon?.getAttribute("alt")).toBe("");
     expect(screen.queryByRole("img")).toBeNull();
   });
+
+  it("is 40 px with a 23 px name by default", () => {
+    const { container } = render(<KanzaBrand />);
+    expect(container.querySelector("img")?.getAttribute("width")).toBe("40");
+    const classes = screen.getByText("Kanza").className.split(/\s+/);
+    expect(classes).toContain("text-brand");
+    expect(classes).not.toContain("text-brand-compact");
+  });
+
+  it("is 36 px with a 22 px name in the compact size, keeping the font size next to a color", () => {
+    const { container } = render(<KanzaBrand size="compact" tone="sidebar" />);
+    expect(container.querySelector("img")?.getAttribute("width")).toBe("36");
+    const classes = screen.getByText("Kanza").className.split(/\s+/);
+    expect(classes).toContain("text-brand-compact");
+    expect(classes).toContain("text-sidebar-primary");
+    expect(classes).not.toContain("text-primary");
+    expect(classes).not.toContain("text-brand");
+  });
 });

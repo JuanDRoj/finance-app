@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleNotch, SignOut, User } from "@phosphor-icons/react/ssr";
+import { CircleNotch, DotsThree, SignOut, User } from "@phosphor-icons/react/ssr";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { focusRing } from "@/components/ui/focus";
+import { focusRing, sidebarFocusRing } from "@/components/ui/focus";
 import { useLogout } from "@/components/use-logout";
 import { cn } from "@/lib/utils";
 
@@ -25,27 +25,36 @@ export type UserMenuUser = {
 type UserMenuProps = {
   /** Without it (the screen could not load `/me`) the menu still offers "Cerrar sesión". */
   user?: UserMenuUser;
+  /**
+   * `avatar` (default) is the round avatar of the header, below 1024 px. `sidebar` is the account
+   * row at the bottom of the desktop sidebar: avatar, name, email and a button with three dots.
+   */
+  variant?: "avatar" | "sidebar";
   className?: string;
 };
 
 const ACCOUNT_LABEL = "Menú de la cuenta";
 
 /**
- * The avatar and its menu (docs/diseno.md D17): the name and email of the user and "Cerrar
- * sesión", at every width. It is the only one on the screen, in the header of `AppShell`: the
- * sidebar has no avatar (its bottom is for Ayuda and Ajustes, in Hito 1).
+ * The account menu (docs/diseno.md D17): the name and email of the user and "Cerrar sesión". There
+ * are two placements and `AppShell` draws both, each hidden by CSS where it does not belong: the
+ * avatar in the header below 1024 px, and from 1024 px the row at the bottom of the sidebar (the
+ * avatar leaves the header, Escritorio v2). Same menu in both.
  *
  * The avatar follows the canvas: below 768 px a 44 px glass tile with the initials in `foreground`
  * (the `card-surface` of the bento tiles); from 768 px a 48 px circle in the soft green of the
- * secondary tokens (`primarySoft` / `onPrimarySoft` of the canvas).
+ * secondary tokens (`primarySoft` / `onPrimarySoft` of the canvas). The sidebar row has a 36 px
+ * avatar (`sidebar-tile`), the name, the email (cut with an ellipsis; the menu has them whole) and
+ * a 36 px button (44 px with a coarse pointer: the 34-40 px size is only for a mouse, D17).
  *
  * The logout is `useLogout` (KAN-27, full page load to `/login`). It is called here and not in the
  * menu item, so its busy state survives if the menu closes with Escape while the request is
  * pending. While it runs, the item stays in the menu with a spinner and ignores presses
  * (`closeOnClick={false}`); if it fails, a toast says so and the item is available again.
  */
-export function UserMenu({ user, className }: UserMenuProps) {
+export function UserMenu({ user, variant = "avatar", className }: UserMenuProps) {
   const { logout, busy } = useLogout();
+  const sidebar = variant === "sidebar";
 
   const logoutItem = (
     <DropdownMenuItem
@@ -64,6 +73,62 @@ export function UserMenu({ user, className }: UserMenuProps) {
     </DropdownMenuItem>
   );
 
+  const content = (
+    <DropdownMenuContent side={sidebar ? "top" : "bottom"} align="end">
+      {user ? (
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <span className="text-base font-bold">{user.name}</span>
+            <span className="text-sm font-normal text-muted-foreground">{user.email}</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {logoutItem}
+        </DropdownMenuGroup>
+      ) : (
+        logoutItem
+      )}
+    </DropdownMenuContent>
+  );
+
+  if (sidebar) {
+    return (
+      <DropdownMenu>
+        <div
+          className={cn(
+            "flex items-center gap-2.5 border-t border-sidebar-line px-2 pt-2.5",
+            className,
+          )}
+        >
+          <span
+            aria-hidden
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-tile font-heading text-sm font-bold text-sidebar-tile-foreground"
+          >
+            {user?.initials ?? <User weight="bold" className="size-5" />}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-bold text-sidebar-title">
+              {user?.name ?? "Tu cuenta"}
+            </span>
+            {user ? (
+              <span className="truncate text-sm text-sidebar-foreground">{user.email}</span>
+            ) : null}
+          </span>
+          <DropdownMenuTrigger
+            aria-label={ACCOUNT_LABEL}
+            aria-busy={busy || undefined}
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-tooltip text-sidebar-foreground transition-[transform,background-color] duration-150 ease-out hover:bg-sidebar-accent active:scale-[0.97] pointer-coarse:size-11",
+              sidebarFocusRing,
+            )}
+          >
+            <DotsThree aria-hidden weight="bold" className="size-5" />
+          </DropdownMenuTrigger>
+        </div>
+        {content}
+      </DropdownMenu>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -81,20 +146,7 @@ export function UserMenu({ user, className }: UserMenuProps) {
           {user?.initials ?? <User weight="bold" className="size-5" />}
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="bottom" align="end">
-        {user ? (
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>
-              <span className="text-base font-bold">{user.name}</span>
-              <span className="text-sm font-normal text-muted-foreground">{user.email}</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {logoutItem}
-          </DropdownMenuGroup>
-        ) : (
-          logoutItem
-        )}
-      </DropdownMenuContent>
+      {content}
     </DropdownMenu>
   );
 }

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpaceRead } from "@/lib/core/data/spaces";
 import type { UserRead } from "@/lib/core/data/me";
@@ -20,13 +20,18 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 // their own tests. Here only what the shell hands them matters: the user menu is where
 // "Cerrar sesión" lives (KAN-41), so the stand-in records the props it receives.
 vi.mock("@/components/user-menu", () => ({
-  UserMenu: (props: { user?: unknown }) => {
+  UserMenu: (props: { user?: unknown; variant?: string }) => {
     mocks.userMenu(props);
     return <button type="button" aria-label="Menú de la cuenta" />;
   },
 }));
 vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
+vi.mock("@/components/bottom-nav", () => ({ BottomNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
+// `next/font` only works inside Next's compiler: the sidebar's logo writes the name with it.
+vi.mock("@/components/brand/brand-font", () => ({
+  brandFont: { variable: "brand-font-variable" },
+}));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -86,67 +91,98 @@ describe("HomePage", () => {
   });
 
   // KAN-27 made "Cerrar sesión" a button of every screen with a session; KAN-41 moved it into the
-  // avatar menu (tested in user-menu.test.tsx). What stays true here: every screen has that menu,
-  // once, in the header, at every width. The sidebar has no avatar.
-  function accountMenu() {
-    return screen.getByRole("button", { name: "Menú de la cuenta" });
+  // avatar menu (tested in user-menu.test.tsx); KAN-69 (Escritorio v2) put a second one at the
+  // bottom of the sidebar. What stays true here: every screen has the menu in the header (below
+  // 1024 px) and in the sidebar (from 1024 px), once each. jsdom has no CSS, so both are in the DOM.
+  function headerMenu() {
+    return within(screen.getByRole("banner")).getByRole("button", { name: "Menú de la cuenta" });
   }
 
-  it("has the account menu in the header, on the greeting and on the error screen", async () => {
+  function sidebarMenu() {
+    const sidebar = document.querySelector("[data-slot='sidebar']") as HTMLElement;
+    return within(sidebar).getByRole("button", { name: "Menú de la cuenta" });
+  }
+
+  it("has the account menu in the header and in the sidebar, on the greeting and on the error screen", async () => {
     const { unmount } = await renderHome();
-    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(1);
-    expect(accountMenu().closest("header")).toBe(
-      screen.getByRole("heading", { level: 1 }).closest("header"),
-    );
+    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(2);
+    expect(headerMenu()).toBeTruthy();
+    expect(sidebarMenu()).toBeTruthy();
     unmount();
 
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     backend({ me: failure(500, { code: "internal_error", detail: "Internal Server Error" }) });
     await renderHome();
-    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(1);
-    expect(accountMenu().closest("header")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Menú de la cuenta" })).toHaveLength(2);
+    expect(headerMenu()).toBeTruthy();
+    expect(sidebarMenu()).toBeTruthy();
     logged.mockRestore();
   });
 
   it("has the menu on the screen without a space too", async () => {
     backend({ spaces: ok([]) });
     await renderHome();
-    expect(accountMenu()).toBeTruthy();
+    expect(headerMenu()).toBeTruthy();
+    expect(sidebarMenu()).toBeTruthy();
   });
 
-  it("hands the menu the name, the email and the initials of the user, and nothing else", async () => {
+  it("hands each menu the name, the email and the initials of the user, and nothing else", async () => {
     await renderHome();
-    expect(mocks.userMenu).toHaveBeenCalledTimes(1);
-    expect(mocks.userMenu.mock.calls[0]?.[0].user).toEqual({
-      name: "Ana Pérez",
-      email: "ana.perez@example.com",
-      initials: "AP",
-    });
+    // One call for the header avatar and one for the sidebar row.
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
+    const calls = mocks.userMenu.mock.calls.map(([props]) => props);
+    expect(calls.map((props) => props.variant)).toContain("sidebar");
+    expect(calls.map((props) => props.variant)).toContain(undefined);
+    for (const props of calls) {
+      expect(props.user).toEqual({
+        name: "Ana Pérez",
+        email: "ana.perez@example.com",
+        initials: "AP",
+      });
+    }
   });
 
   it("uses the part of the email before the @ as the name when there is no display name", async () => {
     backend({ me: ok({ ...USER, display_name: null }) });
     await renderHome();
-    expect(mocks.userMenu.mock.calls[0]?.[0].user).toEqual({
-      name: "ana.perez",
-      email: "ana.perez@example.com",
-      initials: "A",
-    });
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
+    for (const [props] of mocks.userMenu.mock.calls) {
+      expect(props.user).toEqual({
+        name: "ana.perez",
+        email: "ana.perez@example.com",
+        initials: "A",
+      });
+    }
   });
 
-  it("gives the menu no user when /me failed: a generic avatar, but the menu is still there", async () => {
+  it("gives the menus no user when /me failed: a generic avatar, but the menus are still there", async () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     backend({ me: failure(502) });
     await renderHome();
-    expect(accountMenu()).toBeTruthy();
-    expect(mocks.userMenu.mock.calls[0]?.[0].user).toBeUndefined();
+    expect(headerMenu()).toBeTruthy();
+    expect(sidebarMenu()).toBeTruthy();
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
+    for (const [props] of mocks.userMenu.mock.calls) {
+      expect(props.user).toBeUndefined();
+    }
     logged.mockRestore();
   });
 
-  it("has the main landmark and the logo of the sidebar", async () => {
+  it("names the space and its currency in the sidebar", async () => {
+    await renderHome();
+    const sidebar = within(document.querySelector("[data-slot='sidebar']") as HTMLElement);
+    expect(sidebar.getByText("Mi espacio")).toBeTruthy();
+    expect(sidebar.getByText("Peso uruguayo · UYU")).toBeTruthy();
+  });
+
+  it("has the main landmark and the name Kanza in the sidebar", async () => {
     await renderHome();
     expect(screen.getByRole("main")).toBeTruthy();
-    expect(screen.getByAltText("Kanza")).toBeTruthy();
+    // Since Escritorio v2 the logo is the icon (decorative) and the visible name, not an image
+    // named "Kanza".
+    expect(
+      within(document.querySelector("[data-slot='sidebar']") as HTMLElement).getByText("Kanza"),
+    ).toBeTruthy();
   });
 
   it("falls back to the part of the email before the @ when there is no display name", async () => {
@@ -186,7 +222,12 @@ describe("HomePage", () => {
 
   it("never shows the raw values of the backend", async () => {
     await renderHome();
-    expect(screen.queryByText(/personal|UYU|household/)).toBeNull();
+    expect(screen.queryByText(/personal|household/)).toBeNull();
+    // The code of the currency shows up in one place only, inside its Spanish name (D17): not as a
+    // bare "UYU" nor in any text such as "Moneda: UYU".
+    expect(screen.queryAllByText(/UYU/).map((node) => node.textContent)).toEqual([
+      "Peso uruguayo · UYU",
+    ]);
   });
 
   it("holds very long names and emails without failing", async () => {

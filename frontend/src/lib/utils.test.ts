@@ -65,16 +65,46 @@ describe("cn", () => {
     expect(cn("tracking-title", "tracking-brand")).toBe("tracking-brand");
   });
 
-  it("resolves the tooltip and mark radius tokens, also on one side", () => {
+  it("resolves the tooltip radius token against Tailwind's and keeps it apart from other groups", () => {
     expect(cn("rounded-tooltip", "rounded-full")).toBe("rounded-full");
     expect(cn("rounded-full", "rounded-tooltip")).toBe("rounded-tooltip");
     expect(cn("rounded-tile", "rounded-tooltip")).toBe("rounded-tooltip");
-    expect(cn("rounded-r-lg", "rounded-r-mark")).toBe("rounded-r-mark");
-    expect(cn("rounded-r-mark", "rounded-r-lg")).toBe("rounded-r-lg");
     // A one-sided radius does not remove the others, a color or a size.
-    expect(cn("rounded-icon", "rounded-r-mark")).toBe("rounded-icon rounded-r-mark");
+    expect(cn("rounded-icon", "rounded-r-tooltip")).toBe("rounded-icon rounded-r-tooltip");
+    expect(cn("rounded-r-lg", "rounded-r-tooltip")).toBe("rounded-r-tooltip");
     expect(cn("rounded-tooltip bg-tooltip text-tooltip-label")).toBe(
       "rounded-tooltip bg-tooltip text-tooltip-label",
+    );
+  });
+
+  it("resolves the font size tokens of KAN-69 against Tailwind's and keeps them apart from colors", () => {
+    // The label of the bottom bar: 11 px, then 12 px from 768 px (a different variant).
+    expect(cn("text-nav-label", "md:text-xs")).toBe("text-nav-label md:text-xs");
+    expect(cn("text-xs", "text-nav-label")).toBe("text-nav-label");
+    expect(cn("text-nav-label", "text-xs")).toBe("text-xs");
+    expect(cn("text-nav-label", "text-primary")).toBe("text-nav-label text-primary");
+    // The title of an item (15 px) and the compact Kanza name (22 px).
+    expect(cn("text-sm", "text-item")).toBe("text-item");
+    expect(cn("text-item", "text-sidebar-primary")).toBe("text-item text-sidebar-primary");
+    expect(cn("text-brand", "text-brand-compact")).toBe("text-brand-compact");
+    expect(cn("text-brand-compact", "text-sidebar-primary")).toBe(
+      "text-brand-compact text-sidebar-primary",
+    );
+    // The secondary text at 13 px, next to a color and apart from the tooltip's own 13 px token.
+    expect(cn("text-xs", "text-caption")).toBe("text-caption");
+    expect(cn("text-caption", "text-sm")).toBe("text-sm");
+    expect(cn("text-caption", "text-sidebar-foreground")).toBe(
+      "text-caption text-sidebar-foreground",
+    );
+    expect(cn("text-caption", "text-tooltip-label")).toBe("text-tooltip-label");
+  });
+
+  it("resolves the shadow tokens of the bottom bar against Tailwind's and keeps them apart from colors", () => {
+    expect(cn("shadow-md", "shadow-nav")).toBe("shadow-nav");
+    expect(cn("shadow-nav", "shadow-md")).toBe("shadow-md");
+    expect(cn("shadow-fab", "shadow-nav")).toBe("shadow-nav");
+    expect(cn("shadow-fab bg-primary text-primary-foreground")).toBe(
+      "shadow-fab bg-primary text-primary-foreground",
     );
   });
 

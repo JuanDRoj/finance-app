@@ -38,3 +38,11 @@ export function initialsOf(user: Pick<UserRead, "display_name" | "email">): stri
     .slice(0, 2);
   return initials.length === 0 ? null : initials.join("");
 }
+
+/**
+ * The letter of the tile of a space in the sidebar: the first letter or digit of its name, upper
+ * case in Spanish ("Mi espacio" is "M"). `null` when the name has none (for example `!!!`).
+ */
+export function spaceInitialOf(name: string): string | null {
+  return firstLetterOrDigit(name);
+}
