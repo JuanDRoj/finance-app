@@ -4,7 +4,7 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 import { X } from "@phosphor-icons/react/ssr";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "./button";
+import { buttonVariants } from "./button-variants";
 import { OVERLAY_CLASSES } from "./dialog";
 
 /**

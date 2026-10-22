@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatInstant, formatLocalDate, todayInTimezone } from "./dates";
+import { formatInstant, formatLocalDate, formatWeekdayDate, todayInTimezone } from "./dates";
 
 describe("test environment", () => {
   it("runs with a negative-offset time zone, so a device-zone regression fails everywhere", () => {
@@ -129,5 +129,42 @@ describe("todayInTimezone", () => {
 
   it("rejects an invalid time zone", () => {
     expect(() => todayInTimezone("Mars/Olympus")).toThrow(RangeError);
+  });
+});
+
+describe("formatWeekdayDate", () => {
+  it("writes the weekday in capitals, without a comma, and the day and month in words", () => {
+    // 21 October 2026 is a Wednesday.
+    expect(formatWeekdayDate("2026-10-21T15:00:00Z", "America/Montevideo")).toBe(
+      "Miércoles 21 de octubre",
+    );
+    expect(formatWeekdayDate("2026-10-19T15:00:00Z", "America/Montevideo")).toBe(
+      "Lunes 19 de octubre",
+    );
+    expect(formatWeekdayDate("2026-01-01T15:00:00Z", "America/Montevideo")).toBe(
+      "Jueves 1 de enero",
+    );
+  });
+
+  it("uses the day of the space's time zone, not of the UTC instant nor of the device", () => {
+    // 01:30 UTC of Thursday the 22nd is still Wednesday the 21st at 22:30 in Montevideo (UTC-3)...
+    expect(formatWeekdayDate("2026-10-22T01:30:00Z", "America/Montevideo")).toBe(
+      "Miércoles 21 de octubre",
+    );
+    // ...and already Thursday in Madrid (UTC+2 in October).
+    expect(formatWeekdayDate("2026-10-22T01:30:00Z", "Europe/Madrid")).toBe("Jueves 22 de octubre");
+  });
+
+  it("accepts a Date, the instant of 'now'", () => {
+    expect(formatWeekdayDate(new Date("2026-10-21T15:00:00Z"), "America/Montevideo")).toBe(
+      "Miércoles 21 de octubre",
+    );
+  });
+
+  it("rejects an instant with no offset and an invalid one, like formatInstant", () => {
+    expect(() => formatWeekdayDate("2026-10-21T15:00:00", "America/Montevideo")).toThrow(
+      RangeError,
+    );
+    expect(() => formatWeekdayDate(new Date("nope"), "America/Montevideo")).toThrow(RangeError);
   });
 });

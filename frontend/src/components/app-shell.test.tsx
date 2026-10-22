@@ -1,10 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./app-shell";
 
 // The shell's client pieces have their own tests (they need the router or a QueryClientProvider).
 // Here: what the shell decides, which is where each piece goes and what it leaves out.
-const mocks = vi.hoisted(() => ({ userMenu: vi.fn(), sidebar: vi.fn() }));
+const mocks = vi.hoisted(() => ({ userMenu: vi.fn(), sidebar: vi.fn(), panelHost: vi.fn() }));
 
 vi.mock("./user-menu", () => ({
   UserMenu: (props: { variant?: string; className?: string }) => {
@@ -22,6 +22,12 @@ vi.mock("./bottom-nav", () => ({
   BottomNav: () => <nav data-slot="bottom-nav" aria-label="Principal" />,
 }));
 vi.mock("./bfcache-guard", () => ({ BfcacheGuard: () => null }));
+vi.mock("./accounts/account-panel", () => ({
+  AccountPanelHost: (props: unknown) => {
+    mocks.panelHost(props);
+    return <div data-testid="panel-host" />;
+  },
+}));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -29,10 +35,11 @@ afterEach(cleanup);
 beforeEach(() => {
   mocks.userMenu.mockReset();
   mocks.sidebar.mockReset();
+  mocks.panelHost.mockReset();
 });
 
 const USER = { display_name: "Ana Pérez", email: "ana@example.com" };
-const SPACE = { name: "Mi espacio", currency: { code: "UYU", exponent: 2 } };
+const SPACE = { id: "space-1", name: "Mi espacio", currency: { code: "UYU", exponent: 2 } };
 
 describe("AppShell", () => {
   it("keeps the avatar in the header below 1024 px and hides it from there", () => {
@@ -114,5 +121,69 @@ describe("AppShell", () => {
       .getAllByRole("button")
       .map((button) => button.textContent || button.getAttribute("aria-label"));
     expect(buttons).toEqual(["Acción", "Menú de la cuenta"]);
+  });
+
+  describe("the line under the title", () => {
+    it("shows the subtitle from 1024 px only, under the h1 and in the secondary color", () => {
+      render(
+        <AppShell title="Hola, Ana" subtitle="Miércoles 21 de octubre">
+          x
+        </AppShell>,
+      );
+      const subtitle = screen.getByText("Miércoles 21 de octubre");
+      expect(subtitle.className).toContain("hidden");
+      expect(subtitle.className).toContain("lg:block");
+      expect(subtitle.className).toContain("text-muted-foreground");
+      expect(subtitle.previousElementSibling).toBe(screen.getByRole("heading", { level: 1 }));
+      expect(subtitle.closest("header")).not.toBeNull();
+    });
+
+    it("draws nothing when there is no subtitle", () => {
+      render(<AppShell title="Inicio">x</AppShell>);
+      expect(document.querySelector("header p")).toBeNull();
+    });
+
+    it("does not make the subtitle a heading: the screen keeps one h1", () => {
+      render(
+        <AppShell title="Inicio" subtitle="Miércoles 21 de octubre">
+          x
+        </AppShell>,
+      );
+      expect(screen.getAllByRole("heading")).toHaveLength(1);
+      expect(screen.queryByRole("heading", { name: "Miércoles 21 de octubre" })).toBeNull();
+    });
+  });
+
+  describe("what goes before the title", () => {
+    it("puts the leading element (a 'Volver') before the h1, in the header", () => {
+      render(
+        <AppShell title="Nueva cuenta" leading={<a href="#volver">Volver</a>}>
+          x
+        </AppShell>,
+      );
+      const header = screen.getByRole("banner");
+      const back = within(header).getByRole("link", { name: "Volver" });
+      const title = within(header).getByRole("heading", { level: 1 });
+      expect(back.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  describe("the side panel of the main action", () => {
+    it("is mounted once, with the id and the currency of the space and nothing else of it", () => {
+      render(
+        <AppShell title="Inicio" space={SPACE}>
+          x
+        </AppShell>,
+      );
+      expect(screen.getAllByTestId("panel-host")).toHaveLength(1);
+      expect(mocks.panelHost).toHaveBeenCalledWith({
+        space: { id: "space-1", currency: { code: "UYU", exponent: 2 } },
+      });
+    });
+
+    it("is mounted without a space too (a screen that could not load it), and opens nothing", () => {
+      render(<AppShell title="Inicio">x</AppShell>);
+      expect(mocks.panelHost).toHaveBeenCalledWith({ space: undefined });
+    });
   });
 });

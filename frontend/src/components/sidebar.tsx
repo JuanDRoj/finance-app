@@ -1,7 +1,7 @@
 import { Plus } from "@phosphor-icons/react/ssr";
-import Link from "next/link";
 import { KanzaBrand } from "@/components/brand/kanza-brand";
 import { NAV, type NavConfig } from "@/components/nav-sections";
+import { PrimaryActionLink } from "@/components/primary-action-link";
 import { SIDEBAR_CARD_POSITION } from "@/components/shell-layout";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { sidebarFocusRing } from "@/components/ui/focus";
@@ -31,7 +31,7 @@ type SidebarBodyProps = {
 
 /**
  * What goes inside the card, from the top: the logo, the space (name and currency; one space in
- * v1, so it is not interactive), the button of the main action, the sections, and at the bottom
+ * v1, so it is not interactive), the button of the main action (a `PrimaryActionLink`: from 1024 px it opens the side panel), the sections, and at the bottom
  * the entries of "Más" (Categorías) and the account of the user with its menu. Not a component of
  * its own in the app: `Sidebar` is its only user, apart from the catalog.
  */
@@ -62,8 +62,9 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
 
       {action ? (
         // The text is the name: no `aria-label` (WCAG 2.5.3). The "N" hint comes with the shortcut.
-        <Link
+        <PrimaryActionLink
           href={action.href}
+          panel={action.panel}
           className={cn(
             "flex min-h-11.5 items-center justify-center gap-2 rounded-full bg-sidebar-primary px-4 text-item font-bold text-sidebar-primary-foreground transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.98]",
             sidebarFocusRing,
@@ -71,7 +72,7 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
         >
           <Plus aria-hidden weight="bold" className="size-4.5 shrink-0" />
           {action.buttonText}
-        </Link>
+        </PrimaryActionLink>
       ) : null}
 
       <SidebarNav group="main" nav={nav} pathname={pathname} />

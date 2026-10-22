@@ -160,9 +160,22 @@ describe("BottomNav", () => {
     expect(nav.getAttribute("data-slot")).toBe("bottom-nav");
     expect(nav.className).toContain("fixed");
     expect(nav.className).toContain("lg:hidden");
-    // Today it has only Inicio, and it is the current screen.
-    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(["Inicio"]);
+    // Today it has only Inicio, which is the current screen, and the "+" (since KAN-70 the main
+    // action opens the form of a new account).
+    expect(
+      screen
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("aria-label") ?? link.textContent),
+    ).toEqual(["Inicio", "Nueva cuenta"]);
     expect(screen.getByRole("link", { name: "Inicio" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("leads the '+' to the page of the form of a new account: a phone has no side panel", () => {
+    render(<BottomNav />);
+    const plus = screen.getByRole("link", { name: "Nueva cuenta" });
+    expect(plus.getAttribute("href")).toBe("/cuentas/nueva");
+    expect(plus.textContent).toBe("");
+    expect(plus.className).toContain("size-13");
   });
 
   it("clears the safe areas: the bottom edge and the sides", () => {

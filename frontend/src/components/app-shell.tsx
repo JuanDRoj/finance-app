@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { AccountPanelHost } from "@/components/accounts/account-panel";
 import { BfcacheGuard } from "@/components/bfcache-guard";
 import { BottomNav } from "@/components/bottom-nav";
 import { DESKTOP_GROUP_VERTICAL_PADDING } from "@/components/shell-layout";
@@ -23,10 +24,21 @@ type AppShellProps = {
    */
   user?: Pick<UserRead, "display_name" | "email">;
   /**
-   * The space shown in the sidebar (name and currency), from `GET /spaces`. A page that could not
-   * load it leaves it out: the sidebar then has no space row.
+   * The space of the screen, from `GET /spaces`: its name and currency for the sidebar row, and its
+   * id and currency for the side panel that creates an account in it (`AccountPanelHost`). A page
+   * that could not load it leaves it out: the sidebar then has no space row and no panel opens.
    */
-  space?: Pick<SpaceRead, "name" | "currency">;
+  space?: Pick<SpaceRead, "id" | "name" | "currency">;
+  /**
+   * The secondary line under the `h1` (docs/diseno.md D17 › Escritorio v2: "Miércoles 21 de
+   * octubre"). Shown from 1024 px only; below it the header is just the title and the avatar.
+   */
+  subtitle?: string;
+  /**
+   * What goes before the title, for a screen with a form: its "Volver" (`BackLink`). A phone
+   * screen, so it is not shown specially on desktop; give it only where it makes sense.
+   */
+  leading?: ReactNode;
   /**
    * Leaves out the bottom bar, for the screens with a "Volver" and a form (the account form): the
    * keyboard needs the room. The sidebar stays on desktop. The toast then falls back to its base
@@ -70,6 +82,8 @@ export function AppShell({
   actions,
   user,
   space,
+  subtitle,
+  leading,
   hideBottomNav,
   phoneOnly,
   children,
@@ -107,9 +121,19 @@ export function AppShell({
               header's padding-bottom plus the 14 px gap of the canvas); a desktop 8 px above (the
               group's padding is the rest) and 20 px to the content. */}
           <header className="flex items-center justify-between gap-3 pt-[calc(1.125rem+env(safe-area-inset-top,0px))] pb-3 md:pt-[calc(1.5rem+env(safe-area-inset-top,0px))] md:pb-1 lg:pt-2 lg:pb-0">
-            <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop">
-              {title}
-            </h1>
+            <div className="flex min-w-0 items-center gap-1">
+              {leading}
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop">
+                  {title}
+                </h1>
+                {subtitle ? (
+                  <p className="hidden text-item break-words text-muted-foreground lg:block">
+                    {subtitle}
+                  </p>
+                ) : null}
+              </div>
+            </div>
             <div className="flex shrink-0 items-center gap-2.5">
               {actions}
               <UserMenu user={menuUser} className="lg:hidden" />
@@ -129,6 +153,11 @@ export function AppShell({
           </main>
         </div>
       </div>
+      {/* The side panel of the main action (from 1024 px): it reads `?cuenta=nueva` from the URL, which
+          is why it waits behind a Suspense boundary, as `useSearchParams` asks. */}
+      <Suspense fallback={null}>
+        <AccountPanelHost space={space && { id: space.id, currency: space.currency }} />
+      </Suspense>
       {hideBottomNav ? null : <BottomNav />}
     </div>
   );

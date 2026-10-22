@@ -77,3 +77,32 @@ export function todayInTimezone(timeZone: string, now: Date = new Date()): strin
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
+
+/**
+ * A date as the header of the Inicio writes it: the weekday first, in capitals, and no comma
+ * ("Miércoles 21 de octubre"). It is "today" in the space's time zone (`spaces.timezone`), never
+ * the device's: an instant near midnight must not name the neighbouring day. The words come from
+ * `Intl`; only the comma that es-UY puts after the weekday is dropped and the first letter raised.
+ */
+export function formatWeekdayDate(
+  instant: string | Date,
+  timeZone: string,
+  locale: string = DEFAULT_LOCALE,
+): string {
+  if (typeof instant === "string" && !ISO_INSTANT.test(instant)) {
+    throw new RangeError(`Instant must be ISO 8601 with "Z" or a ±hh:mm offset: "${instant}"`);
+  }
+  const date = typeof instant === "string" ? new Date(instant) : instant;
+  if (Number.isNaN(date.getTime())) throw new RangeError(`Invalid instant: "${String(instant)}"`);
+  const text = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone,
+  })
+    .formatToParts(date)
+    .map((part) => (part.type === "literal" ? part.value.replace(/^,\s*/, " ") : part.value))
+    .join("")
+    .trim();
+  return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
+}

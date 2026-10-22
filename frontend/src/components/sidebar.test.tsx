@@ -34,8 +34,14 @@ const SPACE = { name: "Mi espacio", currency: { code: "UYU" } };
 const WITH_ACTION: NavConfig = {
   sections: [],
   more: [],
-  action: { href: "/cuentas/nueva", label: "Nueva cuenta", buttonText: "Nueva cuenta" },
+  action: {
+    href: "/cuentas/nueva",
+    label: "Nueva cuenta",
+    buttonText: "Nueva cuenta",
+    panel: { param: "cuenta", value: "nueva" },
+  },
 };
+const WITHOUT_ACTION: NavConfig = { sections: [], more: [], action: null };
 
 describe("SidebarBody", () => {
   it("shows the Kanza name next to a decorative icon", () => {
@@ -85,9 +91,15 @@ describe("SidebarBody", () => {
   });
 
   describe("the main action", () => {
-    it("is not drawn while there is no destination (today)", () => {
-      render(<SidebarBody user={USER} space={SPACE} />);
+    it("is not drawn while there is no destination", () => {
+      render(<SidebarBody user={USER} space={SPACE} nav={WITHOUT_ACTION} />);
       expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    it("is drawn with the real navigation: 'Nueva cuenta' until the panel to register exists", () => {
+      render(<SidebarBody user={USER} space={SPACE} />);
+      const link = screen.getByRole("link", { name: "Nueva cuenta" });
+      expect(link.getAttribute("href")).toBe("/cuentas/nueva");
     });
 
     it("is a link named by its own text when there is one, without an aria-label", () => {

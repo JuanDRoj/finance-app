@@ -23,9 +23,16 @@ export type MoreSection = NavSection & {
  * D17 › Navegación del Hito 1).
  */
 export type PrimaryAction = {
+  /** Where it goes below 1024 px (and with no JavaScript): a page of its own. */
   href: string;
   label: string;
   buttonText: string;
+  /**
+   * From 1024 px the action does not leave the screen: it opens its side panel over it, by adding
+   * `?{param}={value}` to the current URL (`AccountPanelHost` reads it). Without it, the action
+   * is just a link.
+   */
+  panel?: { param: string; value: string };
 };
 
 /** Everything the navigation shows. Components read it from `NAV`; the catalog passes its own. */
@@ -57,11 +64,18 @@ export const MORE_SECTIONS: readonly MoreSection[] = [];
 export const MORE_ITEM: NavSection = { id: "more", href: "/mas", label: "Más", icon: DotsThree };
 
 /**
- * The destination of the "+" and of the sidebar button, or `null` while there is none: the screen
- * they open must exist first (FE-16 sets it to the account form, FE-20 to the transaction panel
- * and changes the texts to "Registrar movimiento" and "Registrar").
+ * What the "+" of the bottom bar and the button of the sidebar do. Until the panel to register a
+ * movement exists (FE-20) they open the form of a new account (docs/diseno.md D17, D18): a page
+ * below 1024 px (`/cuentas/nueva`) and, from 1024 px, the side panel over the current screen
+ * (`?cuenta=nueva`). FE-20 changes the destination and the texts to "Registrar movimiento" and
+ * "Registrar". It is `null` only while there is no screen to open at all.
  */
-export const PRIMARY_ACTION: PrimaryAction | null = null;
+export const PRIMARY_ACTION: PrimaryAction | null = {
+  href: "/cuentas/nueva",
+  label: "Nueva cuenta",
+  buttonText: "Nueva cuenta",
+  panel: { param: "cuenta", value: "nueva" },
+};
 
 export const NAV: NavConfig = {
   sections: NAV_SECTIONS,
