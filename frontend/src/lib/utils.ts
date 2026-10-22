@@ -19,10 +19,11 @@ const twMerge = extendTailwindMerge({
         "nav-label",
         "item",
         "caption",
+        "panel-title",
       ],
       tracking: ["brand", "title"],
-      radius: ["tile", "icon", "field", "nav", "sheet", "tooltip"],
-      shadow: ["tooltip", "nav", "fab"],
+      radius: ["tile", "icon", "field", "nav", "sheet", "tooltip", "card", "dialog"],
+      shadow: ["tooltip", "nav", "fab", "panel", "dialog", "sheet"],
     },
   },
 });

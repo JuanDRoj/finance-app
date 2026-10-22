@@ -4,9 +4,18 @@ import { cn } from "@/lib/utils";
 type CardProps = ComponentProps<"div"> & {
   /**
    * `glass` (default): bento tile or list group over the decorative background (token `card`).
+   * `tile` (KAN-91): the same tile, but from 1024 px a solid `surface` card with the decorative
+   * border, radius 20 and 24 px of padding (docs/diseno.md D14, D17 › Escritorio v2): what the
+   * screens of Hito 1 use for their tiles. Below 1024 px it is identical to `glass`.
    * `solid`: opaque surface. Use it for forms: a field border (`--input`) must keep 3:1.
    */
-  variant?: "glass" | "solid";
+  variant?: "glass" | "tile" | "solid";
+};
+
+const SURFACE: Record<NonNullable<CardProps["variant"]>, string> = {
+  glass: "card-surface",
+  tile: "tile-surface lg:rounded-card lg:p-6",
+  solid: "border border-border bg-card-solid",
 };
 
 export function Card({ variant = "glass", className, ...props }: CardProps) {
@@ -15,7 +24,7 @@ export function Card({ variant = "glass", className, ...props }: CardProps) {
       data-slot="card"
       className={cn(
         "flex min-w-0 flex-col gap-3 rounded-tile p-4 text-card-foreground",
-        variant === "glass" ? "card-surface" : "border border-border bg-card-solid",
+        SURFACE[variant],
         className,
       )}
       {...props}

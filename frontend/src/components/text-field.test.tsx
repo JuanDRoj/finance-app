@@ -124,6 +124,17 @@ describe("TextField", () => {
     expect(plain.className).not.toContain("pr-14");
   });
 
+  it("puts inputClassName on the input and className on the field around it", () => {
+    const { container } = render(
+      <TextField label="Monto" className="mt-2" inputClassName="font-heading text-lg" />,
+    );
+    const input = screen.getByLabelText("Monto");
+    expect(input.className).toContain("font-heading");
+    expect(input.className).toContain("text-lg");
+    expect(container.querySelector("[data-slot=field]")?.className).toContain("mt-2");
+    expect(container.querySelector("[data-slot=field]")?.className).not.toContain("font-heading");
+  });
+
   it("passes the rest of the props to the input", () => {
     render(
       <TextField

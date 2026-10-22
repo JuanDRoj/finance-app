@@ -49,6 +49,17 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     title: "No encontramos ese espacio",
     message: "Puede que ya no exista o que no tengas acceso. Vuelve al inicio y elige otro.",
   },
+  // `PATCH /spaces/{id}`: the currency can only change while the space has no movements (BE-17).
+  space_has_transactions: {
+    title: "Ya no puedes cambiar la moneda",
+    message: `Tu espacio ya tiene movimientos y sus montos están guardados en la moneda actual. ${SAFE}`,
+  },
+  // `/spaces/{id}/accounts/{account_id}` (BE-16): an account that does not exist in the space.
+  account_not_found: {
+    title: "No encontramos esa cuenta",
+    message:
+      "Puede que ya no exista o que la hayas archivado desde otro dispositivo. Vuelve al inicio e inténtalo de nuevo.",
+  },
   internal_error: {
     title: "Algo salió mal de nuestro lado",
     message: `Inténtalo de nuevo en unos minutos. ${SAFE}`,
@@ -107,6 +118,11 @@ const FIELD_ERROR_BY_TYPE: Record<string, string> = {
   greater_than: "El valor es demasiado bajo.",
   less_than: "El valor es demasiado alto.",
   value_error: "El valor no es válido.",
+  // `POST /spaces/{id}/accounts` (BE-16): the closing and due days belong to credit cards only.
+  card_day_required: "Elige un día del 1 al 31.",
+  card_day_not_allowed: "Solo las tarjetas tienen día de cierre y de vencimiento.",
+  // A `PATCH` that sends an explicit `null` for a field that cannot be cleared.
+  null_not_allowed: "Este campo no puede quedar vacío.",
 };
 
 const FIELD_ERROR_FALLBACK = "El valor no es válido.";
@@ -122,6 +138,12 @@ const VALIDATION_ERROR_BY_TYPE: Record<string, ErrorDescription> = {
     message:
       "Revisa la configuración de fecha y hora de tu dispositivo e inténtalo de nuevo. Tus datos están a salvo.",
   },
+  // `PATCH /spaces/{id}`: the code is not one of the seeded currencies. The user picks from the
+  // list the backend sent, so this means the list is out of date, not that a field is wrong.
+  currency_unsupported: {
+    title: "Esa moneda no está disponible",
+    message: `Elige otra de la lista. ${SAFE}`,
+  },
 };
 
 /** Spanish message for the `type` of a 422 issue (to mark a form field). Never undefined. */
@@ -129,6 +151,31 @@ export function fieldErrorMessage(type: string): string {
   return Object.hasOwn(FIELD_ERROR_BY_TYPE, type)
     ? (FIELD_ERROR_BY_TYPE[type] ?? FIELD_ERROR_FALLBACK)
     : FIELD_ERROR_FALLBACK;
+}
+
+/** A problem of one field of a 422: where it is and what to tell the person. */
+export type ValidationIssue = {
+  /**
+   * The field, as the backend names it, without the leading `body` (`["body", "closing_day"]` is
+   * `"closing_day"`; a nested one is joined with dots). A form maps it to its own field.
+   */
+  path: string;
+  /** Spanish text for the field (`fieldErrorMessage` of the issue's `type`). */
+  message: string;
+};
+
+/**
+ * The fields a 422 points at, in the order the backend lists them, ready for `setError`. Empty
+ * for anything that is not an `ApiError` with FastAPI's 422 body (a 404, a network failure, a
+ * body that is not that shape), so a form can tell "mark these fields" from "show an Alert".
+ */
+export function validationIssuesOf(error: unknown): ValidationIssue[] {
+  if (!(error instanceof ApiError) || error.status !== 422) return [];
+  if (!isValidationErrorBody(error.body)) return [];
+  return (error.body.detail ?? []).map((issue) => {
+    const loc = issue.loc[0] === "body" ? issue.loc.slice(1) : issue.loc;
+    return { path: loc.join("."), message: fieldErrorMessage(issue.type) };
+  });
 }
 
 /** Runtime check of the error body: `ApiError.body` is `unknown` until we look at it. */
@@ -203,4 +250,18 @@ export const CURRENCY_NAMES: Readonly<Record<string, string>> = {
 export function describeCurrency(code: string): string {
   const name = Object.hasOwn(CURRENCY_NAMES, code) ? CURRENCY_NAMES[code] : undefined;
   return name ? `${name} · ${code}` : code;
+}
+
+/** Names of the account types (`AccountCreate.type`) in Spanish: the one place that translates them. */
+export const ACCOUNT_TYPE_NAMES: Readonly<Record<"bank" | "cash" | "credit_card", string>> = {
+  bank: "Banco",
+  cash: "Efectivo",
+  credit_card: "Tarjeta",
+};
+
+/** An account type as the person reads it. One this map does not know shows as "Cuenta". */
+export function describeAccountType(type: string): string {
+  return Object.hasOwn(ACCOUNT_TYPE_NAMES, type)
+    ? (ACCOUNT_TYPE_NAMES[type as keyof typeof ACCOUNT_TYPE_NAMES] ?? "Cuenta")
+    : "Cuenta";
 }

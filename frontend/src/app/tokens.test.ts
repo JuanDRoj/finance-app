@@ -61,6 +61,14 @@ const PAIRS: Pair[] = [
   ["expense", "background", 4.5, { light: 15.84, dark: 17.15 }],
   ["foreground", "card-solid", 4.5, undefined],
   ["popover-foreground", "popover", 4.5, undefined],
+  // Desktop cards (Escritorio v2, KAN-91): the text of a card is measured on `surface`, and the
+  // icons of its containers (`primary` on `primary-soft`) as non-text, 3:1.
+  ["foreground", "surface", 4.5, { light: 17.85, dark: 15.04 }],
+  ["muted-foreground", "surface", 4.5, { light: 6.6, dark: 7.81 }],
+  ["primary", "surface", 4.5, { light: 6.24, dark: 10.07 }],
+  ["debt", "surface", 4.5, { light: 5.78, dark: 9.1 }],
+  ["destructive", "surface", 4.5, { light: 6.54, dark: 8.24 }],
+  ["primary", "primary-soft", 3, { light: 5.36, dark: 7.41 }],
   ["ring", "background", 3, { light: 5.54, dark: 11.48 }],
   // Desktop sidebar (KAN-41, D17), with the values of the Kanza canvas. It is dark in both themes
   // (#0E1A14 in light, #13241B in dark). Idle icons need 3:1 (non-text); 4.5 is asked for so the
@@ -117,7 +125,7 @@ describe.each([
   ["light", light],
   ["dark", dark],
 ] as const)("default focus outline, %s palette", (_name, palette) => {
-  it.each(["background", "card-solid", "popover", "muted", "secondary"])(
+  it.each(["background", "card-solid", "popover", "muted", "secondary", "surface"])(
     "reaches 3:1 (WCAG non-text contrast) on %s",
     (surface) => {
       const surfaceHex = hexOf(palette, surface);
@@ -137,6 +145,7 @@ const COMPONENT_PAIRS: [string, string, number][] = [
   ["foreground", "card-solid", 4.5],
   ["primary", "secondary", 3], // duotone icon of an empty state (non-text)
   ["primary", "card-solid", 4.5], // link buttons
+  ["debt", "card-solid", 4.5], // the figures of a card's debt in the money field (tone="debt")
   ["secondary-foreground", "secondary", 4.5],
 ];
 
@@ -195,7 +204,7 @@ describe.each([
   // `Input` paints card-solid under its own border, but outline buttons and any control that
   // is transparent would sit on glass, so every surface is checked.
   describe("the --input border (3:1)", () => {
-    it.each(["background", "card-solid", "popover", "muted"])("over %s", (surface) => {
+    it.each(["background", "card-solid", "popover", "muted", "surface"])("over %s", (surface) => {
       const surfaceHex = hexOf(palette, surface);
       expect(contrast(over(palette, "input", surfaceHex), surfaceHex)).toBeGreaterThanOrEqual(3);
     });
@@ -206,6 +215,32 @@ describe.each([
         expect(contrast(over(palette, "input", surfaceHex), surfaceHex)).toBeGreaterThanOrEqual(3);
       }
     });
+  });
+});
+
+// The side panel, the dialogs and the bottom sheet (KAN-91) open over a veil (`scrim`) that darkens
+// the page. The panel and the sheet are `glass-strong`, so what is behind them is the page (or a
+// blob) already darkened by the veil: the text on them is measured on that composite.
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("glass-strong over the scrim, %s palette", (_name, palette) => {
+  const grounds = ["background", "blob-1", "blob-2"].map((token) => hexOf(palette, token));
+  it.each(["foreground", "muted-foreground", "primary", "debt"])(
+    "%s reaches 4.5:1 over every ground",
+    (text) => {
+      for (const ground of grounds) {
+        const surfaceHex = over(palette, "glass-strong", over(palette, "scrim", ground));
+        expect(contrast(hexOf(palette, text), surfaceHex)).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it("keeps the --input border at 3:1 over it", () => {
+    for (const ground of grounds) {
+      const surfaceHex = over(palette, "glass-strong", over(palette, "scrim", ground));
+      expect(contrast(over(palette, "input", surfaceHex), surfaceHex)).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 
@@ -318,6 +353,40 @@ describe("tokens", () => {
         false,
       );
     }
+  });
+
+  it("defines the desktop-card tokens of Escritorio v2 (KAN-91) with the values of the canvas", () => {
+    expect(hexOf(light, "surface").toLowerCase()).toBe("#ffffff");
+    expect(hexOf(dark, "surface").toLowerCase()).toBe("#142019");
+    expect(hexOf(light, "primary-soft").toLowerCase()).toBe("#e3f1ea");
+    expect(hexOf(dark, "primary-soft").toLowerCase()).toBe("#173b2c");
+    // A card is a solid surface: no alpha, so no blob shows through and no blur is needed.
+    expect(light.get("surface")).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(dark.get("surface")).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+
+  it("defines the veil: light and faint on a light page, darker on a dark one", () => {
+    expect(light.get("scrim")).toBe("rgba(8, 17, 13, 0.22)");
+    expect(dark.get("scrim")).toBe("rgba(0, 0, 0, 0.55)");
+  });
+
+  it("defines the shape, shadow and size tokens of the panel and the dialog in @theme", () => {
+    const theme = declarations(/@theme\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "");
+    expect(theme.get("radius-card")).toBe("1.25rem"); // 20 px
+    expect(theme.get("radius-dialog")).toBe("1.5rem"); // 24 px
+    expect(theme.get("text-panel-title")).toBe("1.375rem"); // 22 px
+    expect(theme.get("shadow-panel")).toBe("-16px 0 40px rgba(0, 0, 0, 0.16)");
+    expect(theme.get("shadow-dialog")).toBe("0 24px 60px rgba(0, 0, 0, 0.22)");
+    expect(theme.get("shadow-sheet")).toBe("0 -10px 30px rgba(0, 0, 0, 0.16)");
+  });
+
+  it("makes a tile glass below 1024 px and a solid surface from 1024 px (no blur there)", () => {
+    const utility = /@utility tile-surface\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(utility).toContain("background-color: var(--card)");
+    expect(utility).toMatch(
+      /@media \(min-width: 64rem\)\s*\{[^}]*background-color: var\(--surface\)/,
+    );
+    expect(utility).toMatch(/@media \(min-width: 64rem\)\s*\{[^}]*backdrop-filter: none/);
   });
 
   it("defines the same tokens in the light and dark palettes", () => {

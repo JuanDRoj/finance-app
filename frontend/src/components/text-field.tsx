@@ -25,6 +25,11 @@ export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"
   endAction?: ReactNode;
   /** Defaults to a generated id; pass one when something else needs to point at the input. */
   id?: string;
+  /**
+   * Extra classes for the `<input>` itself (`className` goes on the `Field` around it): the money
+   * field sets its Montserrat figures with it. They are merged after the field's own.
+   */
+  inputClassName?: string;
 };
 
 /**
@@ -45,6 +50,7 @@ export function TextField({
   optional,
   id,
   className,
+  inputClassName,
   startIcon,
   endAction,
   "aria-describedby": extraDescribedBy,
@@ -80,7 +86,7 @@ export function TextField({
           id={inputId}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={cn(startIcon && "pl-11", endAction && "pr-14")}
+          className={cn(startIcon && "pl-11", endAction && "pr-14", inputClassName)}
         />
         {endAction ? (
           // 44 px control inside the 48 px input: 2 px margin on the free sides.

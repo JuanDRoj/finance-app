@@ -108,6 +108,36 @@ describe("cn", () => {
     );
   });
 
+  it("resolves the radius tokens of the desktop card and the dialog (KAN-91) and keeps them apart from colors", () => {
+    // A tile is 28 px on a phone and a 20 px card from 1024 px: different variants, both stay.
+    expect(cn("rounded-tile", "lg:rounded-card")).toBe("rounded-tile lg:rounded-card");
+    expect(cn("rounded-card", "rounded-dialog")).toBe("rounded-dialog");
+    expect(cn("rounded-dialog", "rounded-full")).toBe("rounded-full");
+    expect(cn("rounded-2xl", "rounded-card")).toBe("rounded-card");
+    expect(cn("rounded-card bg-surface text-foreground")).toBe(
+      "rounded-card bg-surface text-foreground",
+    );
+    // The top of the bottom sheet: a side radius does not remove the others.
+    expect(cn("rounded-dialog", "rounded-t-sheet")).toBe("rounded-dialog rounded-t-sheet");
+  });
+
+  it("resolves the shadow tokens of the panel, the dialog and the sheet (KAN-91) against Tailwind's and colors", () => {
+    expect(cn("shadow-md", "shadow-panel")).toBe("shadow-panel");
+    expect(cn("shadow-panel", "shadow-dialog")).toBe("shadow-dialog");
+    expect(cn("shadow-dialog", "shadow-sheet")).toBe("shadow-sheet");
+    expect(cn("shadow-sheet", "shadow-md")).toBe("shadow-md");
+    expect(cn("shadow-panel bg-scrim text-foreground")).toBe(
+      "shadow-panel bg-scrim text-foreground",
+    );
+  });
+
+  it("resolves the title size of the panel and the dialog (KAN-91) against Tailwind's and colors", () => {
+    expect(cn("text-xl", "text-panel-title")).toBe("text-panel-title");
+    expect(cn("text-panel-title", "text-xl")).toBe("text-xl");
+    expect(cn("text-panel-title", "text-foreground")).toBe("text-panel-title text-foreground");
+    expect(cn("text-brand-compact", "text-panel-title")).toBe("text-panel-title");
+  });
+
   it("keeps font families and weights apart", () => {
     expect(cn("font-brand", "font-extrabold")).toBe("font-brand font-extrabold");
     expect(cn("font-heading", "font-bold")).toBe("font-heading font-bold");
