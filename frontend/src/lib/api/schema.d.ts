@@ -377,6 +377,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/spaces/{space_id}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Transaction
+         * @description Register an expense, an income or a transfer; the backend builds the entries.
+         *
+         *     The body depends on `type`. An expense and an income take an account, a category of their kind
+         *     and a positive amount; a transfer takes two different accounts (paying a card is a transfer)
+         *     and a positive amount. `amount_minor` is always positive, in the minor unit of the currency of
+         *     the space: the backend applies the sign (on a credit card an expense raises the debt and a
+         *     transfer from a bank lowers it). The movement is born `confirmed`.
+         *
+         *     Accounts and categories must belong to the space and be active, or a 422 names the field
+         *     (`loc` is `["body", "<type>", "<field>"]`): an id of another space answers like one that does
+         *     not exist.
+         */
+        post: operations["create_transaction_spaces__space_id__transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -533,6 +563,23 @@ export interface components {
             /** Exponent */
             exponent: number;
         };
+        /** EntryRead */
+        EntryRead: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /** Category Id */
+            category_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
         /**
          * ErrorResponse
          * @description Body of every error response except 422, for `responses={404: {"model": ErrorResponse}}`.
@@ -543,6 +590,36 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /**
+         * ExpenseCreate
+         * @description Money goes out of an account, classified in an expense category (or its subcategory).
+         */
+        ExpenseCreate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "expense";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -552,6 +629,36 @@ export interface components {
         HealthResponse: {
             /** Status */
             status: string;
+        };
+        /**
+         * IncomeCreate
+         * @description Money comes into an account, classified in an income category (or its subcategory).
+         */
+        IncomeCreate: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "income";
         };
         /**
          * SessionCreate
@@ -597,6 +704,63 @@ export interface components {
         SpaceUpdate: {
             /** Currency */
             currency?: string;
+        };
+        /** TransactionRead */
+        TransactionRead: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description: string | null;
+            /** Entries */
+            entries: components["schemas"]["EntryRead"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "confirmed" | "skipped";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "expense" | "income" | "transfer" | "adjustment";
+        };
+        /**
+         * TransferCreate
+         * @description Money moves between two accounts of the space. Paying a card is a transfer.
+         */
+        TransferCreate: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * From Account Id
+             * Format: uuid
+             */
+            from_account_id: string;
+            /**
+             * To Account Id
+             * Format: uuid
+             */
+            to_account_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "transfer";
         };
         /** UserRead */
         UserRead: {
@@ -1622,6 +1786,59 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_transaction_spaces__space_id__transactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseCreate"] | components["schemas"]["IncomeCreate"] | components["schemas"]["TransferCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

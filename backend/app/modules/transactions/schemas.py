@@ -112,8 +112,18 @@ class AdjustmentCreate(_MovementCreate):
     amount_minor: SignedAmount
 
 
+# What the service and `build_entries` accept: the four types.
 TransactionCreate = Annotated[
     ExpenseCreate | IncomeCreate | TransferCreate | AdjustmentCreate,
+    Field(discriminator="type"),
+]
+
+# The body of `POST /spaces/{id}/transactions`: the movements a person registers. No adjustment: the
+# backend dates and computes those (initial balance, reconciliation: `create_adjustment`), so a
+# client sending `type: "adjustment"` gets a 422 `union_tag_invalid`. A Pydantic error of this union
+# has the location `("body", "<type>", "<field>")`; the service builds the same one.
+MovementCreate = Annotated[
+    ExpenseCreate | IncomeCreate | TransferCreate,
     Field(discriminator="type"),
 ]
 

@@ -11,12 +11,14 @@ from app.modules.transactions.schemas import (
     AdjustmentCreate,
     ExpenseCreate,
     IncomeCreate,
+    MovementCreate,
     TransactionCreate,
     TransferCreate,
 )
 
 MAX_SAFE_INTEGER = 2**53 - 1
 adapter: TypeAdapter[Any] = TypeAdapter(TransactionCreate)
+movement_adapter: TypeAdapter[Any] = TypeAdapter(MovementCreate)
 ACCOUNT = str(uuid.uuid4())
 OTHER_ACCOUNT = str(uuid.uuid4())
 CATEGORY = str(uuid.uuid4())
@@ -291,3 +293,35 @@ def test_ids_must_be_uuids(field: str) -> None:
     errors = _errors(_body("expense", **{field: "not-a-uuid"}))
 
     assert [loc for _, loc in errors] == [("expense", field)]
+
+
+# the body of the API: no adjustments ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "model"),
+    [("expense", ExpenseCreate), ("income", IncomeCreate), ("transfer", TransferCreate)],
+)
+def test_the_body_of_the_api_accepts_expenses_incomes_and_transfers(kind: str, model: type) -> None:
+    assert isinstance(movement_adapter.validate_python(BODIES[kind]), model)
+
+
+def test_the_body_of_the_api_refuses_adjustments() -> None:
+    # An adjustment is dated and computed by the backend (initial balance, reconciliation): a
+    # client cannot create one through the movements endpoint.
+    with pytest.raises(ValidationError) as exc:
+        movement_adapter.validate_python(BODIES["adjustment"])
+
+    assert [(e["type"], e["loc"]) for e in exc.value.errors()] == [("union_tag_invalid", ())]
+    assert exc.value.errors()[0]["ctx"]["expected_tags"] == "'expense', 'income', 'transfer'"
+
+
+def test_the_errors_of_the_body_of_the_api_carry_the_type_in_their_location() -> None:
+    # The service builds the same `loc` for the rules that need the database, so a field has one
+    # path whichever rule rejects it: ("body", "<type>", "<field>").
+    with pytest.raises(ValidationError) as exc:
+        movement_adapter.validate_python(_body("income", category_id=_MISSING))
+
+    assert [(e["type"], e["loc"]) for e in exc.value.errors()] == [
+        ("missing", ("income", "category_id"))
+    ]

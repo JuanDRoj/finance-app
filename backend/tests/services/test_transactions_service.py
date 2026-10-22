@@ -536,7 +536,7 @@ async def test_an_account_of_another_space_is_refused(session: AsyncSession, kin
         _data(kind, account_id=str(theirs.id), amount_minor=100, **extra),
     )
 
-    assert (error.code, error.loc) == ("account_not_found", ["body", "account_id"])
+    assert (error.code, error.loc) == ("account_not_found", ["body", kind, "account_id"])
 
 
 async def test_a_missing_account_is_refused(session: AsyncSession) -> None:
@@ -549,7 +549,7 @@ async def test_a_missing_account_is_refused(session: AsyncSession) -> None:
         _data("adjustment", account_id=str(uuid.uuid4()), amount_minor=100),
     )
 
-    assert (error.code, error.loc) == ("account_not_found", ["body", "account_id"])
+    assert (error.code, error.loc) == ("account_not_found", ["body", "adjustment", "account_id"])
 
 
 async def test_an_archived_account_is_refused(session: AsyncSession) -> None:
@@ -560,7 +560,7 @@ async def test_an_archived_account_is_refused(session: AsyncSession) -> None:
         session, space_id, user_id, _data("adjustment", account_id=str(old.id), amount_minor=100)
     )
 
-    assert (error.code, error.loc) == ("account_archived", ["body", "account_id"])
+    assert (error.code, error.loc) == ("account_archived", ["body", "adjustment", "account_id"])
 
 
 @pytest.mark.parametrize("field", ["from_account_id", "to_account_id"])
@@ -576,7 +576,7 @@ async def test_a_transfer_with_an_account_of_another_space_names_the_field(
 
     error = await _reject(session, space_a, user_a, _data("transfer", amount_minor=100, **ids))
 
-    assert (error.code, error.loc) == ("account_not_found", ["body", field])
+    assert (error.code, error.loc) == ("account_not_found", ["body", "transfer", field])
 
 
 @pytest.mark.parametrize("field", ["from_account_id", "to_account_id"])
@@ -591,7 +591,7 @@ async def test_a_transfer_with_an_archived_account_names_the_field(
 
     error = await _reject(session, space_id, user_id, _data("transfer", amount_minor=100, **ids))
 
-    assert (error.code, error.loc) == ("account_archived", ["body", field])
+    assert (error.code, error.loc) == ("account_archived", ["body", "transfer", field])
 
 
 async def test_a_category_of_another_space_is_refused(session: AsyncSession) -> None:
@@ -607,7 +607,7 @@ async def test_a_category_of_another_space_is_refused(session: AsyncSession) -> 
         _data("expense", account_id=str(account.id), category_id=str(theirs.id), amount_minor=100),
     )
 
-    assert (error.code, error.loc) == ("category_not_found", ["body", "category_id"])
+    assert (error.code, error.loc) == ("category_not_found", ["body", "expense", "category_id"])
 
 
 async def test_a_missing_category_is_refused(session: AsyncSession) -> None:
@@ -626,7 +626,7 @@ async def test_a_missing_category_is_refused(session: AsyncSession) -> None:
         ),
     )
 
-    assert (error.code, error.loc) == ("category_not_found", ["body", "category_id"])
+    assert (error.code, error.loc) == ("category_not_found", ["body", "expense", "category_id"])
 
 
 async def test_an_archived_category_is_refused_but_old_movements_keep_it(
@@ -644,7 +644,7 @@ async def test_an_archived_category_is_refused_but_old_movements_keep_it(
 
     error = await _reject(session, space_id, user_id, data)
 
-    assert (error.code, error.loc) == ("category_archived", ["body", "category_id"])
+    assert (error.code, error.loc) == ("category_archived", ["body", "expense", "category_id"])
     stored = await session.scalar(select(Entry.category_id).where(Entry.transaction_id == old.id))
     assert stored == category.id
 
@@ -686,7 +686,7 @@ async def test_the_kind_of_the_category_must_match_the_type(
 
     assert (error.code, error.loc) == (
         "transaction_category_kind_mismatch",
-        ["body", "category_id"],
+        ["body", kind, "category_id"],
     )
 
 
