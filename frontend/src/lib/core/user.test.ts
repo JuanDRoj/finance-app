@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayNameOf, initialsOf } from "./user";
+import { displayNameOf, initialsOf, spaceInitialOf } from "./user";
 
 describe("displayNameOf", () => {
   it("shows the display name when there is one", () => {
@@ -104,5 +104,23 @@ describe("initialsOf", () => {
     expect(initialsOf(user("😀 !!"))).toBeNull();
     expect(initialsOf(user(null, "---@example.com"))).toBeNull();
     expect(initialsOf(user(null, "!!!"))).toBeNull();
+  });
+});
+
+describe("spaceInitialOf", () => {
+  it("is the first letter of the name, upper case", () => {
+    expect(spaceInitialOf("Mi espacio")).toBe("M");
+    expect(spaceInitialOf("casa")).toBe("C");
+    expect(spaceInitialOf("épsilon")).toBe("É");
+  });
+
+  it("skips what is not a letter or a digit, and keeps a digit", () => {
+    expect(spaceInitialOf("¡Casa!")).toBe("C");
+    expect(spaceInitialOf("  2026")).toBe("2");
+  });
+
+  it("is null when the name has no letter or digit", () => {
+    expect(spaceInitialOf("!!!")).toBeNull();
+    expect(spaceInitialOf("")).toBeNull();
   });
 });

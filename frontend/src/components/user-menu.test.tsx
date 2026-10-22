@@ -205,3 +205,67 @@ describe("UserMenu 'Cerrar sesión'", () => {
     expect(mocks.del).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("UserMenu in the sidebar", () => {
+  function renderSidebar(props: Partial<Parameters<typeof UserMenu>[0]> = {}) {
+    return renderMenu({ variant: "sidebar", ...props });
+  }
+
+  it("has the same trigger name, a three-dots button, and says it opens a menu", () => {
+    renderSidebar();
+    expect(trigger().getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger().getAttribute("aria-expanded")).toBe("false");
+    expect(trigger().textContent).toBe("");
+    expect(trigger().querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("shows the avatar, the name and the email in the row, outside the menu", () => {
+    renderSidebar();
+    expect(screen.getByText("AP")).toBeTruthy();
+    expect(screen.getByText("Ana Pérez")).toBeTruthy();
+    expect(screen.getByText("ana.perez@example.com")).toBeTruthy();
+    expect(screen.queryByRole("menu")).toBeNull();
+    // The avatar is decoration; the button is the only control of the row.
+    expect(screen.getByText("AP").closest("[aria-hidden='true']")).not.toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("cuts a long name and email with an ellipsis in the row", () => {
+    const long = "x".repeat(120);
+    renderSidebar({ user: { name: long, email: `${long}@example.com`, initials: "X" } });
+    expect(screen.getByText(long).className).toContain("truncate");
+    expect(screen.getByText(`${long}@example.com`).className).toContain("truncate");
+  });
+
+  it("is 36 px with a mouse and 44 px with a coarse pointer", () => {
+    renderSidebar();
+    expect(trigger().className).toContain("size-9");
+    expect(trigger().className).toContain("pointer-coarse:size-11");
+  });
+
+  it("shows a person icon and 'Tu cuenta' when there is no user, and still offers the menu", async () => {
+    renderSidebar({ user: undefined });
+    expect(screen.getByText("Tu cuenta")).toBeTruthy();
+    expect(screen.queryByText(/@/)).toBeNull();
+    await openWithKeyboard();
+    expect(screen.getByRole("menuitem", { name: "Cerrar sesión" })).toBeTruthy();
+  });
+
+  it("opens the same menu, with the name and email whole, and closes it with Escape", async () => {
+    renderSidebar();
+    const menu = await openWithKeyboard();
+    expect(screen.getByRole("group").textContent).toContain("Ana Pérez");
+    expect(screen.getByRole("group").textContent).toContain("ana.perez@example.com");
+    fireEvent.keyDown(menu, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("closes the session once, from the sidebar too", async () => {
+    renderSidebar();
+    await openWithKeyboard();
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Cerrar sesión" }));
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/login"));
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+  });
+});

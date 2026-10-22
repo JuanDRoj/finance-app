@@ -53,6 +53,26 @@
   /* Tooltip of the sidebar icons: inverted against the page (dark on light, light on dark). */
   --tooltip: #0e1a14;
   --tooltip-foreground: #eaf5ef;
+  /*
+   * Rest of the sidebar's colors in Escritorio v2 (KAN-69, docs/diseno.md D17): the sidebar is the
+   * same in both themes, so none is repeated in the dark palette. `title` is the name of the
+   * space and of the user; `text` the name of a section at rest (`--sidebar-foreground` stays for
+   * icons and secondary text); `surface` and `line` the row of the space and the separators;
+   * `tile` and `tile-foreground` the initial of the space and the avatar.
+   */
+  --sidebar-title: #eaf5ef;
+  --sidebar-text: #c3d4cb;
+  --sidebar-surface: rgba(255, 255, 255, 0.05);
+  --sidebar-line: rgba(255, 255, 255, 0.1);
+  --sidebar-tile: #173b2c;
+  --sidebar-tile-foreground: #a9efcf;
+  /*
+   * Bottom bar (phones and tablets, KAN-69, docs/diseno.md D17): its height and its distance from
+   * the bottom edge, which is 12px or the safe area, whichever is greater. Not tokens of color,
+   * so they do not change with the theme. The page and the toast read them to stay clear of it.
+   */
+  --bottom-nav-height: 68px;
+  --bottom-nav-offset: max(12px, env(safe-area-inset-bottom, 0px));
   --radius: 1rem;
 }
 
@@ -127,13 +147,18 @@
   --text-brand: 1.4375rem; /* the Kanza name in the login header (23px) */
   --shadow-tooltip: 0 8px 20px rgba(0, 0, 0, 0.18); /* the sidebar's tooltip */
   /* KAN-41, from the Kanza canvas (docs/diseno.md D13 and D14). */
-  --radius-tooltip: 0.625rem; /* 10px: the sidebar's tooltip */
-  --radius-mark: 0.25rem; /* 4px: the outer corners of the active-section mark */
+  --radius-tooltip: 0.625rem; /* 10px: tooltip, and the small buttons of the sidebar */
   --text-title-tablet: 1.625rem; /* 26px: screen title from 768px */
   --text-title-desktop: 1.875rem; /* 30px: screen title from 1024px */
   --tracking-title: -0.02em; /* screen title */
-  --text-tooltip-label: 0.8125rem; /* 13px: text of the sidebar's tooltip */
+  --text-tooltip-label: 0.8125rem; /* 13px: text of a tooltip */
   --text-avatar: 0.9375rem; /* 15px: initials of the 48px avatar */
+  /* KAN-69, from the Kanza canvas (docs/diseno.md D13 and D14). */
+  --text-nav-label: 0.6875rem; /* 11px: label of the bottom bar (12px from 768px: text-xs) */
+  --text-item: 0.9375rem; /* 15px: title of an item (sidebar sections, rows of "Más") */
+  --text-brand-compact: 1.375rem; /* 22px: the Kanza name in the sidebar */
+  --shadow-nav: 0 10px 30px rgba(0, 0, 0, 0.14); /* the bottom bar */
+  --shadow-fab: 0 6px 16px rgba(0, 0, 0, 0.18); /* the "+" of the bottom bar */
 }
 
 @theme inline {
@@ -174,6 +199,12 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-tooltip: var(--tooltip);
   --color-tooltip-foreground: var(--tooltip-foreground);
+  --color-sidebar-title: var(--sidebar-title);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-surface: var(--sidebar-surface);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-tile: var(--sidebar-tile);
+  --color-sidebar-tile-foreground: var(--sidebar-tile-foreground);
 
   /* The scale shadcn components expect, derived from --radius (field radius, 16px). */
   --radius-sm: calc(var(--radius) * 0.6);
@@ -249,6 +280,16 @@
   a,
   [role="button"] {
     touch-action: manipulation;
+  }
+
+  /*
+   * The toast sits 20px above the bottom bar (docs/diseno.md D8): its bottom edge is the bar's
+   * distance from the edge, plus its height, plus 20px. Only a screen that has the bar defines it
+   * (a form without the bar keeps the Toaster's own offset). The Toaster reads it in sonner.tsx;
+   * from 1024px the bar is hidden and the Toaster does not use it.
+   */
+  body:has([data-slot="bottom-nav"]) {
+    --toast-offset-bottom: calc(var(--bottom-nav-offset) + var(--bottom-nav-height) + 20px);
   }
 
   /* KAN-27: after logout, a copy of the page that the browser restores from its back/forward cache

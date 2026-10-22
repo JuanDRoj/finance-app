@@ -1,43 +1,22 @@
 "use client";
 
 import { CheckCircle, Info, Warning, XCircle, CircleNotch } from "@phosphor-icons/react/ssr";
-import { useSyncExternalStore, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { useIsDesktop } from "@/components/use-is-desktop";
 
-// Above the bottom edge and the home indicator. The bottom nav (a later task) will raise it.
-const OFFSET = "calc(16px + env(safe-area-inset-bottom, 0px))";
+// Above the bottom edge and the home indicator. A screen with the bottom bar defines
+// `--toast-offset-bottom` (globals.css) so the toast sits 20px above the bar (docs/diseno.md D8);
+// without the bar (a form) the fallback is this base offset. Sonner passes the string as is to its
+// own CSS variables, so `var()` works.
+const OFFSET = "var(--toast-offset-bottom, calc(16px + env(safe-area-inset-bottom, 0px)))";
 
-// Desktop: bottom right, clear of the sidebar (which is on the left) and of the safe areas.
+// Desktop: bottom right, clear of the sidebar (which is on the left) and of the safe areas. The
+// bottom bar does not exist from 1024 px, so it does not use the variable above.
 const DESKTOP_OFFSET = {
   bottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
   right: "calc(24px + env(safe-area-inset-right, 0px))",
 };
-
-/**
- * The same width as Tailwind's `lg` (64rem = 1024 px at the default font size), where the sidebar
- * appears (`AppShell`, docs/diseno.md D17). Sonner takes its position as a prop, not from CSS, so
- * the width is asked of the browser with `matchMedia`; keep it equal to the `lg:` classes.
- */
-const DESKTOP_MEDIA_QUERY = "(min-width: 64rem)";
-
-function subscribeToDesktop(onChange: () => void) {
-  const query = window.matchMedia(DESKTOP_MEDIA_QUERY);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-/**
- * Whether the window is as wide as the desktop layout. On the server, and while hydrating, it is
- * `false` (the phone layout): React then re-renders with the real value, with no mismatch. Nothing
- * flashes, because the toaster draws nothing until the first toast.
- */
-function useIsDesktop() {
-  return useSyncExternalStore(
-    subscribeToDesktop,
-    () => window.matchMedia(DESKTOP_MEDIA_QUERY).matches,
-    () => false,
-  );
-}
 
 /**
  * The one `<Toaster />` of the app (mounted in layout.tsx); call `toast()` from client code only.

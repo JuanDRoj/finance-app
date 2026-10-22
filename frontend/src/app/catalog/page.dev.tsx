@@ -1,4 +1,4 @@
-import { Plus, Tray } from "@phosphor-icons/react/ssr";
+import { Plus, Tag, Tray } from "@phosphor-icons/react/ssr";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Alert } from "@/components/ui/alert";
@@ -19,8 +19,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/core/data/errors";
 import { describeApiError } from "@/lib/core/i18n";
 import { formatMoney } from "@/lib/core/money";
+import { MoreList } from "@/components/more-list";
+import type { MoreSection } from "@/components/nav-sections";
 import { AuditPanel } from "./_components/audit-panel";
 import { LoadingDemo } from "./_components/loading-demo";
+import { NavPreview } from "./_components/nav-preview";
 import { SessionDemo } from "./_components/session-demo";
 import { ToastDemo } from "./_components/toast-demo";
 
@@ -65,6 +68,26 @@ const DEMO_USER = {
     "ana.maria.de.los.angeles.fernandez.rodriguez.perez.montenegro@un-dominio-muy-largo.example.com",
 };
 
+// What hangs from "Más" at the end of Hito 1 (the app lists it once Categorías exists, FE-21).
+const DEMO_MORE: readonly MoreSection[] = [
+  {
+    id: "categories",
+    href: "/categorias",
+    label: "Categorías",
+    icon: Tag,
+    description: "Crea, renombra y archiva las tuyas",
+  },
+  {
+    id: "long",
+    href: "/largo",
+    label:
+      "Una sección con un nombre larguísimo que tiene que partirse en varias líneas sin desbordar",
+    icon: Tag,
+    description:
+      "Y una descripción también larguísima, para ver que la fila crece y el chevron no se aplasta",
+  },
+];
+
 const NOT_FOUND = describeApiError(
   new ApiError(404, { detail: "Space not found", code: "space_not_found" }),
 );
@@ -80,18 +103,27 @@ const NETWORK = describeApiError(new TypeError("Failed to fetch"));
 
 export default async function CatalogPage({
   searchParams,
-}: Readonly<{ searchParams: Promise<{ title?: string | string[] }> }>) {
+}: Readonly<{ searchParams: Promise<{ title?: string | string[]; bar?: string | string[] }> }>) {
   // `/catalog?title=...` tries a long header title (it wraps to two lines, then is cut).
-  const { title } = await searchParams;
+  // `/catalog?bar=off` leaves out the bottom bar, as a form screen does: the toast of the demo
+  // below then sits at its base offset instead of 20 px above the bar.
+  const { title, bar } = await searchParams;
   const headerTitle = (Array.isArray(title) ? title[0] : title)?.slice(0, 200) || "Catálogo";
+  const hideBottomNav = (Array.isArray(bar) ? bar[0] : bar) === "off";
   return (
-    <AppShell title={headerTitle} user={DEMO_USER}>
+    <AppShell
+      title={headerTitle}
+      user={DEMO_USER}
+      space={{ name: "Mi espacio", currency: { code: "UYU", exponent: 2 } }}
+      hideBottomNav={hideBottomNav}
+    >
       <div className="flex flex-col gap-8">
         <p className="text-sm text-muted-foreground">
           Solo en local (`npm run dev`). Cambia el tema del sistema para ver claro y oscuro y
           estrecha la ventana a 360 px (o ensánchala hasta 1440 px: desde 1024 px aparece la barra
           lateral). Con Tab ves el foco real; &quot;Foco&quot; aplica el mismo anillo sin esperar.
-          El menú del avatar trae un usuario de nombre y correo larguísimos.
+          El menú del avatar trae un usuario de nombre y correo larguísimos. Con{" "}
+          <code>?bar=off</code> la página no lleva barra inferior (como un formulario).
         </p>
 
         <Section title="Botones">
@@ -284,6 +316,19 @@ export default async function CatalogPage({
               </EmptyContent>
             </Empty>
           </Card>
+        </Section>
+
+        <Section title="Navegación del Hito 1">
+          <p className="text-sm text-muted-foreground">
+            La navegación completa del final del Hito 1, con las piezas reales (la app solo muestra
+            lo que ya existe). La barra inferior y la lateral de esta página son las de verdad:
+            aparecen según el ancho. Los toques de aquí abajo no navegan.
+          </p>
+          <NavPreview />
+        </Section>
+
+        <Section title="Pantalla Más (solo bajo 1024 px en la app)">
+          <MoreList sections={DEMO_MORE} />
         </Section>
 
         <Section title="Avisos con Deshacer">

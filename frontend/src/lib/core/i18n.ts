@@ -181,3 +181,26 @@ export function describeApiError(error: unknown): ErrorDescription {
   if (error instanceof TypeError) return NETWORK_ERROR;
   return GENERIC_ERROR;
 }
+
+/**
+ * Names of the currencies a space can use, in Spanish. `GET /currencies` sends only the code and
+ * the exponent, so the name lives here (docs/diseno.md D18). The order is the one of the list the
+ * user picks from (FE-16): UYU, COP, USD, ARS, BRL, EUR.
+ */
+export const CURRENCY_NAMES: Readonly<Record<string, string>> = {
+  UYU: "Peso uruguayo",
+  COP: "Peso colombiano",
+  USD: "Dólar estadounidense",
+  ARS: "Peso argentino",
+  BRL: "Real brasileño",
+  EUR: "Euro",
+};
+
+/**
+ * A currency as the sidebar shows it: "Peso uruguayo · UYU". A code with no name here (the backend
+ * added a currency) shows as the code alone, never a raw object key.
+ */
+export function describeCurrency(code: string): string {
+  const name = Object.hasOwn(CURRENCY_NAMES, code) ? CURRENCY_NAMES[code] : undefined;
+  return name ? `${name} · ${code}` : code;
+}

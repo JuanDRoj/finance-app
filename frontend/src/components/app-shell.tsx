@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { BfcacheGuard } from "@/components/bfcache-guard";
+import { BottomNav } from "@/components/bottom-nav";
 import { DESKTOP_GROUP_VERTICAL_PADDING } from "@/components/shell-layout";
 import { Sidebar } from "@/components/sidebar";
 import { UserMenu, type UserMenuUser } from "@/components/user-menu";
 import type { UserRead } from "@/lib/core/data/me";
+import type { SpaceRead } from "@/lib/core/data/spaces";
 import { displayNameOf, initialsOf } from "@/lib/core/user";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +22,17 @@ type AppShellProps = {
    * leaves it out: the avatar is then a generic icon and "Cerrar sesión" is still in its menu.
    */
   user?: Pick<UserRead, "display_name" | "email">;
+  /**
+   * The space shown in the sidebar (name and currency), from `GET /spaces`. A page that could not
+   * load it leaves it out: the sidebar then has no space row.
+   */
+  space?: Pick<SpaceRead, "name" | "currency">;
+  /**
+   * Leaves out the bottom bar, for the screens with a "Volver" and a form (the account form): the
+   * keyboard needs the room. The sidebar stays on desktop. The toast then falls back to its base
+   * offset by itself (`globals.css` only raises it when the bar is in the page).
+   */
+  hideBottomNav?: boolean;
   children: ReactNode;
 };
 
@@ -27,14 +40,17 @@ type AppShellProps = {
  * Frame of a signed-in screen (docs/diseno.md D17), after the Kanza canvas.
  *
  * - Below 1024 px: one centered column of 640 px at most, with 16 px gutters. Phones are narrower
- *   than that, so there it is just the screen.
- * - From 1024 px (`lg`): the sidebar (a floating card) and the content column are one group, up to
- *   1440 px wide **counting the bar**, centered. 16 px of padding above and on the left, 24 px on
- *   the right and below, and 24 px between the bar and the content.
+ *   than that, so there it is just the screen. The bottom bar (`BottomNav`) floats over its foot
+ *   and the `main` leaves room for it.
+ * - From 1024 px (`lg`): the sidebar (a floating card, 240 px) and the content column are one
+ *   group, up to 1440 px wide **counting the bar**, centered. 16 px of padding above and on the
+ *   left, 24 px on the right and below, and 24 px between the bar and the content.
  *
  * The header is flat, inside the content column and aligned with it (same width and gutters): the
- * `h1` on the left, the actions of the screen and the avatar menu (`UserMenu`) on the right, at
- * every width. The avatar is only there: the sidebar has none.
+ * `h1` on the left, the actions of the screen and, below 1024 px, the avatar menu (`UserMenu`) on
+ * the right. From 1024 px the avatar leaves the header and lives at the bottom of the sidebar
+ * (Escritorio v2): both are always in the page, each hidden by CSS where it does not belong, so
+ * every screen with a session has its "Cerrar sesión" at every width.
  *
  * The padding is the group's, so the header and the page can never disagree on their side
  * gutters. Each side is `max(gutter, env(safe-area-inset-*))`, not a sum: the inset is room the
@@ -43,7 +59,7 @@ type AppShellProps = {
  * restored page from showing data after the logout (KAN-27). A Server Component: it holds no
  * state; it hands the client pieces only the name, the email and the initials.
  */
-export function AppShell({ title, actions, user, children }: AppShellProps) {
+export function AppShell({ title, actions, user, space, hideBottomNav, children }: AppShellProps) {
   const menuUser: UserMenuUser | undefined = user && {
     name: displayNameOf(user),
     email: user.email,
@@ -68,7 +84,7 @@ export function AppShell({ title, actions, user, children }: AppShellProps) {
           DESKTOP_GROUP_VERTICAL_PADDING,
         )}
       >
-        <Sidebar />
+        <Sidebar user={menuUser} space={space} />
         {/* `min-w-0`: a flex item is as wide as its widest content by default, and a long word
             would widen the column past the screen instead of wrapping. */}
         <div className="min-w-0 lg:flex-1">
@@ -82,15 +98,24 @@ export function AppShell({ title, actions, user, children }: AppShellProps) {
             </h1>
             <div className="flex shrink-0 items-center gap-2.5">
               {actions}
-              <UserMenu user={menuUser} />
+              <UserMenu user={menuUser} className="lg:hidden" />
             </div>
           </header>
           <BfcacheGuard />
-          <main className="relative pt-2 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] md:pt-3.5 lg:pt-5 lg:pb-0">
+          {/* Below 1024 px the bottom bar floats over the foot of the page: 24 px of air above it. */}
+          <main
+            className={cn(
+              "relative pt-2 md:pt-3.5 lg:pt-5 lg:pb-0",
+              hideBottomNav
+                ? "pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
+                : "pb-[calc(var(--bottom-nav-offset)+var(--bottom-nav-height)+1.5rem)]",
+            )}
+          >
             {children}
           </main>
         </div>
       </div>
+      {hideBottomNav ? null : <BottomNav />}
     </div>
   );
 }
