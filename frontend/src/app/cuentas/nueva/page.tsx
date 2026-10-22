@@ -15,14 +15,14 @@ import { NewAccountPageForm } from "./_components/new-account-page-form";
 
 export const metadata: Metadata = { title: "Nueva cuenta" };
 
-// Where a desktop visitor goes: the Inicio with the side panel open over it (`?cuenta=nueva`, read by
-// `AccountPanelHost`). FE-17 points it at Cuentas, which is where the panel opens over the list.
-const DESKTOP_DESTINATION = "/?cuenta=nueva";
+// Where a desktop visitor goes: Cuentas with the side panel open over the list (`?cuenta=nueva`, read
+// by `AccountPanelHost`; FE-17 pointed it here, it was the Inicio). `/?cuenta=nueva` still works.
+const DESKTOP_DESTINATION = "/cuentas?cuenta=nueva";
 
 /**
  * The form of a new account as a page (docs/diseno.md D18), for phones and tablets: below 1024 px
  * the "+" of the bottom bar and "Crear mi primera cuenta" lead here. From 1024 px the form is the
- * side panel over the current screen, so `DesktopRedirect` sends the visitor to the Inicio with the
+ * side panel over the current screen, so `DesktopRedirect` sends the visitor to Cuentas with the
  * panel open (and `phoneOnly` hides the page's content column meanwhile, as in "Más").
  *
  * - No bottom bar (`hideBottomNav`): the keyboard needs the room.

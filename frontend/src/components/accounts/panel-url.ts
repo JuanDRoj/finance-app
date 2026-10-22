@@ -30,3 +30,6 @@ export function closePanelInUrl(param: string): void {
   url.searchParams.delete(param);
   writeUrl(url);
 }
+
+/** The query param that names the account shown in the detail of Cuentas (`/cuentas?sel=<id>`). */
+export const SELECTED_ACCOUNT_PARAM = "sel";
