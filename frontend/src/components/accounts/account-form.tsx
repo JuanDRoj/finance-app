@@ -7,7 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { MoneyField } from "@/components/money-field";
 import { SegmentedControl } from "@/components/segmented-control";
-import { SelectField } from "@/components/select-field";
+import { CardDaysFields } from "@/components/accounts/card-days-fields";
 import { TextField } from "@/components/text-field";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,6 @@ const TYPE_OPTIONS = (Object.keys(ACCOUNT_TYPE_NAMES) as AccountType[]).map((val
   label: ACCOUNT_TYPE_NAMES[value],
 }));
 
-const DAYS = Array.from({ length: 31 }, (_, index) => String(index + 1));
-
 /** "0,00" for two decimals, "0" for none, "0,000" for three: the placeholder of the amount. */
 function zeroAmount(exponent: number): string {
   return exponent === 0 ? "0" : `0,${"0".repeat(exponent)}`;
@@ -79,8 +77,6 @@ const FIELD_OF_API_FIELD: Readonly<Record<string, keyof AccountFormValues>> = {
   closing_day: "closingDay",
   due_day: "dueDay",
 };
-
-const DAYS_HELP_ID = "account-days-help";
 
 type AccountFormProps = {
   /** The space the account is created in: its id and its currency (the symbol and the decimals). */
@@ -104,7 +100,7 @@ type AccountFormProps = {
 
 /**
  * The form of a new account (docs/diseno.md D18), one component in two containers: a page below
- * 1024 px and the side panel from 1024 px. Only creating; editing is KAN-92's (FE-28).
+ * 1024 px and the side panel from 1024 px. Only creating; editing is `AccountEditForm`.
  *
  * - react-hook-form with `accountFormSchema(exponent)`: the form holds text and the schema turns it
  *   into the body of `POST /spaces/{id}/accounts` (the balance as an integer of the minor unit,
@@ -220,39 +216,13 @@ export function AccountForm({
         {...register("balance")}
       />
       {isCard ? (
-        <div className="flex flex-col gap-1.5">
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField
-              label="Día de cierre"
-              placeholder="Elige"
-              aria-describedby={DAYS_HELP_ID}
-              error={errors.closingDay?.message}
-              {...register("closingDay")}
-            >
-              {DAYS.map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="Día de vencimiento"
-              placeholder="Elige"
-              aria-describedby={DAYS_HELP_ID}
-              error={errors.dueDay?.message}
-              {...register("dueDay")}
-            >
-              {DAYS.map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-          <p id={DAYS_HELP_ID} className="text-sm text-muted-foreground">
-            Con estos días Kanza calcula cuánto pagar cada mes.
-          </p>
-        </div>
+        <CardDaysFields
+          register={register}
+          errors={errors}
+          closingName="closingDay"
+          dueName="dueDay"
+          placeholder="Elige"
+        />
       ) : null}
       {offline ? <Alert title={NETWORK_ERROR.title}>{NETWORK_ERROR.message}</Alert> : null}
       {formError && !offline ? <Alert title={formError.title}>{formError.message}</Alert> : null}

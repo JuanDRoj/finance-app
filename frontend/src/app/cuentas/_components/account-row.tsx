@@ -1,11 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import type { MouseEvent } from "react";
 import { AccountIcon } from "@/components/accounts/account-icon";
-import { SELECTED_ACCOUNT_PARAM, openPanelInUrl } from "@/components/accounts/panel-url";
+import { AccountLink } from "@/components/accounts/account-link";
 import { focusRing } from "@/components/ui/focus";
-import { DESKTOP_MEDIA_QUERY, useIsDesktop } from "@/components/use-is-desktop";
 import { accountMetaLine, displayedAmount } from "@/lib/core/accounts-summary";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import { formatMoney, type Currency } from "@/lib/core/money";
@@ -23,15 +20,11 @@ type AccountRowProps = {
  * the whole name in `title`), its line (the type, or "Cierra el 5 · vence el 12") and its amount
  * with `formatMoney`, a card by what it owes (positive, in the debt color).
  *
- * - From 1024 px it is a link to `/cuentas?sel=<id>` (`aria-current` on the chosen one): a plain
- *   click does not navigate, it writes `?sel` with `history.replaceState` (no request, no history
- *   entry), which the screen reads to fill the detail. A modified click keeps its meaning.
- * - Below 1024 px it is **not interactive yet**: the page of an account (its edit form) is KAN-92
- *   (FE-28), and a link to it would be a 404. The row is plain text until then. Like the rest of
- *   what depends on the width, the server and the first client render show the phone version.
+ * It is an `AccountLink` to `/cuentas/<id>` (`aria-current` on the chosen one). Below 1024 px a tap
+ * opens the account's page (KAN-92); from 1024 px a plain click writes `?sel` instead of
+ * navigating, which the screen reads to fill the detail (see `AccountLink`).
  */
 export function AccountRow({ account, currency, selected }: AccountRowProps) {
-  const desktop = useIsDesktop();
   const isCard = account.type === "credit_card";
 
   const content = (
@@ -55,27 +48,12 @@ export function AccountRow({ account, currency, selected }: AccountRowProps) {
       </span>
     </>
   );
-  const classes = "flex min-h-17 items-center gap-3 px-3.5 lg:min-h-13.5 lg:rounded-xl lg:px-2";
-
-  if (!desktop) return <div className={classes}>{content}</div>;
-
-  function handleClick(event: MouseEvent<HTMLAnchorElement>) {
-    const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-    if (event.button !== 0 || modified || event.defaultPrevented) return;
-    // Asked at the moment of the click, like `PrimaryActionLink`: the width may have changed.
-    if (!window.matchMedia(DESKTOP_MEDIA_QUERY).matches) return;
-    event.preventDefault();
-    openPanelInUrl({ param: SELECTED_ACCOUNT_PARAM, value: account.id });
-  }
-
   return (
-    <Link
-      href={`/cuentas?${SELECTED_ACCOUNT_PARAM}=${account.id}`}
-      prefetch={false}
+    <AccountLink
+      accountId={account.id}
       aria-current={selected ? "true" : undefined}
-      onClick={handleClick}
       className={cn(
-        classes,
+        "flex min-h-17 items-center gap-3 px-3.5 lg:min-h-13.5 lg:rounded-xl lg:px-2",
         // The chosen row is `primary` at 10 % (12 % in dark), as K-V2 draws it, plus an inset ring in
         // full `primary` (3:1 as a state indicator, WCAG 1.4.11) so it does not rely on the tint.
         // Hover is `primary` at 5 %, subtler than the chosen row in both themes, so hovering another
@@ -87,6 +65,6 @@ export function AccountRow({ account, currency, selected }: AccountRowProps) {
       )}
     >
       {content}
-    </Link>
+    </AccountLink>
   );
 }

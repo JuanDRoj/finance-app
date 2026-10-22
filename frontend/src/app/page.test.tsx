@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/server", () => ({ getServerApi: mocks.getServerApi }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 // The shell's client pieces need a QueryClientProvider, the router and the browser; they have
 // their own tests. Here only what the shell hands them matters: the user menu is where
 // "Cerrar sesión" lives (KAN-41), so the stand-in records the props it receives.
@@ -572,11 +576,11 @@ describe("HomePage", () => {
       );
     });
 
-    it("makes each row a link to Cuentas with that account chosen", async () => {
+    it("makes each row a link to the account's page", async () => {
       await renderHome();
       const region = within(screen.getByRole("region", { name: "Tus cuentas" }));
       const hrefs = region.getAllByRole("link").map((link) => link.getAttribute("href"));
-      expect(hrefs).toEqual([BANK, CASH, CARD].map((account) => `/cuentas?sel=${account.id}`));
+      expect(hrefs).toEqual([BANK, CASH, CARD].map((account) => `/cuentas/${account.id}`));
     });
 
     it("cuts a very long name with an ellipsis instead of breaking the row", async () => {

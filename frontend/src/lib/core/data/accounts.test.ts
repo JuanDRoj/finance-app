@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { paths } from "@/lib/api/schema";
 import {
   accountsQueryKey,
+  apiErrorCode,
+  archiveAccount,
+  getAccount,
+  reconcileAccount,
+  updateAccount,
   accountsQueryOptions,
   createAccount,
   listAccounts,
@@ -152,5 +157,51 @@ describe("unarchiveAccount", () => {
       status: 404,
       body,
     });
+  });
+});
+
+describe("getAccount, updateAccount, archiveAccount and reconcileAccount", () => {
+  const path = `/spaces/${SPACE_ID}/accounts/${ACCOUNT.id}`;
+
+  it("reads one account with GET", async () => {
+    const { api, fetch } = clientAnswering(Response.json(ACCOUNT));
+    await expect(getAccount(api, SPACE_ID, ACCOUNT.id)).resolves.toEqual(ACCOUNT);
+    expect(new URL(fetch.mock.calls[0]![0].url).pathname).toBe(path);
+  });
+
+  it("sends only the fields it is given with PATCH", async () => {
+    const { api, fetch } = clientAnswering(Response.json({ ...ACCOUNT, name: "Nuevo" }));
+    await updateAccount(api, SPACE_ID, ACCOUNT.id, { name: "Nuevo" });
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("PATCH");
+    expect(new URL(request.url).pathname).toBe(path);
+    expect(await request.json()).toEqual({ name: "Nuevo" });
+  });
+
+  it("archives with POST .../archive and throws the 409 of a balance that is not zero", async () => {
+    const ok = clientAnswering(Response.json(ACCOUNT));
+    await archiveAccount(ok.api, SPACE_ID, ACCOUNT.id);
+    expect(ok.fetch.mock.calls[0]![0].method).toBe("POST");
+    expect(new URL(ok.fetch.mock.calls[0]![0].url).pathname).toBe(`${path}/archive`);
+
+    const body = { code: "account_has_balance", detail: "Balance is not zero" };
+    const refused = clientAnswering(Response.json(body, { status: 409 }));
+    const error = await archiveAccount(refused.api, SPACE_ID, ACCOUNT.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 409, body });
+    expect(apiErrorCode(error)).toBe("account_has_balance");
+  });
+
+  it("reconciles with POST .../reconcile and the real balance as given (a card's negative)", async () => {
+    const { api, fetch } = clientAnswering(Response.json(ACCOUNT));
+    await reconcileAccount(api, SPACE_ID, ACCOUNT.id, { balance_minor: -2500000 });
+    const request = fetch.mock.calls[0]![0];
+    expect(new URL(request.url).pathname).toBe(`${path}/reconcile`);
+    expect(await request.json()).toEqual({ balance_minor: -2500000 });
+  });
+
+  it("apiErrorCode is undefined for anything that is not an ApiError with a code", () => {
+    expect(apiErrorCode(new Error("x"))).toBeUndefined();
+    expect(apiErrorCode(new ApiError(500, undefined))).toBeUndefined();
+    expect(apiErrorCode(new ApiError(422, { detail: [] }))).toBeUndefined();
   });
 });
