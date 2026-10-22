@@ -142,6 +142,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 
 - `detail` en inglés y `code` estable en snake_case (`<entidad>_<problema>`). El frontend traduce `code` (o `type` en los 422) a un mensaje en español. Un código nuevo implica agregar su traducción, y un código existente nunca se renombra.
 - El 422 tiene un solo formato, venga de Pydantic o del service, así que el frontend puede marcar el campo con error en el formulario.
+- **`loc` en una unión discriminada (KAN-74).** Pydantic mete el tag en la ubicación: un error del cuerpo de `POST /spaces/{id}/transactions` sale en `["body", "expense", "category_id"]`, no en `["body", "category_id"]`. El service construye el mismo `loc` (`("body", data.type, campo)` en `_check_accounts` y `_check_category`), así cada campo tiene un solo camino, sea cual sea la regla que lo rechaza. `validationIssuesOf` del frontend solo quita el `body` inicial, así que entrega `expense.category_id`: el formulario quita el tipo o registra sus campos con ese prefijo.
 - Las validaciones que no necesitan la BD van en el schema (Pydantic → 422 automático). Ejemplo: en una transferencia, origen y destino deben ser cuentas distintas.
 - Si un dato del usuario puede violar un CHECK de la BD (que daría un 500), el service lo valida antes y lanza `InvalidFieldError` con su `loc`. Ejemplo: el cuadre rechaza una diferencia mayor que `MAX_SAFE_INTEGER` con 422 `balance_out_of_range` en `balance_minor`, antes de que falle `ck_entries_amount_range` (KAN-67).
 - `account_archived` sale como 422 al crear un movimiento (la cuenta va en el cuerpo, con `loc`) y como 409 en el cuadre (la cuenta va en la ruta). Los dos son a propósito.
@@ -168,6 +169,8 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
   ]
   ```
 
+  `TransactionCreate` es lo que acepta el service. **El cuerpo de la API es otra unión, más chica** (KAN-74): `MovementCreate` = gasto | ingreso | transferencia, **sin ajuste**. Un `type: "adjustment"` da 422 `union_tag_invalid`. Los ajustes los fechan y calculan el saldo inicial y el cuadre (`create_adjustment`, `reconcile_account`), con su lock; un `POST` libre de ajustes se saltaría ambas cosas. Regla general: si un tipo interno no lo puede crear el cliente, la API expone una unión propia en vez de rechazarlo en el router.
+
 - **Respuesta:** el router declara `response_model=AccountRead` y devuelve el objeto ORM. FastAPI lo filtra y serializa, y mypy queda conforme con `-> Account`.
 - **Rutas sin barra final:** con `prefix`, la colección se declara con `@router.get("")`, no con `"/"` (que genera `/accounts/`; como la app usa `redirect_slashes=False`, `/accounts` daría 404 en vez de un 307). `tests/api/test_routing.py` vigila que ninguna ruta termine en `/`.
 - **Fechas:** la fecha de una transacción es `date`; los momentos son `datetime` con zona (UTC). `spaces.timezone` se valida con `zoneinfo.ZoneInfo` (si es inválida, 422). La fecha de un ajuste la pone solo `transactions.service.create_adjustment`: el día local del espacio (`spaces.timezone`) en el `now` que le pasa el router (KAN-67).
@@ -177,6 +180,7 @@ Los services lanzan **errores de dominio**; un handler registrado en `create_app
 
 - **`require_space_member` se declara en el `APIRouter`** (`dependencies=[Depends(require_space_member)]`), no en cada endpoint: toda ruta del router queda protegida aunque alguien olvide ponerlo. Si el endpoint necesita la membresía (ej. el rol), la vuelve a declarar como parámetro; FastAPI la resuelve una sola vez por request.
 - **Defensa en profundidad:** toda función de repository recibe `space_id` y filtra por él. `get(session, space_id, account_id)`, nunca `get(session, account_id)`. Un recurso de otro espacio da el mismo 404 que uno inexistente.
+- **Un id de otro espacio en el cuerpo da 422, no 404 (KAN-74).** El 404 `space_not_found` es para el espacio de la ruta. Una cuenta o categoría ajena enviada en el cuerpo responde 422 `account_not_found` / `category_not_found` con su `loc`, idéntico a un id inexistente: no filtra que exista y el formulario marca el campo. `tests/api/test_transactions.py` compara las dos respuestas.
 - **Nada que modifique datos va por `GET`.** Junto con la cookie `SameSite=Lax`, eso cierra la puerta al CSRF clásico.
 - **Librerías síncronas** (`firebase-admin`, `google-auth`): se llaman con `await asyncio.to_thread(...)`, nunca directo dentro de `async def`, porque bloquearían el servidor para todos los requests.
 - **Cron** (Cloud Scheduler → endpoint): verifica el token OIDC de la cuenta de servicio del scheduler (audiencia y email) con `google-auth`, vía `to_thread`.
@@ -322,6 +326,14 @@ La moneda del espacio (KAN-68) suma:
 | Regla de ausencia de filas hijas: `FOR UPDATE` sobre el padre y después el callable `has_transactions` | `spaces/service.py` (`update_space`) y `spaces/repository.py` (`get_for_update`) | §2, §3 |
 | Campo derivado de un módulo posterior en la respuesta: el service devuelve `SpaceBase` y el router agrega `currency_locked` (`SpaceRead`) | `spaces/schemas.py` y `spaces/router.py` (`_with_currency_locked`) | §2 |
 | Índice completo además del parcial del listado, para una consulta que también ve las filas borradas | `migrations/versions/20261021_0006_add_transactions_space_id_index.py` | §7 |
+
+Crear movimientos (KAN-74) suma:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Unión pública más chica que la interna (`MovementCreate` sin ajuste) | `transactions/schemas.py` | §5 |
+| `loc` con el tag de la unión también en los errores del service | `transactions/service.py` (`_check_accounts`, `_check_category`) | §4 |
+| Id ajeno en el cuerpo: 422 idéntico a inexistente; 404 solo para la ruta | `tests/api/test_transactions.py` | §6 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 
