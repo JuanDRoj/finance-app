@@ -143,7 +143,10 @@ async def test_a_movement_written_while_the_account_is_being_archived_is_refused
     assert getattr(archived, "archived_at", None) is not None
     # The movement waited for the archive, then read the account archived and refused.
     assert isinstance(movement, InvalidFieldError)
-    assert (movement.code, movement.loc) == ("account_archived", ["body", "account_id"])
+    assert (movement.code, movement.loc) == (
+        "account_archived",
+        ["body", "adjustment", "account_id"],
+    )
     assert await _archived_at(engine, world.account_id) is not None
     assert await _balance(engine, world.account_id) == 0
     assert await _scalar(engine, ARCHIVED_WITH_A_BALANCE) == 0

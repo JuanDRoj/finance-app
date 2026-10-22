@@ -548,6 +548,44 @@
         "title": "CurrencyRead",
         "type": "object"
       },
+      "EntryRead": {
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "amount_minor",
+          "category_id"
+        ],
+        "title": "EntryRead",
+        "type": "object"
+      },
       "ErrorResponse": {
         "description": "Body of every error response except 422, for `responses={404: {\"model\": ErrorResponse}}`.",
         "properties": {
@@ -565,6 +603,60 @@
           "code"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "ExpenseCreate": {
+        "additionalProperties": false,
+        "description": "Money goes out of an account, classified in an expense category (or its subcategory).",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9007199254740991.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "const": "expense",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "type",
+          "account_id",
+          "category_id",
+          "amount_minor"
+        ],
+        "title": "ExpenseCreate",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -591,6 +683,60 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "IncomeCreate": {
+        "additionalProperties": false,
+        "description": "Money comes into an account, classified in an income category (or its subcategory).",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9007199254740991.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "type": {
+            "const": "income",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "type",
+          "account_id",
+          "category_id",
+          "amount_minor"
+        ],
+        "title": "IncomeCreate",
         "type": "object"
       },
       "SessionCreate": {
@@ -669,6 +815,121 @@
           }
         },
         "title": "SpaceUpdate",
+        "type": "object"
+      },
+      "TransactionRead": {
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EntryRead"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "confirmed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "expense",
+              "income",
+              "transfer",
+              "adjustment"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "date",
+          "description",
+          "entries"
+        ],
+        "title": "TransactionRead",
+        "type": "object"
+      },
+      "TransferCreate": {
+        "additionalProperties": false,
+        "description": "Money moves between two accounts of the space. Paying a card is a transfer.",
+        "properties": {
+          "amount_minor": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9007199254740991.0,
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "from_account_id": {
+            "format": "uuid",
+            "title": "From Account Id",
+            "type": "string"
+          },
+          "to_account_id": {
+            "format": "uuid",
+            "title": "To Account Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "transfer",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "type",
+          "from_account_id",
+          "to_account_id",
+          "amount_minor"
+        ],
+        "title": "TransferCreate",
         "type": "object"
       },
       "UserRead": {
@@ -2131,6 +2392,99 @@
         "summary": "Unarchive Category",
         "tags": [
           "categories"
+        ]
+      }
+    },
+    "/spaces/{space_id}/transactions": {
+      "post": {
+        "description": "Register an expense, an income or a transfer; the backend builds the entries.\n\nThe body depends on `type`. An expense and an income take an account, a category of their kind\nand a positive amount; a transfer takes two different accounts (paying a card is a transfer)\nand a positive amount. `amount_minor` is always positive, in the minor unit of the currency of\nthe space: the backend applies the sign (on a credit card an expense raises the debt and a\ntransfer from a bank lowers it). The movement is born `confirmed`.\n\nAccounts and categories must belong to the space and be active, or a 422 names the field\n(`loc` is `[\"body\", \"<type>\", \"<field>\"]`): an id of another space answers like one that does\nnot exist.",
+        "operationId": "create_transaction_spaces__space_id__transactions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "expense": "#/components/schemas/ExpenseCreate",
+                    "income": "#/components/schemas/IncomeCreate",
+                    "transfer": "#/components/schemas/TransferCreate"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ExpenseCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/IncomeCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TransferCreate"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Transaction",
+        "tags": [
+          "transactions"
         ]
       }
     }

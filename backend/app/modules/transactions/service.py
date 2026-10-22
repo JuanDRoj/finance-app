@@ -38,6 +38,9 @@ async def create_transaction(
 
     The accounts (and, for an expense or an income, the category) must exist in the space and be
     active, and the category must be of the kind of the movement; otherwise a 422 names the field.
+    Its `loc` is `("body", <type>, <field>)`, the same as the errors of the request body (a
+    discriminated union: Pydantic puts the type in the location), so the frontend finds one path
+    per field whichever rule rejected it.
     A principal category that has subcategories is a valid destination. The accounts are read
     `FOR SHARE`, in a fixed order (by id), and stay locked until the request ends: see
     `accounts.service.get_account_for_share` for what that protects (an account cannot be archived
@@ -199,10 +202,11 @@ async def _check_accounts(
             archived[account_id] = account.archived_at is not None
     for field, account_id in references:
         state = archived[account_id]
+        loc = ("body", data.type, field)
         if state is None:
-            raise InvalidFieldError(("body", field), ACCOUNT_NOT_FOUND, "Account not found")
+            raise InvalidFieldError(loc, ACCOUNT_NOT_FOUND, "Account not found")
         if state:
-            raise InvalidFieldError(("body", field), ACCOUNT_ARCHIVED, "The account is archived")
+            raise InvalidFieldError(loc, ACCOUNT_ARCHIVED, "The account is archived")
 
 
 async def _check_category(
@@ -210,7 +214,7 @@ async def _check_category(
 ) -> None:
     if not isinstance(data, ExpenseCreate | IncomeCreate):
         return  # a transfer and an adjustment have no category
-    loc = ("body", "category_id")
+    loc = ("body", data.type, "category_id")
     try:
         category = await categories_service.get_category(session, space_id, data.category_id)
     except NotFoundError:
