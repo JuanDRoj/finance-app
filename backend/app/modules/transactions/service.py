@@ -94,8 +94,10 @@ async def create_adjustment(
     a negative amount raises the debt. An adjustment is neither income nor expense: no category,
     no description (the UI labels it by type). Its date is the local day of the space at `now`
     (`spaces.timezone`), so the same code dates every adjustment. It goes through
-    `create_transaction`, so the account must exist in the space and be active (a 422 on
-    `account_id` otherwise) and is read `FOR SHARE`.
+    `create_transaction`, so the account must exist in the space and be active (otherwise a 422
+    with `loc` `("body", "adjustment", "account_id")`, like any movement) and is read `FOR SHARE`.
+    In practice that 422 never reaches a client: the initial balance creates the account in the
+    same transaction, and the reconciliation answers 409 `account_archived` (or 404) first.
     """
     timezone = await spaces_service.get_space_timezone(session, space_id)
     day = now.astimezone(ZoneInfo(timezone)).date()
