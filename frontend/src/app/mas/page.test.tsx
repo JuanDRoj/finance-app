@@ -99,12 +99,15 @@ describe("MorePage", () => {
     );
   });
 
-  it("sends desktop visitors to the home, and hides the list from 1024 px meanwhile", async () => {
+  it("sends desktop visitors to the home, and hides the whole column (the h1 too) from 1024 px meanwhile", async () => {
     await renderMore();
     expect(screen.getByTestId("desktop-redirect")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Organiza" }).parentElement?.className).toContain(
-      "lg:hidden",
-    );
+    const column = screen.getByRole("main").parentElement as HTMLElement;
+    expect(column.className).toContain("lg:hidden");
+    expect(column.contains(screen.getByRole("heading", { level: 1, name: "Más" }))).toBe(true);
+    expect(column.contains(screen.getByRole("region", { name: "Organiza" }))).toBe(true);
+    // The sidebar is not inside the hidden column: it stays while the page redirects.
+    expect(column.contains(document.querySelector("[data-slot='sidebar']"))).toBe(false);
   });
 
   it("goes to the home when nothing hangs from Más, without asking the backend", async () => {
@@ -149,6 +152,14 @@ describe("MorePage", () => {
       expect(screen.queryByRole("heading", { level: 2, name: "Organiza" })).toBeNull();
       expect(screen.getByText("Reintentar").closest("a")?.getAttribute("href")).toBe("/mas");
       expect(mocks.redirect).not.toHaveBeenCalled();
+    });
+
+    it("does not hide the error from desktop: it is not the redirecting screen", async () => {
+      backend({ me: failure(502) });
+      await renderMore();
+      expect((screen.getByRole("main").parentElement as HTMLElement).className).not.toContain(
+        "lg:hidden",
+      );
     });
 
     it("keeps the account menu on the error screen", async () => {

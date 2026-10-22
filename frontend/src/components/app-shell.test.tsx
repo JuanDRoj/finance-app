@@ -85,6 +85,24 @@ describe("AppShell", () => {
     expect(screen.getByRole("button", { name: "Menú de la cuenta" })).toBeTruthy();
   });
 
+  it("hides the whole content column from 1024 px for a phone-only screen, but not the sidebar", () => {
+    const { unmount } = render(
+      <AppShell title="Más" phoneOnly>
+        x
+      </AppShell>,
+    );
+    const column = screen.getByRole("main").parentElement as HTMLElement;
+    expect(column.className).toContain("lg:hidden");
+    expect(column.contains(screen.getByRole("heading", { level: 1 }))).toBe(true);
+    expect(column.contains(document.querySelector("[data-slot='sidebar']"))).toBe(false);
+    unmount();
+
+    render(<AppShell title="Inicio">x</AppShell>);
+    expect((screen.getByRole("main").parentElement as HTMLElement).className).not.toContain(
+      "lg:hidden",
+    );
+  });
+
   it("has one h1, the title, and the actions before the avatar", () => {
     render(
       <AppShell title="Cuentas" user={USER} actions={<button type="button">Acción</button>}>

@@ -145,6 +145,7 @@ describe("HomePage", () => {
   it("uses the part of the email before the @ as the name when there is no display name", async () => {
     backend({ me: ok({ ...USER, display_name: null }) });
     await renderHome();
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
     for (const [props] of mocks.userMenu.mock.calls) {
       expect(props.user).toEqual({
         name: "ana.perez",
@@ -160,6 +161,7 @@ describe("HomePage", () => {
     await renderHome();
     expect(headerMenu()).toBeTruthy();
     expect(sidebarMenu()).toBeTruthy();
+    expect(mocks.userMenu).toHaveBeenCalledTimes(2);
     for (const [props] of mocks.userMenu.mock.calls) {
       expect(props.user).toBeUndefined();
     }
@@ -220,9 +222,12 @@ describe("HomePage", () => {
 
   it("never shows the raw values of the backend", async () => {
     await renderHome();
-    // The currency appears only inside its Spanish name ("Peso uruguayo · UYU", D17), never alone.
     expect(screen.queryByText(/personal|household/)).toBeNull();
-    expect(screen.queryByText("UYU")).toBeNull();
+    // The code of the currency shows up in one place only, inside its Spanish name (D17): not as a
+    // bare "UYU" nor in any text such as "Moneda: UYU".
+    expect(screen.queryAllByText(/UYU/).map((node) => node.textContent)).toEqual([
+      "Peso uruguayo · UYU",
+    ]);
   });
 
   it("holds very long names and emails without failing", async () => {

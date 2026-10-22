@@ -156,6 +156,7 @@
   /* KAN-69, from the Kanza canvas (docs/diseno.md D13 and D14). */
   --text-nav-label: 0.6875rem; /* 11px: label of the bottom bar (12px from 768px: text-xs) */
   --text-item: 0.9375rem; /* 15px: title of an item (sidebar sections, rows of "Más") */
+  --text-caption: 0.8125rem; /* 13px: secondary text at the minimum size (currency of the sidebar's space) */
   --text-brand-compact: 1.375rem; /* 22px: the Kanza name in the sidebar */
   --shadow-nav: 0 10px 30px rgba(0, 0, 0, 0.14); /* the bottom bar */
   --shadow-fab: 0 6px 16px rgba(0, 0, 0, 0.18); /* the "+" of the bottom bar */

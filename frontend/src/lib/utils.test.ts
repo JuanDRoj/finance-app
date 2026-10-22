@@ -69,7 +69,9 @@ describe("cn", () => {
     expect(cn("rounded-tooltip", "rounded-full")).toBe("rounded-full");
     expect(cn("rounded-full", "rounded-tooltip")).toBe("rounded-tooltip");
     expect(cn("rounded-tile", "rounded-tooltip")).toBe("rounded-tooltip");
-    // A radius does not remove a color or a size.
+    // A one-sided radius does not remove the others, a color or a size.
+    expect(cn("rounded-icon", "rounded-r-tooltip")).toBe("rounded-icon rounded-r-tooltip");
+    expect(cn("rounded-r-lg", "rounded-r-tooltip")).toBe("rounded-r-tooltip");
     expect(cn("rounded-tooltip bg-tooltip text-tooltip-label")).toBe(
       "rounded-tooltip bg-tooltip text-tooltip-label",
     );
@@ -88,6 +90,13 @@ describe("cn", () => {
     expect(cn("text-brand-compact", "text-sidebar-primary")).toBe(
       "text-brand-compact text-sidebar-primary",
     );
+    // The secondary text at 13 px, next to a color and apart from the tooltip's own 13 px token.
+    expect(cn("text-xs", "text-caption")).toBe("text-caption");
+    expect(cn("text-caption", "text-sm")).toBe("text-sm");
+    expect(cn("text-caption", "text-sidebar-foreground")).toBe(
+      "text-caption text-sidebar-foreground",
+    );
+    expect(cn("text-caption", "text-tooltip-label")).toBe("text-tooltip-label");
   });
 
   it("resolves the shadow tokens of the bottom bar against Tailwind's and keeps them apart from colors", () => {

@@ -18,6 +18,7 @@ const twMerge = extendTailwindMerge({
         "avatar",
         "nav-label",
         "item",
+        "caption",
       ],
       tracking: ["brand", "title"],
       radius: ["tile", "icon", "field", "nav", "sheet", "tooltip"],

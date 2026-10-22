@@ -53,7 +53,7 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-sm font-bold text-sidebar-title">{space.name}</span>
-            <span className="truncate text-xs text-sidebar-foreground">
+            <span className="truncate text-caption text-sidebar-foreground">
               {describeCurrency(space.currency.code)}
             </span>
           </span>

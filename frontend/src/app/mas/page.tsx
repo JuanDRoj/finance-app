@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Más" };
  * "Más" (docs/diseno.md D17 › Navegación del Hito 1): the screen behind the last tab of the bottom
  * bar, for phones and tablets. It lists what hangs from "Más" (`MORE_SECTIONS`: Categorías in
  * Hito 1). From 1024 px those options are already in the sidebar, so `DesktopRedirect` sends the
- * visitor to `/` (and `lg:hidden` keeps the content from flashing meanwhile).
+ * visitor to `/` (and `phoneOnly` hides the whole content column, the `h1` included, meanwhile).
  *
  * - Nothing hangs from "Más" yet (no Categorías screen): there is nothing to show, so `/`. The tab
  *   itself is not drawn in that case.
@@ -64,11 +64,9 @@ export default async function MorePage() {
   }
 
   return (
-    <AppShell title="Más" user={result.user} space={result.spaces[0]}>
+    <AppShell title="Más" user={result.user} space={result.spaces[0]} phoneOnly>
       <DesktopRedirect />
-      <div className="lg:hidden">
-        <MoreList sections={MORE_SECTIONS} />
-      </div>
+      <MoreList sections={MORE_SECTIONS} />
     </AppShell>
   );
 }

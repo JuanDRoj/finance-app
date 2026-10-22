@@ -53,6 +53,11 @@ describe("SidebarBody", () => {
       expect(screen.getByText("Peso uruguayo · UYU")).toBeTruthy();
     });
 
+    it("writes the currency at 13 px (the minimum), with the secondary-text token", () => {
+      render(<SidebarBody space={SPACE} />);
+      expect(screen.getByText("Peso uruguayo · UYU").className).toContain("text-caption");
+    });
+
     it("is not interactive (one space in v1): no link, no button", () => {
       render(<SidebarBody space={SPACE} />);
       const row = screen.getByText("Mi espacio").closest("div");

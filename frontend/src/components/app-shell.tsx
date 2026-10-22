@@ -33,6 +33,12 @@ type AppShellProps = {
    * offset by itself (`globals.css` only raises it when the bar is in the page).
    */
   hideBottomNav?: boolean;
+  /**
+   * For a screen that exists only below 1024 px ("Más"): from 1024 px the whole content column
+   * (header and `main`) is hidden, so nothing of it shows while the page sends the visitor
+   * elsewhere (`DesktopRedirect`). The sidebar stays.
+   */
+  phoneOnly?: boolean;
   children: ReactNode;
 };
 
@@ -59,7 +65,15 @@ type AppShellProps = {
  * restored page from showing data after the logout (KAN-27). A Server Component: it holds no
  * state; it hands the client pieces only the name, the email and the initials.
  */
-export function AppShell({ title, actions, user, space, hideBottomNav, children }: AppShellProps) {
+export function AppShell({
+  title,
+  actions,
+  user,
+  space,
+  hideBottomNav,
+  phoneOnly,
+  children,
+}: AppShellProps) {
   const menuUser: UserMenuUser | undefined = user && {
     name: displayNameOf(user),
     email: user.email,
@@ -87,7 +101,7 @@ export function AppShell({ title, actions, user, space, hideBottomNav, children 
         <Sidebar user={menuUser} space={space} />
         {/* `min-w-0`: a flex item is as wide as its widest content by default, and a long word
             would widen the column past the screen instead of wrapping. */}
-        <div className="min-w-0 lg:flex-1">
+        <div className={cn("min-w-0 lg:flex-1", phoneOnly && "lg:hidden")}>
           {/* Spacing from the canvas: a phone 18 px above (plus the inset) and 12 + 8 px to the
               content; a tablet (K-Tablet) 24 px above and 18 px to the content (4 px of the
               header's padding-bottom plus the 14 px gap of the canvas); a desktop 8 px above (the
