@@ -76,12 +76,13 @@ export function AccountRow({ account, currency, selected }: AccountRowProps) {
       onClick={handleClick}
       className={cn(
         classes,
-        // The chosen row is `primary` at 10 % (12 % in dark), as K-V2 draws it, plus an inset ring so
-        // it does not rely on the tint alone; hover is the subtler `accent`, so hovering another
+        // The chosen row is `primary` at 10 % (12 % in dark), as K-V2 draws it, plus an inset ring in
+        // full `primary` (3:1 as a state indicator, WCAG 1.4.11) so it does not rely on the tint.
+        // Hover is `primary` at 5 %, subtler than the chosen row in both themes, so hovering another
         // row never hides which one is chosen.
         selected
-          ? "bg-primary/10 ring-1 ring-primary/40 ring-inset dark:bg-primary/12"
-          : "hover:bg-accent",
+          ? "bg-primary/10 ring-1 ring-primary ring-inset dark:bg-primary/12"
+          : "hover:bg-primary/5",
         focusRing,
       )}
     >
