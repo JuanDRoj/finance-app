@@ -52,7 +52,7 @@ const answer = (status: number, data?: unknown) =>
     : { error: data, response: new Response(null, { status }) };
 
 /** An API client that answers as `now`, the chosen outcome, says. Only what the demos call is there. */
-function scriptedApi(now: string): ApiClient {
+function scriptedApi(now: string, instant: boolean): ApiClient {
   return {
     async GET() {
       if (now === "list-loading") return never();
@@ -72,7 +72,7 @@ function scriptedApi(now: string): ApiClient {
           ],
         });
       }
-      await wait(1000);
+      if (!instant) await wait(1000);
       return answer(201, {
         id: crypto.randomUUID(),
         archived_at: null,
@@ -87,16 +87,27 @@ function scriptedApi(now: string): ApiClient {
         return answer(409, { code: "space_has_transactions", detail: "The currency is locked" });
       }
       if (now === "offline") throw new TypeError("Failed to fetch");
-      await wait(600);
+      if (!instant) await wait(600);
       return answer(200, { ...SPACE, name: "Mi espacio", currency_locked: false });
     },
   } as unknown as ApiClient;
 }
 
-/** Its own query client: the demos must not share the cached currencies with each other. */
-function Isolated({ children }: Readonly<{ children: ReactNode }>) {
+/**
+ * Its own query client: the demos must not share the cached currencies with each other.
+ *
+ * The picker asks for one retry of the list, and TanStack Query waits a second before it (the app
+ * does too, so the catalog shows it that way). `instant` takes that wait away for the tests, which
+ * cannot sit a second out against a one-second `findBy` timeout.
+ */
+function Isolated({ children, instant }: Readonly<{ children: ReactNode; instant: boolean }>) {
   const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } }),
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, staleTime: 0, ...(instant ? { retryDelay: 0 } : {}) },
+        },
+      }),
   );
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
@@ -128,16 +139,19 @@ function OutcomePicker<T extends string>({
   );
 }
 
-/** The form of a new account in both containers, with a server that answers what you choose. */
-export function AccountFormDemo() {
+/**
+ * The form of a new account in both containers, with a server that answers what you choose.
+ * `instant` (for tests) answers without latency.
+ */
+export function AccountFormDemo({ instant = false }: Readonly<{ instant?: boolean }>) {
   const [outcome, setOutcome] = useState<AccountOutcome>("ok");
-  const api = useMemo(() => scriptedApi(outcome), [outcome]);
+  const api = useMemo(() => scriptedApi(outcome, instant), [outcome, instant]);
   const [round, setRound] = useState(0);
   const [created, setCreated] = useState<AccountWithBalance | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
   return (
-    <Isolated>
+    <Isolated instant={instant}>
       <div className="flex flex-col gap-4">
         <OutcomePicker
           label="Qué responde el servidor al crear"
@@ -184,14 +198,20 @@ export function AccountFormDemo() {
   );
 }
 
-/** The card of the currency with its picker (dialog from 1024 px, sheet below), on a scripted server. */
-export function CurrencyDemo({ beside }: Readonly<{ beside?: ReactNode }>) {
+/**
+ * The card of the currency with its picker (dialog from 1024 px, sheet below), on a scripted server.
+ * `instant` (for tests) answers without latency and retries the list without waiting.
+ */
+export function CurrencyDemo({
+  beside,
+  instant = false,
+}: Readonly<{ beside?: ReactNode; instant?: boolean }>) {
   const [outcome, setOutcome] = useState<CurrencyOutcome>("ok");
-  const api = useMemo(() => scriptedApi(outcome), [outcome]);
+  const api = useMemo(() => scriptedApi(outcome, instant), [outcome, instant]);
 
   return (
     // A new query client per outcome: the currencies fetched with the last one must not be shown.
-    <Isolated key={outcome}>
+    <Isolated key={outcome} instant={instant}>
       <div className="flex flex-col gap-4">
         <OutcomePicker
           label="Qué pasa al abrir «Cambiar» y al usar la moneda"

@@ -11,6 +11,10 @@ vi.mock("@/components/use-is-desktop", () => ({
   useIsDesktop: () => false,
 }));
 
+// The demos run in `instant` mode: no latency in the scripted server and no wait before the retry the
+// picker asks for. Otherwise a test would depend on a real second (the retry's wait, TanStack Query's
+// default) against the one-second timeout of `findBy`, and fail whenever the machine is busy.
+
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
 
@@ -22,12 +26,10 @@ describe("AccountFormDemo", () => {
   const OUTCOME = "Qué responde el servidor al crear";
 
   it("creates the account and hands it to the container, then the form stays busy", async () => {
-    render(<AccountFormDemo />);
+    render(<AccountFormDemo instant />);
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Itaú" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
-    expect(
-      await screen.findByText("El contenedor recibió la cuenta «Itaú».", {}, { timeout: 3000 }),
-    ).toBeTruthy();
+    expect(await screen.findByText("El contenedor recibió la cuenta «Itaú».")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Crear cuenta" }).getAttribute("aria-busy")).toBe(
       "true",
     );
@@ -41,7 +43,7 @@ describe("AccountFormDemo", () => {
     ["server", "Algo salió mal de nuestro lado"],
     ["offline", "No pudimos conectar"],
   ])("shows the Alert of the %s outcome", async (outcome, text) => {
-    render(<AccountFormDemo />);
+    render(<AccountFormDemo instant />);
     choose(OUTCOME, outcome);
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Itaú" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
@@ -49,7 +51,7 @@ describe("AccountFormDemo", () => {
   });
 
   it("marks the fields of a 422", async () => {
-    render(<AccountFormDemo />);
+    render(<AccountFormDemo instant />);
     choose(OUTCOME, "fields");
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Itaú" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
@@ -58,7 +60,7 @@ describe("AccountFormDemo", () => {
   });
 
   it("stays loading when the server never answers", async () => {
-    render(<AccountFormDemo />);
+    render(<AccountFormDemo instant />);
     choose(OUTCOME, "never");
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Itaú" } });
     fireEvent.click(screen.getByRole("button", { name: "Crear cuenta" }));
@@ -70,7 +72,7 @@ describe("AccountFormDemo", () => {
   });
 
   it("opens the panel with the same server", async () => {
-    render(<AccountFormDemo />);
+    render(<AccountFormDemo instant />);
     fireEvent.click(screen.getByRole("button", { name: "Abrir el panel «Nueva cuenta»" }));
     expect(await screen.findByRole("dialog", { name: "Nueva cuenta" })).toBeTruthy();
   });
@@ -85,7 +87,7 @@ describe("CurrencyDemo", () => {
   }
 
   it("lists the currencies in the order of the app", async () => {
-    render(<CurrencyDemo />);
+    render(<CurrencyDemo instant />);
     await openPicker();
     const radios = await screen.findAllByRole("radio");
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual([
@@ -99,20 +101,20 @@ describe("CurrencyDemo", () => {
   });
 
   it("shows the list failing, and the list stuck loading", async () => {
-    const { unmount } = render(<CurrencyDemo />);
+    const { unmount } = render(<CurrencyDemo instant />);
     choose(OUTCOME, "list-error");
     await openPicker();
     expect((await screen.findByRole("alert")).textContent).toContain("Algo salió mal");
     unmount();
 
-    render(<CurrencyDemo />);
+    render(<CurrencyDemo instant />);
     choose(OUTCOME, "list-loading");
     const dialog = await openPicker();
     expect(dialog.querySelectorAll("[data-slot='skeleton']")).toHaveLength(6);
   });
 
   it("shows the 409 when the currency is used", async () => {
-    render(<CurrencyDemo />);
+    render(<CurrencyDemo instant />);
     choose(OUTCOME, "locked");
     await openPicker();
     fireEvent.click(await screen.findByRole("radio", { name: /Euro/ }));
@@ -121,7 +123,7 @@ describe("CurrencyDemo", () => {
   });
 
   it("draws what it is given next to the card", () => {
-    render(<CurrencyDemo beside={<p>La tarjeta del grillo</p>} />);
+    render(<CurrencyDemo instant beside={<p>La tarjeta del grillo</p>} />);
     expect(screen.getByText("La tarjeta del grillo")).toBeTruthy();
   });
 });
