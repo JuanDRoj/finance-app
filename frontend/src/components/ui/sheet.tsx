@@ -18,7 +18,9 @@ import { OVERLAY_CLASSES } from "./dialog";
  *
  * The shadcn source was adjusted to Menta by hand because its CLI would overwrite `button.tsx` and
  * add the `cn` package (docs/diseno.md D4). Compose it as `Sheet` > `SheetContent` > `SheetHeader`
- * (with a `SheetTitle`, which names the dialog) + `SheetBody` + `SheetFooter`.
+ * (with a `SheetTitle`, which names the dialog) + `SheetBody` + `SheetFooter`. The three parts pad
+ * themselves for the side panel (24 px) and take no side padding inside the bottom sheet, which has
+ * its own (16 px or the safe area), so the same parts serve both shapes with no wrapper.
  */
 function Sheet(props: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -45,8 +47,12 @@ type SheetContentProps = SheetPrimitive.Popup.Props & {
 // Insets: the panel floats 12 px from the edges, or the safe area if that is more (a notch).
 const PANEL =
   "top-[max(0.75rem,env(safe-area-inset-top,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] w-110 max-w-[calc(100%-1.5rem)] rounded-sheet shadow-panel data-ending-style:translate-x-6 data-starting-style:translate-x-6";
+// The sheet is full width, so a phone turned sideways has its notch under the sides: 16 px of
+// padding or the safe area of that side, whichever is more (the pattern of `app-shell.tsx` and
+// `bottom-nav.tsx`). The header, the body and the footer take no side padding of their own inside
+// it (see `IN_BOTTOM` below): the sheet's is the only one.
 const BOTTOM =
-  "inset-x-0 bottom-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-1rem)] rounded-t-sheet px-4 pt-2.5 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] shadow-sheet data-ending-style:translate-y-10 data-starting-style:translate-y-10";
+  "inset-x-0 bottom-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-1rem)] rounded-t-sheet pt-2.5 pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))] shadow-sheet data-ending-style:translate-y-10 data-starting-style:translate-y-10";
 
 function SheetContent({
   side = "right",
@@ -111,7 +117,12 @@ function SheetHeader({ showClose = true, className, children, ...props }: SheetH
   return (
     <div
       data-slot="sheet-header"
-      className={cn("flex shrink-0 items-center gap-2 px-6 pt-5.5 pb-2.5", className)}
+      className={cn(
+        "flex shrink-0 items-center gap-2 px-6 pt-5.5 pb-2.5",
+        // In the bottom sheet the grabber is above and the sheet itself pads the sides.
+        "in-data-[side=bottom]:px-0 in-data-[side=bottom]:pt-0",
+        className,
+      )}
       {...props}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
@@ -161,6 +172,7 @@ function SheetBody({ className, ...props }: ComponentProps<"div">) {
       data-slot="sheet-body"
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-4.5 overflow-y-auto overscroll-contain px-6 py-3.5",
+        "in-data-[side=bottom]:px-0",
         className,
       )}
       {...props}
@@ -173,7 +185,12 @@ function SheetFooter({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("flex shrink-0 flex-wrap justify-end gap-2.5 px-6 pt-4 pb-5.5", className)}
+      className={cn(
+        "flex shrink-0 flex-wrap justify-end gap-2.5 px-6 pt-4 pb-5.5",
+        // The sheet already leaves its own room under the content (and "Cancelar" follows).
+        "in-data-[side=bottom]:px-0 in-data-[side=bottom]:pb-0",
+        className,
+      )}
       {...props}
     />
   );

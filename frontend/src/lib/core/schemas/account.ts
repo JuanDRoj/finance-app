@@ -111,8 +111,10 @@ function buildAccountBody(
 /** What the form holds: all text, before the schema checks it. */
 export type AccountFormValues = z.input<ReturnType<typeof accountFormSchema>>;
 
-// Contract check (docs: frontend/CLAUDE.md > Formularios). The form's values are not the request
-// body, so the check goes on the **output** of the schema, which is: if the body gets a field the
-// backend does not have, or a type stops matching, `npm run typecheck` fails here.
+// Contract check (frontend/CLAUDE.md > Formularios). The form's values are not the request body,
+// so what must match the generated type is the schema's **output**. What really holds it is the
+// type `AccountCreate` on `body` in `buildAccountBody` and on the return of the `.transform`: a
+// field the backend does not have, or one of the wrong type, fails `npm run typecheck` there. This
+// line is only a second net, in case someone drops those annotations and the output drifts.
 const _check: AccountCreate = {} as z.output<ReturnType<typeof accountFormSchema>>;
 void _check;

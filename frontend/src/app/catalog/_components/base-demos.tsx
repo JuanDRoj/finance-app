@@ -21,6 +21,7 @@ import {
   SheetBody,
   SheetClose,
   SheetContent,
+  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -184,17 +185,20 @@ export function BottomSheetDemo() {
         Abrir la hoja inferior
       </SheetTrigger>
       <SheetContent side="bottom">
-        <div className="flex flex-col gap-1.5 px-1 pb-3.5">
+        {/* The same parts as the side panel: inside the sheet they take no side padding of their own. */}
+        <SheetHeader showClose={false}>
           <SheetTitle className="text-xl">Moneda de tu espacio</SheetTitle>
-          <p className="text-sm text-muted-foreground">
+          <SheetDescription>
             Todos tus montos usarán esta moneda. Puedes cambiarla hasta que registres tu primer
             movimiento.
-          </p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3.5">
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody>
           <CurrencyChoices name="sheet-demo-currency" layout="sheet" />
-        </div>
-        <SheetClose render={<Button className="shrink-0" />}>Usar esta moneda</SheetClose>
+        </SheetBody>
+        <SheetFooter>
+          <SheetClose render={<Button className="w-full" />}>Usar esta moneda</SheetClose>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

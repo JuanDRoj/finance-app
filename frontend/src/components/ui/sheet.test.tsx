@@ -219,6 +219,36 @@ describe("Sheet, bottom sheet (side='bottom')", () => {
     expect(dialog.className).not.toContain("w-110");
   });
 
+  it("clears the safe areas on the sides too: a phone turned sideways has the notch there", () => {
+    render(<Panel side="bottom" />);
+    const { className } = screen.getByRole("dialog");
+    // 16 px or the safe area of that side, whichever is more (as app-shell.tsx and bottom-nav.tsx).
+    expect(className).toContain("pl-[max(1rem,env(safe-area-inset-left,0px))]");
+    expect(className).toContain("pr-[max(1rem,env(safe-area-inset-right,0px))]");
+    // A fixed side padding would be added to nothing: the inset must be able to win.
+    expect(className).not.toMatch(/(^|\s)px-/);
+    expect(className).toContain("pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]");
+  });
+
+  it("pads the sides once: the header, the body and the footer add none of their own in it", () => {
+    render(<Panel side="bottom" />);
+    for (const slot of ["header", "body", "footer"]) {
+      const { className } = document.querySelector(`[data-slot='sheet-${slot}']`) as HTMLElement;
+      // 24 px for the side panel (the default); 0 inside the bottom sheet, which has its own.
+      expect(className, slot).toContain("px-6");
+      expect(className, slot).toContain("in-data-[side=bottom]:px-0");
+    }
+  });
+
+  it("keeps the 24 px side padding of the parts in the side panel, where nothing pads for them", () => {
+    render(<Panel />);
+    expect(screen.getByRole("dialog").className).not.toMatch(/(^|\s)p[lrx]-/);
+    for (const slot of ["header", "body", "footer"]) {
+      const element = document.querySelector(`[data-slot='sheet-${slot}']`) as HTMLElement;
+      expect(element.className, slot).toContain("px-6");
+    }
+  });
+
   it("draws a decorative grabber, hidden from assistive technology", () => {
     render(<Panel side="bottom" />);
     const grabber = document.querySelector("[data-slot='sheet-grabber']");
