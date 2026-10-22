@@ -20,7 +20,10 @@ import { OVERLAY_CLASSES } from "./dialog";
  * add the `cn` package (docs/diseno.md D4). Compose it as `Sheet` > `SheetContent` > `SheetHeader`
  * (with a `SheetTitle`, which names the dialog) + `SheetBody` + `SheetFooter`. The three parts pad
  * themselves for the side panel (24 px) and take no side padding inside the bottom sheet, which has
- * its own (16 px or the safe area), so the same parts serve both shapes with no wrapper.
+ * its own (16 px or the safe area), so the same parts serve both shapes with no wrapper. They tell
+ * the two apart with the named group `group/sheet` that `SheetContent` sets on its popup plus its
+ * `data-side` (`group-data-[side=bottom]/sheet:`), not with `in-data-[side=bottom]:`, which would
+ * also react to an ancestor with `data-side="bottom"` that is not this sheet.
  */
 function Sheet(props: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -50,7 +53,7 @@ const PANEL =
 // The sheet is full width, so a phone turned sideways has its notch under the sides: 16 px of
 // padding or the safe area of that side, whichever is more (the pattern of `app-shell.tsx` and
 // `bottom-nav.tsx`). The header, the body and the footer take no side padding of their own inside
-// it (see `IN_BOTTOM` below): the sheet's is the only one.
+// it (they carry `group-data-[side=bottom]/sheet:` variants): the sheet's is the only one.
 const BOTTOM =
   "inset-x-0 bottom-0 max-h-[calc(100dvh-env(safe-area-inset-top,0px)-1rem)] rounded-t-sheet pt-2.5 pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pl-[max(1rem,env(safe-area-inset-left,0px))] shadow-sheet data-ending-style:translate-y-10 data-starting-style:translate-y-10";
 
@@ -68,7 +71,9 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "glass-strong fixed z-50 flex flex-col text-foreground",
+          // `group/sheet`: the parts below ask for the bottom sheet through this group, not through any
+          // ancestor with `data-side` (Base UI puts one on its menus, tooltips and popovers).
+          "group/sheet glass-strong fixed z-50 flex flex-col text-foreground",
           "transition-[opacity,translate] duration-200 ease-out motion-reduce:transition-none",
           "data-ending-style:opacity-0 data-starting-style:opacity-0",
           side === "right" ? PANEL : BOTTOM,
@@ -120,7 +125,7 @@ function SheetHeader({ showClose = true, className, children, ...props }: SheetH
       className={cn(
         "flex shrink-0 items-center gap-2 px-6 pt-5.5 pb-2.5",
         // In the bottom sheet the grabber is above and the sheet itself pads the sides.
-        "in-data-[side=bottom]:px-0 in-data-[side=bottom]:pt-0",
+        "group-data-[side=bottom]/sheet:px-0 group-data-[side=bottom]/sheet:pt-0",
         className,
       )}
       {...props}
@@ -172,7 +177,7 @@ function SheetBody({ className, ...props }: ComponentProps<"div">) {
       data-slot="sheet-body"
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-4.5 overflow-y-auto overscroll-contain px-6 py-3.5",
-        "in-data-[side=bottom]:px-0",
+        "group-data-[side=bottom]/sheet:px-0",
         className,
       )}
       {...props}
@@ -188,7 +193,7 @@ function SheetFooter({ className, ...props }: ComponentProps<"div">) {
       className={cn(
         "flex shrink-0 flex-wrap justify-end gap-2.5 px-6 pt-4 pb-5.5",
         // The sheet already leaves its own room under the content (and "Cancelar" follows).
-        "in-data-[side=bottom]:px-0 in-data-[side=bottom]:pb-0",
+        "group-data-[side=bottom]/sheet:px-0 group-data-[side=bottom]/sheet:pb-0",
         className,
       )}
       {...props}

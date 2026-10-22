@@ -135,6 +135,41 @@ describe("accountFormSchema: what it refuses, in Spanish", () => {
     });
   });
 
+  it("counts the 80 characters of the name as the backend does: by code point, not by UTF-16 unit", () => {
+    // Pydantic `max_length` (len(str)) and PostgreSQL `char_length` count code points: an emoji is
+    // one character for them, but 2 in JavaScript's `.length`.
+    const emojis = (count: number) => "😀".repeat(count);
+    expect(emojis(80).length).toBe(160); // what zod's `.max(80)` would have refused
+    expect(check({ name: emojis(80) }).body).toMatchObject({ name: emojis(80) });
+    expect(check({ name: emojis(81) }).errors).toEqual({
+      name: "Usa como máximo 80 caracteres.",
+    });
+    // A decomposed accent is two code points for the backend too ("e" + U+0301).
+    expect(check({ name: "e\u0301".repeat(40) }).body).toBeDefined();
+    expect(check({ name: "e\u0301".repeat(41) }).errors).toEqual({
+      name: "Usa como máximo 80 caracteres.",
+    });
+    // Letters outside the BMP and plain ones add up in the same count.
+    expect(check({ name: `${"a".repeat(40)}${emojis(40)}` }).body).toBeDefined();
+    expect(check({ name: `${"a".repeat(41)}${emojis(40)}` }).errors).toEqual({
+      name: "Usa como máximo 80 caracteres.",
+    });
+  });
+
+  it("trims before counting, and still counts plain text as before", () => {
+    expect(check({ name: ` ${"😀".repeat(80)} ` }).body).toMatchObject({ name: "😀".repeat(80) });
+    expect(check({ name: "ñ".repeat(80) }).body).toBeDefined();
+    expect(check({ name: "ñ".repeat(81) }).errors).toEqual({
+      name: "Usa como máximo 80 caracteres.",
+    });
+  });
+
+  it("reports a name that is too long together with the other problems", () => {
+    const { errors } = check({ name: "😀".repeat(81), balance: "1,505" });
+    expect(Object.keys(errors ?? {}).sort()).toEqual(["balance", "name"]);
+    expect(errors?.name).toBe("Usa como máximo 80 caracteres.");
+  });
+
   it("asks for a type", () => {
     const result = accountFormSchema(2).safeParse({ ...blank, type: "" });
     expect(result.success).toBe(false);

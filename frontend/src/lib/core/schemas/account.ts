@@ -12,10 +12,14 @@ import { describeMoneyInputIssue } from "./money-input";
  * Messages are the Spanish text shown under each field.
  */
 
-/** The database caps an account name at 80 characters (`ck_accounts_name_length`). */
+/**
+ * The database caps an account name at 80 characters (`ck_accounts_name_length`, `char_length`) and
+ * the backend at 80 (Pydantic `max_length`): both count code points, so does the form.
+ */
 export const ACCOUNT_NAME_MAX_LENGTH = 80;
 
 const NAME_REQUIRED = "Escribe un nombre.";
+const NAME_TOO_LONG = `Usa como máximo ${ACCOUNT_NAME_MAX_LENGTH} caracteres.`;
 const DAY_REQUIRED = "Elige un día del 1 al 31.";
 
 // A day of the month as the `<select>` gives it back: "1" to "31", or "" for "Elige".
@@ -41,8 +45,8 @@ export function accountFormSchema(exponent: number) {
         name: z
           .string({ error: NAME_REQUIRED })
           .trim()
-          .min(1, NAME_REQUIRED)
-          .max(ACCOUNT_NAME_MAX_LENGTH, `Usa como máximo ${ACCOUNT_NAME_MAX_LENGTH} caracteres.`),
+          // The cap is checked below with the object (it counts characters, not UTF-16 units).
+          .min(1, NAME_REQUIRED),
         balance: z.string({ error: "Escribe un monto." }),
         closingDay: z.string(),
         dueDay: z.string(),
@@ -84,6 +88,13 @@ function buildAccountBody(
   const isCard = values.type === "credit_card";
   const body: AccountCreate = { type: values.type, name: values.name };
   const issues: { path: keyof FormFields; message: string }[] = [];
+
+  // Characters, not UTF-16 units: the backend (Pydantic `max_length`, `len(str)`) and the database
+  // (`char_length`) count code points, and zod's `.max()` counts `.length`, where an emoji weighs 2
+  // (80 emojis would be refused here that the backend accepts). `[...name]` splits by code point.
+  if ([...values.name].length > ACCOUNT_NAME_MAX_LENGTH) {
+    issues.push({ path: "name", message: NAME_TOO_LONG });
+  }
 
   const balance = parseMoneyInput(values.balance, exponent, { allowNegative: !isCard });
   if (balance.ok) {

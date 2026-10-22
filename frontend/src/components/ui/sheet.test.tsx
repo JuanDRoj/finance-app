@@ -236,12 +236,36 @@ describe("Sheet, bottom sheet (side='bottom')", () => {
       const { className } = document.querySelector(`[data-slot='sheet-${slot}']`) as HTMLElement;
       // 24 px for the side panel (the default); 0 inside the bottom sheet, which has its own.
       expect(className, slot).toContain("px-6");
-      expect(className, slot).toContain("in-data-[side=bottom]:px-0");
+      expect(className, slot).toContain("group-data-[side=bottom]/sheet:px-0");
+    }
+    expect(document.querySelector("[data-slot='sheet-header']")?.className).toContain(
+      "group-data-[side=bottom]/sheet:pt-0",
+    );
+    expect(document.querySelector("[data-slot='sheet-footer']")?.className).toContain(
+      "group-data-[side=bottom]/sheet:pb-0",
+    );
+  });
+
+  it("asks for the bottom sheet through the named group of its own popup, never through any ancestor", () => {
+    render(<Panel side="bottom" />);
+    // The popup is the group and carries the side the variant looks at (data-slot + data-side).
+    const popup = screen.getByRole("dialog");
+    expect(popup.getAttribute("data-slot")).toBe("sheet-content");
+    expect(popup.getAttribute("data-side")).toBe("bottom");
+    expect(popup.className.split(/\s+/)).toContain("group/sheet");
+    // `in-data-[side=bottom]:` would also match a menu or a tooltip of Base UI (they set data-side)
+    // that contains a part: no part uses it.
+    for (const slot of ["header", "body", "footer"]) {
+      const { className } = document.querySelector(`[data-slot='sheet-${slot}']`) as HTMLElement;
+      expect(className, slot).not.toContain("in-data-");
     }
   });
 
   it("keeps the 24 px side padding of the parts in the side panel, where nothing pads for them", () => {
     render(<Panel />);
+    // The same group, but its side is "right": the bottom variants of the parts do not apply.
+    expect(screen.getByRole("dialog").className.split(/\s+/)).toContain("group/sheet");
+    expect(screen.getByRole("dialog").getAttribute("data-side")).toBe("right");
     expect(screen.getByRole("dialog").className).not.toMatch(/(^|\s)p[lrx]-/);
     for (const slot of ["header", "body", "footer"]) {
       const element = document.querySelector(`[data-slot='sheet-${slot}']`) as HTMLElement;
