@@ -67,7 +67,7 @@ export function ArchivedAccounts({ accounts, space, api = browserApi }: Archived
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex min-h-13 items-center justify-between gap-3 rounded-[inherit] px-4 text-left text-item font-bold lg:min-h-11.5 lg:text-muted-foreground",
+          "flex min-h-13 items-center justify-between gap-3 rounded-[inherit] px-4 text-left text-item font-bold lg:min-h-11.5 lg:text-sm lg:text-muted-foreground",
           focusRing,
         )}
       >

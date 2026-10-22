@@ -74,7 +74,16 @@ export function AccountRow({ account, currency, selected }: AccountRowProps) {
       prefetch={false}
       aria-current={selected ? "true" : undefined}
       onClick={handleClick}
-      className={cn(classes, "hover:bg-primary-soft", selected && "bg-primary-soft", focusRing)}
+      className={cn(
+        classes,
+        // The chosen row is `primary` at 10 % (12 % in dark), as K-V2 draws it, plus an inset ring so
+        // it does not rely on the tint alone; hover is the subtler `accent`, so hovering another
+        // row never hides which one is chosen.
+        selected
+          ? "bg-primary/10 ring-1 ring-primary/40 ring-inset dark:bg-primary/12"
+          : "hover:bg-accent",
+        focusRing,
+      )}
     >
       {content}
     </Link>

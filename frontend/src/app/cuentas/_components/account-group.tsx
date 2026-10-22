@@ -31,10 +31,10 @@ export function AccountGroup({
   const titleId = useId();
   return (
     <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-3 px-1 lg:px-4 lg:pt-0">
+      <div className="flex items-baseline justify-between gap-3 px-1 lg:px-4">
         <h2
           id={titleId}
-          className="font-heading text-base font-bold lg:text-item lg:text-muted-foreground"
+          className="font-heading text-base font-bold lg:text-sm lg:text-muted-foreground"
         >
           {title}
         </h2>
