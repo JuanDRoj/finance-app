@@ -9,6 +9,7 @@ import {
   fieldErrorMessage,
   isErrorResponse,
   isValidationErrorBody,
+  orderCurrencies,
   validationIssuesOf,
 } from "./i18n";
 
@@ -290,5 +291,44 @@ describe("describeCurrency", () => {
 
   it("keeps the order of the list the user picks from (docs/diseno.md D18)", () => {
     expect(Object.keys(CURRENCY_NAMES)).toEqual(["UYU", "COP", "USD", "ARS", "BRL", "EUR"]);
+  });
+});
+
+describe("orderCurrencies", () => {
+  const codes = (list: { code: string }[]) => list.map((currency) => currency.code);
+
+  it("puts the currencies in the order of the list the person picks from", () => {
+    const fromBackend = ["EUR", "ARS", "UYU", "BRL", "USD", "COP"].map((code) => ({ code }));
+    expect(codes(orderCurrencies(fromBackend))).toEqual(["UYU", "COP", "USD", "ARS", "BRL", "EUR"]);
+  });
+
+  it("keeps the rest of each currency untouched", () => {
+    const list = [
+      { code: "USD", exponent: 2 },
+      { code: "UYU", exponent: 2 },
+    ];
+    expect(orderCurrencies(list)).toEqual([
+      { code: "UYU", exponent: 2 },
+      { code: "USD", exponent: 2 },
+    ]);
+  });
+
+  it("sends a currency without a name after the known ones, in the order the backend gave", () => {
+    const fromBackend = ["CLP", "EUR", "PEN", "UYU"].map((code) => ({ code }));
+    expect(codes(orderCurrencies(fromBackend))).toEqual(["UYU", "EUR", "CLP", "PEN"]);
+  });
+
+  it("does not change the array it is given, and copes with an empty one", () => {
+    const list = [{ code: "EUR" }, { code: "UYU" }];
+    orderCurrencies(list);
+    expect(codes(list)).toEqual(["EUR", "UYU"]);
+    expect(orderCurrencies([])).toEqual([]);
+  });
+
+  it("does not take inherited keys for known currencies", () => {
+    expect(codes(orderCurrencies([{ code: "constructor" }, { code: "UYU" }]))).toEqual([
+      "UYU",
+      "constructor",
+    ]);
   });
 });

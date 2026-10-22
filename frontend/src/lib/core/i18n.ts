@@ -265,3 +265,20 @@ export function describeAccountType(type: string): string {
     ? (ACCOUNT_TYPE_NAMES[type as keyof typeof ACCOUNT_TYPE_NAMES] ?? "Cuenta")
     : "Cuenta";
 }
+
+/**
+ * The currencies of `GET /currencies` in the order the person picks from (the order of
+ * `CURRENCY_NAMES`: UYU, COP, USD, ARS, BRL, EUR). One the map does not know (the backend seeded a
+ * new currency) goes after them, in the order the backend sent. Returns a new array.
+ */
+export function orderCurrencies<T extends { code: string }>(currencies: readonly T[]): T[] {
+  const known = Object.keys(CURRENCY_NAMES);
+  const rank = (code: string) => {
+    const index = known.indexOf(code);
+    return index === -1 ? known.length : index;
+  };
+  return currencies
+    .map((currency, position) => ({ currency, position }))
+    .sort((a, b) => rank(a.currency.code) - rank(b.currency.code) || a.position - b.position)
+    .map(({ currency }) => currency);
+}

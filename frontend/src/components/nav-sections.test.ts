@@ -54,10 +54,23 @@ describe("NAV_SECTIONS", () => {
 });
 
 describe("what the navigation shows today", () => {
-  it("has nothing in Más and no main action until their screens exist", () => {
+  it("has nothing in Más until Categorías exists", () => {
     expect(MORE_SECTIONS).toEqual([]);
-    expect(PRIMARY_ACTION).toBeNull();
     expect(NAV).toEqual({ sections: NAV_SECTIONS, more: MORE_SECTIONS, action: PRIMARY_ACTION });
+  });
+
+  // The "+" and the sidebar button open the form of an account until the panel to register a
+  // movement exists (FE-20, which changes this and the test). Never a link to a screen that does
+  // not exist: /cuentas/nueva is the page of the form.
+  it("opens the form of a new account with the main action", () => {
+    expect(PRIMARY_ACTION).toEqual({
+      href: "/cuentas/nueva",
+      label: "Nueva cuenta",
+      buttonText: "Nueva cuenta",
+      panel: { param: "cuenta", value: "nueva" },
+    });
+    // The visible text is the accessible name of the sidebar button (WCAG 2.5.3): no "N" hint yet.
+    expect(PRIMARY_ACTION?.buttonText).toBe(PRIMARY_ACTION?.label);
   });
 
   it("keeps the 'Más' tab pointing at /mas", () => {

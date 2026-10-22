@@ -21,8 +21,12 @@ import { ApiError } from "@/lib/core/data/errors";
 import { describeApiError } from "@/lib/core/i18n";
 import { formatMoney } from "@/lib/core/money";
 import { MoreList } from "@/components/more-list";
+import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { MoreSection } from "@/components/nav-sections";
 import { AuditPanel } from "./_components/audit-panel";
+import { AccountsSummary } from "../_components/accounts-summary";
+import { FirstUse } from "../_components/first-use";
+import { AccountFormDemo, CurrencyDemo } from "./_components/first-use-demos";
 import {
   BottomSheetDemo,
   DialogDemo,
@@ -39,6 +43,10 @@ import { ToastDemo } from "./_components/toast-demo";
 // lib/env/page-extensions.ts). Every base component in its states, at 360 px and up.
 
 const UYU = { code: "UYU", exponent: 2 } as const;
+// The space of the catalog is not a real one, and the catalog has no session: `?cuenta=nueva` here
+// opens the real panel of the shell (it reads that param), and sending it would reach the real
+// backend with no session cookie, which answers 401 and takes the page to /login.
+const DEMO_SPACE_ID = "00000000-0000-4000-8000-000000000000";
 const AMOUNTS = [155050, 1234567, 9, 100000000, 888888];
 const VARIANTS = ["default", "secondary", "outline", "ghost", "destructive", "link"] as const;
 const VARIANT_LABELS: Record<(typeof VARIANTS)[number], string> = {
@@ -96,6 +104,35 @@ const DEMO_MORE: readonly MoreSection[] = [
   },
 ];
 
+// Accounts as the Inicio lists them once the space has some, with the extremes of break-ui: a name
+// that does not fit, a balance at the limit of the backend, an overdraft and a card in debt.
+const DEMO_ACCOUNT = {
+  archived_at: null,
+  closing_day: null,
+  due_day: null,
+} as const;
+const DEMO_ACCOUNTS: AccountWithBalance[] = [
+  { ...DEMO_ACCOUNT, id: "1", name: "Itaú", type: "bank", balance_minor: 8425000 },
+  { ...DEMO_ACCOUNT, id: "2", name: "Billetera", type: "cash", balance_minor: 550000 },
+  {
+    ...DEMO_ACCOUNT,
+    id: "3",
+    name: "Visa Itaú",
+    type: "credit_card",
+    closing_day: 5,
+    due_day: 12,
+    balance_minor: -2412000,
+  },
+  {
+    ...DEMO_ACCOUNT,
+    id: "4",
+    name: "Cuenta de ahorro en dólares del banco con el nombre más largo que se te ocurra",
+    type: "bank",
+    balance_minor: Number.MAX_SAFE_INTEGER,
+  },
+  { ...DEMO_ACCOUNT, id: "5", name: "Descubierto", type: "bank", balance_minor: -25075 },
+];
+
 const NOT_FOUND = describeApiError(
   new ApiError(404, { detail: "Space not found", code: "space_not_found" }),
 );
@@ -122,7 +159,7 @@ export default async function CatalogPage({
     <AppShell
       title={headerTitle}
       user={DEMO_USER}
-      space={{ name: "Mi espacio", currency: { code: "UYU", exponent: 2 } }}
+      space={{ id: DEMO_SPACE_ID, name: "Mi espacio", currency: { code: "UYU", exponent: 2 } }}
       hideBottomNav={hideBottomNav}
     >
       <div className="flex flex-col gap-8">
@@ -428,6 +465,35 @@ export default async function CatalogPage({
             <BottomSheetDemo />
             <DialogDemo />
           </div>
+        </Section>
+
+        <Section title="Inicio sin cuentas y moneda del espacio">
+          <p className="text-sm text-muted-foreground">
+            La tarjeta del grillo y la de la moneda como en el Inicio (lado a lado desde 1024 px,
+            hasta 1120 px; una debajo de la otra antes). &quot;Cambiar&quot; abre el diálogo (desde
+            1024 px) o la hoja inferior (menos), con un servidor de mentira que responde lo que
+            elijas: la lista cargando, fallando, el 409 de &quot;ya hay movimientos&quot;. El botón
+            del grillo abre el panel lateral real desde 1024 px: aquí no hay sesión, así que
+            enviarlo da 401 y te lleva a /login (los servidores de mentira son los de las demos de
+            esta sección y de «Formulario de cuenta»).
+          </p>
+          <CurrencyDemo
+            beside={
+              <div className="flex min-w-0 flex-col lg:basis-130 lg:grow-2">
+                <FirstUse />
+              </div>
+            }
+          />
+        </Section>
+
+        <Section title="Inicio con cuentas (Tus cuentas)">
+          <div className="flex flex-col gap-3.5 lg:max-w-280">
+            <AccountsSummary accounts={DEMO_ACCOUNTS} currency={UYU} />
+          </div>
+        </Section>
+
+        <Section title="Formulario de cuenta">
+          <AccountFormDemo />
         </Section>
 
         <Section title="Cifras (tnum)">
