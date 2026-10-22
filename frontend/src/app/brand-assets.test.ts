@@ -38,6 +38,7 @@ describe("Kanza brand assets (kit v2, public/)", () => {
       "site.webmanifest",
       "brand/kanza-icon.svg",
       "brand/kanza-peek.svg",
+      "brand/kanza-symbol.svg", // the grillo of the empty states (KAN-91)
     ]) {
       expect(existsSync(new URL(file, publicDir)), file).toBe(true);
     }
@@ -51,6 +52,7 @@ describe("Kanza brand assets (kit v2, public/)", () => {
       "kanza-lockup-horizontal.svg",
       "kanza-lockup-vertical.svg",
       "kanza-peek.svg",
+      "kanza-symbol.svg",
     ]);
   });
 

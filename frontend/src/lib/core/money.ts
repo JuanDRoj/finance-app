@@ -74,6 +74,8 @@ function formatterFor(
       // Always exactly `exponent` decimals: what is shown is what is stored.
       minimumFractionDigits: currency.exponent,
       maximumFractionDigits: currency.exponent,
+      // Thousands are always separated: es-ES (the euro) would skip it in "1234,50 €".
+      useGrouping: "always",
       signDisplay,
     });
     formatters.set(key, formatter);
@@ -101,4 +103,58 @@ export function formatMoney(
     .formatToParts(decimal as Intl.StringNumericLiteral)
     .map((part) => (part.type === "minusSign" ? MINUS_SIGN : part.value))
     .join("");
+}
+
+/**
+ * The symbol people write before an amount of this currency, taken from the same formatter that
+ * prints it: "$" for the pesos, "US$", "R$", "€", or the ISO code of a currency Intl does not know
+ * by symbol. It is the prefix of the money field (docs/diseno.md D18: no "$" is ever fixed).
+ */
+export function currencySymbolOf(currency: Currency): string {
+  const parts = formatterFor(localeForCurrency(currency.code), currency, "never").formatToParts(0);
+  return parts.find((part) => part.type === "currency")?.value ?? currency.code;
+}
+
+/** Why `parseMoneyInput` refused a text; the form maps each one to its Spanish message. */
+export type MoneyInputIssue =
+  "empty" | "invalid" | "too_many_decimals" | "negative_not_allowed" | "too_large";
+
+export type ParsedMoney = { ok: true; minor: number } | { ok: false; issue: MoneyInputIssue };
+
+export type ParseMoneyOptions = {
+  /** A leading minus ("-" or the typographic "−") is accepted. Default: it is an error. */
+  allowNegative?: boolean;
+};
+
+// An optional minus, digits, and at most one decimal separator ("," or "."). No thousands
+// separator: "1.550" is 1,55 pesos with three decimals (an error for exponent 2), not 1550.
+const MONEY_INPUT = /^(-|\u2212)?(\d*)(?:[.,](\d*))?$/;
+
+/**
+ * Turns what a person typed into an amount in the minor unit of the currency ("0,29" with
+ * exponent 2 -> 29), using integers and strings only: never a float, so 0,29 is never
+ * 28.999999999999996. At most `exponent` decimals (what is shown is what is stored); more is an
+ * error, not a rounding. The result is a safe integer, the same cap as the backend
+ * (`MAX_SAFE_INTEGER`), and zero never carries a sign. An empty text is `empty`, so the form can
+ * decide whether an empty amount means "none" (an optional balance) or "required".
+ */
+export function parseMoneyInput(
+  text: string,
+  exponent: number,
+  { allowNegative = false }: ParseMoneyOptions = {},
+): ParsedMoney {
+  assertExponent(exponent);
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: false, issue: "empty" };
+
+  const match = MONEY_INPUT.exec(trimmed);
+  const [, minus, integerPart = "", fractionPart = ""] = match ?? [];
+  if (!match || (integerPart === "" && fractionPart === "")) return { ok: false, issue: "invalid" };
+  if (minus && !allowNegative) return { ok: false, issue: "negative_not_allowed" };
+  if (fractionPart.length > exponent) return { ok: false, issue: "too_many_decimals" };
+
+  const magnitude = BigInt(`${integerPart || "0"}${fractionPart.padEnd(exponent, "0")}`);
+  if (magnitude > BigInt(Number.MAX_SAFE_INTEGER)) return { ok: false, issue: "too_large" };
+  const value = Number(magnitude);
+  return { ok: true, minor: minus && value !== 0 ? -value : value };
 }

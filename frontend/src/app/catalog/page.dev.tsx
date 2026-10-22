@@ -1,4 +1,5 @@
 import { Plus, Tag, Tray } from "@phosphor-icons/react/ssr";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Alert } from "@/components/ui/alert";
@@ -22,6 +23,13 @@ import { formatMoney } from "@/lib/core/money";
 import { MoreList } from "@/components/more-list";
 import type { MoreSection } from "@/components/nav-sections";
 import { AuditPanel } from "./_components/audit-panel";
+import {
+  BottomSheetDemo,
+  DialogDemo,
+  MoneyDemo,
+  PanelDemo,
+  PickersDemo,
+} from "./_components/base-demos";
 import { LoadingDemo } from "./_components/loading-demo";
 import { NavPreview } from "./_components/nav-preview";
 import { SessionDemo } from "./_components/session-demo";
@@ -337,6 +345,89 @@ export default async function CatalogPage({
 
         <Section title="Sesión (cookie en el navegador)">
           <SessionDemo />
+        </Section>
+
+        <Section title="Tarjeta de escritorio (variante tile)">
+          <p className="text-sm text-muted-foreground">
+            Bajo 1024 px es glass, como las de arriba; desde 1024 px es una tarjeta sólida (
+            <code>surface</code>, borde, radio 20, 24 px de relleno). Ensancha la ventana para verla
+            cambiar. El contenedor del ícono usa <code>primary-soft</code>.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Card variant="tile">
+              <span
+                aria-hidden
+                className="flex size-10.5 items-center justify-center rounded-icon bg-primary-soft text-primary"
+              >
+                <Tray weight="duotone" className="size-5.5" />
+              </span>
+              <CardHeader>
+                <CardTitle>Moneda de tu espacio</CardTitle>
+                <CardDescription>Peso uruguayo · UYU</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card variant="tile">
+              <CardHeader>
+                <CardTitle>
+                  Una tarjeta con un título larguísimo que tiene que partirse en varias líneas sin
+                  desbordar a 360 px ni a 1024 px
+                </CardTitle>
+                <CardDescription>{formatMoney("900719925474099100", UYU)}</CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </Section>
+
+        <Section title="El grillo (estado vacío)">
+          <Card variant="tile" className="items-center text-center lg:flex-row lg:text-left">
+            {/* Decorative: the title next to it already says what happens. 120 px, 140 px on desktop. */}
+            <Image
+              src="/brand/kanza-symbol.svg"
+              alt=""
+              width={140}
+              height={140}
+              className="size-30 shrink-0 lg:size-35"
+            />
+            <CardHeader className="lg:items-start">
+              <CardTitle>Empieza por tus cuentas</CardTitle>
+              <CardDescription>
+                Agrega dónde está tu dinero hoy: un banco, tu efectivo o una tarjeta.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Section>
+
+        <Section title="Campo de dinero">
+          <p className="text-sm text-muted-foreground">
+            El símbolo sale de la moneda del espacio (nunca un &quot;$&quot; fijo). Con el teclado
+            decimal en el móvil. Las dos últimas pruebas dicen qué entiende{" "}
+            <code>parseMoneyInput</code> de lo que escribes (acepta &quot;,&quot; o &quot;.&quot;, y
+            un &quot;-&quot; inicial).
+          </p>
+          <Card variant="solid">
+            <MoneyDemo />
+          </Card>
+        </Section>
+
+        <Section title="Selector y control segmentado">
+          <Card variant="solid">
+            <PickersDemo />
+          </Card>
+        </Section>
+
+        <Section title="Panel lateral, hoja inferior y diálogo">
+          <p className="text-sm text-muted-foreground">
+            En la app, el panel (440 px, <code>glass-strong</code>) es de 1024 px en adelante y la
+            hoja inferior de menos de 1024 px; aquí se abren en cualquier ancho. Todos atrapan el
+            foco, cierran con Escape y con el velo, y devuelven el foco al botón que los abrió. La
+            hoja siempre termina con un &quot;Cancelar&quot; visible.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <PanelDemo />
+            <PanelDemo long />
+            <BottomSheetDemo />
+            <DialogDemo />
+          </div>
         </Section>
 
         <Section title="Cifras (tnum)">

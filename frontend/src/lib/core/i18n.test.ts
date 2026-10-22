@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "./data/errors";
 import {
+  ACCOUNT_TYPE_NAMES,
   CURRENCY_NAMES,
+  describeAccountType,
   describeApiError,
   describeCurrency,
   fieldErrorMessage,
   isErrorResponse,
   isValidationErrorBody,
+  validationIssuesOf,
 } from "./i18n";
 
 // Codes the backend raises today (backend/app: NotFoundError, UnauthenticatedError, ForbiddenError
@@ -19,6 +22,8 @@ const KNOWN_CODES = [
   "recent_sign_in_required",
   "origin_not_allowed",
   "space_not_found",
+  "space_has_transactions",
+  "account_not_found",
   "internal_error",
 ] as const;
 
@@ -114,6 +119,141 @@ describe("describeApiError", () => {
     expect(
       describeApiError(apiError(500, { detail: "x", code: "internal_error" })).message,
     ).toContain("a salvo");
+  });
+});
+
+describe("codes of the accounts and the currency (KAN-91)", () => {
+  const generic = describeApiError(apiError(418, undefined));
+
+  it("translates the 409 of a locked currency with its own text", () => {
+    const result = describeApiError(
+      apiError(409, {
+        detail: "The currency cannot be changed once the space has transactions",
+        code: "space_has_transactions",
+      }),
+    );
+    expect(result.title).toBe("Ya no puedes cambiar la moneda");
+    expect(result.message).toContain("movimientos");
+    expect(result.message).toContain("a salvo");
+    // Not the generic 409 ("Esto choca con el estado actual") nor the generic fallback.
+    expect(result).not.toEqual(describeApiError(apiError(409, undefined)));
+    expect(result).not.toEqual(generic);
+  });
+
+  it("translates the 404 of an account that does not exist", () => {
+    const result = describeApiError(
+      apiError(404, { detail: "Account not found", code: "account_not_found" }),
+    );
+    expect(result.title).toBe("No encontramos esa cuenta");
+    expect(result).not.toEqual(describeApiError(apiError(404, undefined)));
+    expect(`${result.title} ${result.message}`).not.toContain("account_not_found");
+    expect(`${result.title} ${result.message}`).not.toContain("Account not found");
+  });
+
+  it.each([
+    ["card_day_required", "Elige un día del 1 al 31."],
+    ["card_day_not_allowed", "Solo las tarjetas tienen día de cierre y de vencimiento."],
+    ["null_not_allowed", "Este campo no puede quedar vacío."],
+  ])("marks a field with the 422 type %s in Spanish", (type, text) => {
+    expect(fieldErrorMessage(type)).toBe(text);
+    expect(fieldErrorMessage(type)).not.toBe(fieldErrorMessage("some_future_type"));
+    expect(fieldErrorMessage(type)).not.toContain(type);
+  });
+
+  it.each(["card_day_required", "card_day_not_allowed", "null_not_allowed"])(
+    "says %s precisely when it is the only problem, never as the generic text",
+    (type) => {
+      const body = { detail: [{ type, loc: ["body", "closing_day"], msg: "English msg" }] };
+      const { title, message } = describeApiError(apiError(422, body));
+      expect(title).toBe("Revisa los datos");
+      expect(message).toContain(fieldErrorMessage(type));
+      expect(message).not.toBe(describeApiError(apiError(422, undefined)).message);
+      expect(`${title} ${message}`).not.toContain(type);
+      expect(`${title} ${message}`).not.toContain("English msg");
+    },
+  );
+
+  it("describes currency_unsupported as a whole, not as a field to fix", () => {
+    const body = {
+      detail: [{ type: "currency_unsupported", loc: ["body", "currency"], msg: "Unsupported" }],
+    };
+    const { title, message } = describeApiError(apiError(422, body));
+    expect(title).toBe("Esa moneda no está disponible");
+    expect(message).toContain("a salvo");
+    expect(message).not.toContain("Corrígelo");
+    expect(`${title} ${message}`).not.toContain("currency_unsupported");
+  });
+});
+
+describe("validationIssuesOf", () => {
+  it("lists the fields of a 422 without the leading `body`, in Spanish", () => {
+    const body = {
+      detail: [
+        {
+          type: "card_day_required",
+          loc: ["body", "closing_day"],
+          msg: "A credit card needs this day",
+        },
+        {
+          type: "card_day_required",
+          loc: ["body", "due_day"],
+          msg: "A credit card needs this day",
+        },
+        { type: "string_too_long", loc: ["body", "name"], msg: "Too long" },
+      ],
+    };
+    expect(validationIssuesOf(apiError(422, body))).toEqual([
+      { path: "closing_day", message: "Elige un día del 1 al 31." },
+      { path: "due_day", message: "Elige un día del 1 al 31." },
+      { path: "name", message: "Es demasiado largo." },
+    ]);
+  });
+
+  it("joins a nested location with dots and keeps a non-body location whole", () => {
+    const body = {
+      detail: [
+        { type: "missing", loc: ["body", "items", 0, "name"], msg: "x" },
+        { type: "int_parsing", loc: ["path", "space_id"], msg: "x" },
+      ],
+    };
+    expect(validationIssuesOf(apiError(422, body))).toEqual([
+      { path: "items.0.name", message: "Este campo es obligatorio." },
+      { path: "path.space_id", message: "Escribe un número entero." },
+    ]);
+  });
+
+  it("falls back to the generic field text for a type it does not know, never the raw type", () => {
+    const body = { detail: [{ type: "brand_new_type", loc: ["body", "name"], msg: "x" }] };
+    expect(validationIssuesOf(apiError(422, body))).toEqual([
+      { path: "name", message: "El valor no es válido." },
+    ]);
+  });
+
+  it("is empty for anything that is not a 422 with FastAPI's body", () => {
+    expect(validationIssuesOf(apiError(404, { detail: "x", code: "account_not_found" }))).toEqual(
+      [],
+    );
+    expect(validationIssuesOf(apiError(422, undefined))).toEqual([]);
+    expect(validationIssuesOf(apiError(422, { detail: "not a list" }))).toEqual([]);
+    expect(validationIssuesOf(apiError(422, { detail: [] }))).toEqual([]);
+    expect(validationIssuesOf(new TypeError("Failed to fetch"))).toEqual([]);
+    expect(validationIssuesOf("boom")).toEqual([]);
+    expect(validationIssuesOf(undefined)).toEqual([]);
+  });
+});
+
+describe("describeAccountType", () => {
+  it("names the three types in Spanish", () => {
+    expect(describeAccountType("bank")).toBe("Banco");
+    expect(describeAccountType("cash")).toBe("Efectivo");
+    expect(describeAccountType("credit_card")).toBe("Tarjeta");
+    expect(Object.keys(ACCOUNT_TYPE_NAMES)).toEqual(["bank", "cash", "credit_card"]);
+  });
+
+  it("never shows the raw value nor reads inherited keys", () => {
+    for (const type of ["savings", "constructor", "toString", "__proto__", ""]) {
+      expect(describeAccountType(type)).toBe("Cuenta");
+    }
   });
 });
 

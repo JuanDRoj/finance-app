@@ -16,6 +16,7 @@ Estado: **aprobado el 2026-10-06** · Tarea KAN-40 [FE-09] · Kit v2 (carpeta lo
 | `public/brand/kanza-icon.svg` | Ícono de app y marca principal, con esquinas redondeadas. Lo usa la cabecera del login |
 | `public/favicon.svg` | **Maestro del favicon**: versión simplificada para menos de 32 px (cabeza más grande, antenas gruesas, moneda lisa). Es idéntico byte a byte a `kanza-favicon.svg` del kit, por eso no se duplica |
 | `public/brand/kanza-peek.svg` | Solo la cabeza asomándose, para el login (sobre la tarjeta del formulario) y, más adelante, los avisos |
+| `public/brand/kanza-symbol.svg` | El grillo asomado detrás de la moneda gigante, sin baldosa: la ilustración de los estados vacíos que invitan a actuar (Inicio sin cuentas, Cuentas vacía, Movimientos vacío). Decorativa (`alt=""`), de 120 px en celular y 140 px en escritorio. Copiado del kit en KAN-91; lo usa la pantalla del Inicio sin cuentas (KAN-70) |
 | `public/brand/kanza-lockup-horizontal.svg` / `-dark.svg` | Ícono + "Kanza" en fila, sobre fondo claro u oscuro (`#08110d`). Para material fuera de la app |
 | `public/brand/kanza-lockup-vertical.svg` | Ícono arriba y "Kanza" abajo (pantalla de carga, espacios cuadrados) |
 | `public/favicon.ico`, `favicon-16/32/48.png` | Favicon para navegadores que no usan el SVG |
@@ -25,7 +26,7 @@ Estado: **aprobado el 2026-10-06** · Tarea KAN-40 [FE-09] · Kit v2 (carpeta lo
 | `src/app/fonts/bricolage/bricolage-grotesque-800-opsz96.woff2` | Tipografía del nombre (ver 5) |
 | `src/app/fonts/bricolage/OFL.txt` | Aviso de copyright y texto de la licencia SIL OFL 1.1 de esa tipografía |
 
-Del kit **no** se copiaron: `kanza-wordmark.svg` (el login usa texto vivo con color de token), `kanza-symbol*.svg` y los mono (estados vacíos y sellos: se copian cuando una tarea los use), `kanza-icon-square.svg` (origen de los PNG de iOS y maskable, ya exportados), `fuentes/src-*.svg` (dibujos de trabajo), `kanza-kit-resumen.png` y `head-snippet.html` (su contenido está en `metadata` de `src/app/layout.tsx`). Nada de la librería de logos de terceros de la skill `logo-design` entra al repo; `src/app/brand-assets.test.ts` vigila que `public/brand/` solo tenga los SVG de arriba.
+Del kit **no** se copiaron: `kanza-wordmark.svg` (el login usa texto vivo con color de token), `kanza-symbol-mono-green.svg` y el mono blanco (sellos: se copian cuando una tarea los use; `kanza-symbol.svg` ya está desde KAN-91), `kanza-icon-square.svg` (origen de los PNG de iOS y maskable, ya exportados), `fuentes/src-*.svg` (dibujos de trabajo), `kanza-kit-resumen.png` y `head-snippet.html` (su contenido está en `metadata` de `src/app/layout.tsx`). Nada de la librería de logos de terceros de la skill `logo-design` entra al repo; `src/app/brand-assets.test.ts` vigila que `public/brand/` solo tenga los SVG de arriba.
 
 ## 3. Cómo se registra en la app
 

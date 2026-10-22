@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { localeForCurrency } from "./locale";
-import { formatMoney, minorToDecimalString } from "./money";
+import { currencySymbolOf, formatMoney, minorToDecimalString, parseMoneyInput } from "./money";
 
 // Intl puts a no-break space (U+00A0) between symbol and digits, and we print expenses with the
 // typographic minus (U+2212). Escapes keep the expectations exact and visible.
@@ -122,6 +122,8 @@ describe("formatMoney", () => {
     expect(localeForCurrency("UYU")).toBe("es-UY");
     expect(localeForCurrency("USD")).toBe("es-UY");
     expect(localeForCurrency("JPY")).toBe("es-UY");
+    // ARS, BRL and EUR have their own since KAN-91 (locale.test.ts).
+    expect(localeForCurrency("ARS")).toBe("es-AR");
   });
 
   it("accepts an explicit locale", () => {
@@ -131,5 +133,138 @@ describe("formatMoney", () => {
   it("propagates errors for invalid input", () => {
     expect(() => formatMoney(1.5, UYU)).toThrow(RangeError);
     expect(() => formatMoney(100, { code: "UYU", exponent: -1 })).toThrow(RangeError);
+  });
+});
+
+describe("currencySymbolOf", () => {
+  it.each([
+    ["UYU", "$"],
+    ["COP", "$"],
+    ["USD", "US$"],
+    ["ARS", "$"],
+    ["BRL", "R$"],
+    ["EUR", "€"],
+  ])("%s is written with %s", (code, symbol) => {
+    expect(currencySymbolOf({ code, exponent: 2 })).toBe(symbol);
+  });
+
+  it("falls back to the ISO code for a currency without a symbol in its locale", () => {
+    expect(currencySymbolOf(CLP)).toBe("CLP");
+  });
+
+  it("does not depend on the exponent", () => {
+    expect(currencySymbolOf({ code: "UYU", exponent: 0 })).toBe("$");
+    expect(currencySymbolOf(KWD)).toBe("KWD");
+  });
+});
+
+describe("parseMoneyInput", () => {
+  const ok = (minor: number) => ({ ok: true, minor });
+  const no = (issue: string) => ({ ok: false, issue });
+
+  it("reads amounts into the minor unit with integers only", () => {
+    expect(parseMoneyInput("1550,50", 2)).toEqual(ok(155050));
+    expect(parseMoneyInput("1550.50", 2)).toEqual(ok(155050));
+    expect(parseMoneyInput("15", 2)).toEqual(ok(1500));
+    expect(parseMoneyInput("0,5", 2)).toEqual(ok(50));
+    expect(parseMoneyInput(",5", 2)).toEqual(ok(50));
+    expect(parseMoneyInput("7,", 2)).toEqual(ok(700));
+    expect(parseMoneyInput("007", 2)).toEqual(ok(700));
+  });
+
+  it("never goes through a float: 0,29 is 29 and 1,15 is 115", () => {
+    expect(parseMoneyInput("0,29", 2)).toEqual(ok(29));
+    expect(parseMoneyInput("0.29", 2)).toEqual(ok(29));
+    expect(parseMoneyInput("1,15", 2)).toEqual(ok(115));
+    expect(parseMoneyInput("4.35", 2)).toEqual(ok(435));
+    expect(parseMoneyInput("0,07", 2)).toEqual(ok(7));
+  });
+
+  it("follows the exponent of the currency", () => {
+    expect(parseMoneyInput("1500", 0)).toEqual(ok(1500));
+    expect(parseMoneyInput("1500,", 0)).toEqual(ok(1500));
+    expect(parseMoneyInput("1,234", 3)).toEqual(ok(1234));
+    expect(parseMoneyInput("0,5", 3)).toEqual(ok(500));
+    expect(parseMoneyInput("2", 3)).toEqual(ok(2000));
+  });
+
+  it("refuses more decimals than the exponent instead of rounding", () => {
+    expect(parseMoneyInput("1,505", 2)).toEqual(no("too_many_decimals"));
+    expect(parseMoneyInput("1,500", 2)).toEqual(no("too_many_decimals"));
+    expect(parseMoneyInput("1,5", 0)).toEqual(no("too_many_decimals"));
+    expect(parseMoneyInput("1,2345", 3)).toEqual(no("too_many_decimals"));
+    // A thousands separator is not supported: "1.550" has three decimals.
+    expect(parseMoneyInput("1.550", 2)).toEqual(no("too_many_decimals"));
+  });
+
+  it("tells an empty text from an invalid one", () => {
+    expect(parseMoneyInput("", 2)).toEqual(no("empty"));
+    expect(parseMoneyInput("   ", 2)).toEqual(no("empty"));
+    for (const text of [
+      "abc",
+      "1,2,3",
+      "1.550,50",
+      "12a",
+      ",",
+      ".",
+      "$ 15",
+      "1 500",
+      "1e3",
+      "--5",
+      "+5",
+    ]) {
+      expect(parseMoneyInput(text, 2), text).toEqual(no("invalid"));
+    }
+    // Only ASCII digits: Arabic-Indic ones are not money for the backend either.
+    expect(parseMoneyInput("١٢", 2)).toEqual(no("invalid"));
+  });
+
+  it("trims the text, spaces included the non-breaking one", () => {
+    expect(parseMoneyInput(`  15,25${NBSP}`, 2)).toEqual(ok(1525));
+  });
+
+  it("accepts a leading minus only when asked to", () => {
+    expect(parseMoneyInput("-5,50", 2)).toEqual(no("negative_not_allowed"));
+    expect(parseMoneyInput("-5,50", 2, { allowNegative: false })).toEqual(
+      no("negative_not_allowed"),
+    );
+    expect(parseMoneyInput("-5,50", 2, { allowNegative: true })).toEqual(ok(-550));
+    expect(parseMoneyInput(`${MINUS}5,50`, 2, { allowNegative: true })).toEqual(ok(-550));
+    expect(parseMoneyInput("5,50", 2, { allowNegative: true })).toEqual(ok(550));
+  });
+
+  it("never returns negative zero", () => {
+    const result = parseMoneyInput("-0", 2, { allowNegative: true });
+    expect(result).toEqual(ok(0));
+    expect(Object.is((result as { minor: number }).minor, -0)).toBe(false);
+    expect(parseMoneyInput("-0,00", 2, { allowNegative: true })).toEqual(ok(0));
+    expect(parseMoneyInput("0", 2)).toEqual(ok(0));
+  });
+
+  it("caps the amount at the largest safe integer, like the backend", () => {
+    // 2^53 - 1 = 9007199254740991 minor units = 90071992547409,91 with two decimals.
+    expect(parseMoneyInput("90071992547409,91", 2)).toEqual(ok(Number.MAX_SAFE_INTEGER));
+    expect(parseMoneyInput("90071992547409,92", 2)).toEqual(no("too_large"));
+    expect(parseMoneyInput("9007199254740991", 0)).toEqual(ok(Number.MAX_SAFE_INTEGER));
+    expect(parseMoneyInput("9007199254740992", 0)).toEqual(no("too_large"));
+    expect(parseMoneyInput("-90071992547409,91", 2, { allowNegative: true })).toEqual(
+      ok(-Number.MAX_SAFE_INTEGER),
+    );
+    expect(parseMoneyInput("-90071992547409,92", 2, { allowNegative: true })).toEqual(
+      no("too_large"),
+    );
+    expect(parseMoneyInput("9".repeat(40), 2)).toEqual(no("too_large"));
+  });
+
+  it("rejects an invalid exponent like the formatter does", () => {
+    expect(() => parseMoneyInput("1", -1)).toThrow(RangeError);
+    expect(() => parseMoneyInput("1", 2.5)).toThrow(RangeError);
+  });
+
+  it("reads back what minorToDecimalString writes", () => {
+    for (const minor of [0, 1, 29, 100, 155050, 9007199254740991]) {
+      const text = minorToDecimalString(minor, 2);
+      expect(parseMoneyInput(text, 2)).toEqual(ok(minor));
+    }
   });
 });

@@ -14,12 +14,16 @@
   --card: rgba(255, 255, 255, 0.62);
   --card-solid: #f7fbf9;
   --card-foreground: var(--foreground);
+  /* Desktop cards (Escritorio v2, docs/diseno.md D14): solid, with a border and the card radius. */
+  --surface: #ffffff;
   --popover: #ffffff;
   --popover-foreground: var(--foreground);
   --primary: #146e4d;
   --primary-foreground: #ffffff;
   --secondary: #cbebdc;
   --secondary-foreground: #0d4a33;
+  /* Soft mint behind the icons of desktop cards (Escritorio v2); `primary` icons on it. */
+  --primary-soft: #e3f1ea;
   --muted: #dcebe3;
   --muted-foreground: #4f6158;
   --accent: #d7eee2;
@@ -35,6 +39,8 @@
   --glass: rgba(255, 255, 255, 0.58);
   --glass-strong: rgba(255, 255, 255, 0.74);
   --glass-border: rgba(255, 255, 255, 0.9);
+  /* Veil behind the side panel, the dialogs and the bottom sheet. */
+  --scrim: rgba(8, 17, 13, 0.22);
   --blob-1: #9fe0bf;
   --blob-2: #cdefd9;
   /*
@@ -82,11 +88,13 @@
     --foreground: #eaf5ef;
     --card: rgba(28, 44, 36, 0.55);
     --card-solid: #142019;
+    --surface: #142019;
     --popover: #12201a;
     --primary: #6eddaa;
     --primary-foreground: #062016;
     --secondary: #173b2c;
     --secondary-foreground: #a9efcf;
+    --primary-soft: #173b2c;
     --muted: #15221c;
     --muted-foreground: #a0b6aa;
     --accent: #1a2c24;
@@ -99,6 +107,7 @@
     --glass: rgba(20, 32, 26, 0.6);
     --glass-strong: rgba(16, 28, 22, 0.82);
     --glass-border: rgba(255, 255, 255, 0.1);
+    --scrim: rgba(0, 0, 0, 0.55);
     --blob-1: #1e6b4c;
     --blob-2: #12432f;
     --sidebar: #13241b;
@@ -130,7 +139,8 @@
 
   .glass,
   .glass-strong,
-  .card-surface {
+  .card-surface,
+  .tile-surface {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -160,6 +170,13 @@
   --text-brand-compact: 1.375rem; /* 22px: the Kanza name in the sidebar */
   --shadow-nav: 0 10px 30px rgba(0, 0, 0, 0.14); /* the bottom bar */
   --shadow-fab: 0 6px 16px rgba(0, 0, 0, 0.18); /* the "+" of the bottom bar */
+  /* KAN-91 (FE-27), from the Kanza canvas (docs/diseno.md D14, D17 › Escritorio v2). */
+  --radius-card: 1.25rem; /* 20px: desktop cards (`surface`) */
+  --radius-dialog: 1.5rem; /* 24px: centered dialogs */
+  --shadow-panel: -16px 0 40px rgba(0, 0, 0, 0.16); /* the side panel */
+  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.22); /* a centered dialog */
+  --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.16); /* the bottom sheet */
+  --text-panel-title: 1.375rem; /* 22px: title of the side panel and of a dialog */
 }
 
 @theme inline {
@@ -168,12 +185,14 @@
   --color-card: var(--card);
   --color-card-solid: var(--card-solid);
   --color-card-foreground: var(--card-foreground);
+  --color-surface: var(--surface);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-primary-soft: var(--primary-soft);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
@@ -189,6 +208,7 @@
   --color-glass: var(--glass);
   --color-glass-strong: var(--glass-strong);
   --color-glass-border: var(--glass-border);
+  --color-scrim: var(--scrim);
   --color-blob-1: var(--blob-1);
   --color-blob-2: var(--blob-2);
   --color-sidebar: var(--sidebar);
@@ -235,6 +255,25 @@
   border: 1px solid var(--glass-border);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
+}
+
+/*
+ * Bento tile (docs/diseno.md D14, D17 › Escritorio v2): glass below 1024px, like `card-surface`,
+ * and from 1024px a solid `surface` with the decorative border and no blur. The radius goes with
+ * the component (`rounded-tile lg:rounded-card`).
+ */
+@utility tile-surface {
+  background-color: var(--card);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+
+  @media (min-width: 64rem) {
+    background-color: var(--surface);
+    border-color: var(--border);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 @utility glass {
