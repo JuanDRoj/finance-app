@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   search: "",
   desktop: true,
   sheet: vi.fn(),
+  edit: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -27,6 +28,28 @@ vi.mock("@/components/accounts/account-panel-sheet", () => ({
       <div data-testid="panel" data-open={String(props.open)}>
         <button type="button" onClick={props.onClose}>
           cerrar
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock("@/components/accounts/account-edit-panel", () => ({
+  AccountEditPanel: (props: {
+    open: boolean;
+    view: string;
+    accountId: string;
+    onView: (view: "editar" | "cuadrar") => void;
+    onClose: () => void;
+  }) => {
+    mocks.edit(props);
+    return (
+      <div data-testid="edit-panel" data-open={String(props.open)} data-view={props.view}>
+        <button type="button" onClick={() => props.onView("cuadrar")}>
+          ir a cuadrar
+        </button>
+        <button type="button" onClick={props.onClose}>
+          cerrar edición
         </button>
       </div>
     );
@@ -60,6 +83,7 @@ function visit(search: string) {
 beforeEach(() => {
   mocks.replace.mockReset();
   mocks.sheet.mockReset();
+  mocks.edit.mockReset();
   atWidth(true);
   visit("");
 });
@@ -130,5 +154,71 @@ describe("AccountPanelHost", () => {
     mocks.search = "";
     rerender(<AccountPanelHost space={SPACE} />);
     expect(screen.getByTestId("panel").getAttribute("data-open")).toBe("false");
+  });
+});
+
+describe("AccountPanelHost: the panels of an existing account", () => {
+  it("opens the edit panel for ?cuenta=editar&sel=<id>, and not the new-account one", async () => {
+    visit("sel=a1&cuenta=editar");
+    render(<AccountPanelHost space={SPACE} />);
+    const panel = await screen.findByTestId("edit-panel");
+    expect(panel.getAttribute("data-open")).toBe("true");
+    expect(panel.getAttribute("data-view")).toBe("editar");
+    expect(mocks.edit.mock.calls[0]?.[0]).toMatchObject({ accountId: "a1", space: SPACE });
+    expect(screen.queryByTestId("panel")).toBeNull();
+  });
+
+  it("opens the reconcile view for ?cuenta=cuadrar", async () => {
+    visit("sel=a1&cuenta=cuadrar");
+    render(<AccountPanelHost space={SPACE} />);
+    expect((await screen.findByTestId("edit-panel")).getAttribute("data-view")).toBe("cuadrar");
+  });
+
+  it("switching view writes ?cuenta in the URL; closing takes only it out, ?sel stays", async () => {
+    window.history.replaceState(null, "", "/cuentas?sel=a1&cuenta=editar");
+    mocks.search = "sel=a1&cuenta=editar";
+    render(<AccountPanelHost space={SPACE} />);
+    (await screen.findByText("ir a cuadrar")).click();
+    expect(window.location.search).toBe("?sel=a1&cuenta=cuadrar");
+    (await screen.findByText("cerrar edición")).click();
+    expect(window.location.search).toBe("?sel=a1");
+  });
+
+  it("takes ?cuenta out when there is no account to edit (no ?sel)", async () => {
+    window.history.replaceState(null, "", "/cuentas?cuenta=editar");
+    mocks.search = "cuenta=editar";
+    render(<AccountPanelHost space={SPACE} />);
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(screen.queryByTestId("edit-panel")).toBeNull();
+  });
+
+  it("below 1024 px goes to the page of the account; cuadrar asks to open the sheet there", async () => {
+    atWidth(false);
+    visit("sel=a1&cuenta=editar");
+    const { unmount } = render(<AccountPanelHost space={SPACE} />);
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/cuentas/a1"));
+    unmount();
+    mocks.replace.mockReset();
+    visit("sel=a1&cuenta=cuadrar");
+    render(<AccountPanelHost space={SPACE} />);
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/cuentas/a1?cuenta=cuadrar"));
+    expect(screen.queryByTestId("edit-panel")).toBeNull();
+  });
+
+  it("keeps the edit panel mounted, closed, with what it showed, once the URL stops asking", async () => {
+    visit("sel=a1&cuenta=editar");
+    const { rerender } = render(<AccountPanelHost space={SPACE} />);
+    await screen.findByTestId("edit-panel");
+    mocks.search = "sel=a1";
+    rerender(<AccountPanelHost space={SPACE} />);
+    const panel = screen.getByTestId("edit-panel");
+    expect(panel.getAttribute("data-open")).toBe("false");
+    expect(panel.getAttribute("data-view")).toBe("editar");
+  });
+
+  it("opens nothing without a space", () => {
+    visit("sel=a1&cuenta=editar");
+    render(<AccountPanelHost />);
+    expect(screen.queryByTestId("edit-panel")).toBeNull();
   });
 });

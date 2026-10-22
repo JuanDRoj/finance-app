@@ -25,6 +25,8 @@ const KNOWN_CODES = [
   "space_not_found",
   "space_has_transactions",
   "account_not_found",
+  "account_has_balance",
+  "account_archived",
   "internal_error",
 ] as const;
 

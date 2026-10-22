@@ -1,11 +1,17 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { components } from "@/lib/api/schema";
 import type { ApiClient } from "./api-client";
-import { unwrap } from "./errors";
+import { ApiError, unwrap } from "./errors";
 import { spaceQueryKey } from "./spaces";
 
 /** An account with its balance in the minor unit of the space's currency (a card owes when negative). */
 export type AccountWithBalance = components["schemas"]["AccountWithBalance"];
+
+/** Body of `PATCH /spaces/{space_id}/accounts/{account_id}`: only the fields to change. */
+export type AccountUpdate = components["schemas"]["AccountUpdate"];
+
+/** Body of `POST .../reconcile`: the real balance, with the sign of `balance_minor`. */
+export type AccountReconcile = components["schemas"]["AccountReconcile"];
 
 /** Body of `POST /spaces/{space_id}/accounts`. */
 export type AccountCreate = components["schemas"]["AccountCreate"];
@@ -88,4 +94,79 @@ export async function unarchiveAccount(
       params: { path: { space_id: spaceId, account_id: accountId } },
     }),
   );
+}
+
+type AccountPath = { params: { path: { space_id: string; account_id: string } } };
+const accountPath = (spaceId: string, accountId: string): AccountPath => ({
+  params: { path: { space_id: spaceId, account_id: accountId } },
+});
+
+/** One account with its balance, archived or not (`GET .../{account_id}`). Throws `account_not_found` (404) or a 401. */
+export async function getAccount(
+  api: ApiClient,
+  spaceId: string,
+  accountId: string,
+): Promise<AccountWithBalance> {
+  return unwrap(
+    api.GET("/spaces/{space_id}/accounts/{account_id}", accountPath(spaceId, accountId)),
+  );
+}
+
+/**
+ * Renames an account or changes the days of a card (`PATCH .../{account_id}`); only the fields in
+ * `body` change. The type cannot. Throws `account_not_found` (404), a 422 or a 401.
+ */
+export async function updateAccount(
+  api: ApiClient,
+  spaceId: string,
+  accountId: string,
+  body: AccountUpdate,
+): Promise<AccountWithBalance> {
+  return unwrap(
+    api.PATCH("/spaces/{space_id}/accounts/{account_id}", {
+      ...accountPath(spaceId, accountId),
+      body,
+    }),
+  );
+}
+
+/**
+ * Archives an account whose balance is zero (`POST .../archive`). Throws an `ApiError`:
+ * `account_has_balance` (409: the balance is not zero), `account_not_found` (404) or a 401.
+ */
+export async function archiveAccount(
+  api: ApiClient,
+  spaceId: string,
+  accountId: string,
+): Promise<AccountWithBalance> {
+  return unwrap(
+    api.POST("/spaces/{space_id}/accounts/{account_id}/archive", accountPath(spaceId, accountId)),
+  );
+}
+
+/**
+ * Matches the balance of an account to the real one (`POST .../reconcile`): the backend registers an
+ * adjustment for the difference, or nothing if there is none. `body.balance_minor` has the sign of
+ * the balance (a card owes when negative). Throws `account_archived` (409), `account_not_found`
+ * (404), a 422 or a 401.
+ */
+export async function reconcileAccount(
+  api: ApiClient,
+  spaceId: string,
+  accountId: string,
+  body: AccountReconcile,
+): Promise<AccountWithBalance> {
+  return unwrap(
+    api.POST("/spaces/{space_id}/accounts/{account_id}/reconcile", {
+      ...accountPath(spaceId, accountId),
+      body,
+    }),
+  );
+}
+
+/** The code the backend put in an error body (`{ code, detail }`), if it is a string. */
+export function apiErrorCode(error: unknown): string | undefined {
+  const body = error instanceof ApiError ? error.body : undefined;
+  const code = (body as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" ? code : undefined;
 }

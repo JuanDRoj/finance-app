@@ -1,4 +1,9 @@
+"use client";
+
+import { PencilSimple, Scales } from "@phosphor-icons/react/ssr";
 import { AccountIcon } from "@/components/accounts/account-icon";
+import { openAccountPanelInUrl } from "@/components/accounts/panel-url";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { displayedAmount } from "@/lib/core/accounts-summary";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
@@ -18,11 +23,12 @@ function longMeta(account: AccountWithBalance): string {
 /**
  * The detail of the chosen account, from 1024 px (docs/diseno.md D17 › Escritorio v2, D18): the
  * icon, the name, the type (and a card's days) and today's balance, or today's debt for a card, in
- * the debt color. Hidden below 1024 px, where tapping an account will open its page (FE-28).
+ * the debt color. Hidden below 1024 px, where tapping an account opens its page (`/cuentas/[id]`).
  *
- * Only the header for now: "Cuadrar saldo" and "Editar" arrive with KAN-92 (FE-28), and the month
- * figure and the table of movements with KAN-89 (FE-26), which needs the movements endpoint. No
- * placeholder stands in for them. The name wraps in two lines at most (the whole name in `title`);
+ * "Cuadrar saldo" and "Editar" open the side panels of the account over the list (`?cuenta=cuadrar` /
+ * `?cuenta=editar`, with `?sel=<id>` of this account: the detail may be showing the first one by
+ * default). The month figure and the table of movements arrive with KAN-89 (FE-26), which needs the
+ * movements endpoint; no placeholder stands in for them. The name wraps in two lines at most (the whole name in `title`);
  * the amount breaks anywhere rather than overflowing (the cap is 9.007.199.254.740.991 units).
  */
 export function AccountDetail({
@@ -50,6 +56,26 @@ export function AccountDetail({
             </h2>
             <span className="text-sm break-words text-muted-foreground">{longMeta(account)}</span>
           </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="lg:min-h-10 lg:pointer-coarse:min-h-11"
+            onClick={() => openAccountPanelInUrl("cuadrar", account.id)}
+          >
+            <Scales aria-hidden weight="bold" className="size-4" />
+            Cuadrar saldo
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="lg:min-h-10 lg:pointer-coarse:min-h-11"
+            onClick={() => openAccountPanelInUrl("editar", account.id)}
+          >
+            <PencilSimple aria-hidden weight="bold" className="size-4" />
+            Editar
+          </Button>
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-1">

@@ -60,6 +60,18 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     message:
       "Puede que ya no exista o que la hayas archivado desde otro dispositivo. Vuelve al inicio e inténtalo de nuevo.",
   },
+  // `POST .../archive` (BE-16): the balance is not zero. The screen explains it with the amount, in
+  // its own alert; this is the fallback text for anywhere that shows the error as it is.
+  account_has_balance: {
+    title: "Todavía no puedes archivar esta cuenta",
+    message:
+      "Para archivarla, su saldo tiene que ser cero. Cuádrala o pasa el dinero a otra cuenta.",
+  },
+  // `POST .../reconcile` (BE-16): an archived account cannot be reconciled.
+  account_archived: {
+    title: "Esa cuenta está archivada",
+    message: "Desarchívala desde Cuentas para poder cuadrar su saldo.",
+  },
   internal_error: {
     title: "Algo salió mal de nuestro lado",
     message: `Inténtalo de nuevo en unos minutos. ${SAFE}`,

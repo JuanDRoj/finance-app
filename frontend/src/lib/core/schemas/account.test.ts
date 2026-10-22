@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_NAME_MAX_LENGTH, accountFormSchema, type AccountFormValues } from "./account";
+import {
+  ACCOUNT_NAME_MAX_LENGTH,
+  accountEditSchema,
+  accountFormSchema,
+  editValuesOf,
+  type AccountFormValues,
+} from "./account";
 import { describeMoneyInputIssue } from "./money-input";
 
 const blank: AccountFormValues = {
@@ -243,5 +249,49 @@ describe("describeMoneyInputIssue", () => {
     expect(describeMoneyInputIssue("invalid", { exponent: 3 })).toBe(
       "Escribe solo números, por ejemplo 1550,500.",
     );
+  });
+});
+
+describe("accountEditSchema", () => {
+  const bank = { type: "bank", name: "Itaú", closing_day: null, due_day: null } as const;
+  const card = { type: "credit_card", name: "Visa", closing_day: 5, due_day: 12 } as const;
+  const run = (
+    account: typeof bank | typeof card,
+    values: Partial<ReturnType<typeof editValuesOf>>,
+  ) => accountEditSchema(account).safeParse({ ...editValuesOf(account), ...values });
+
+  it("starts from the account's own values, the card's days included", () => {
+    expect(editValuesOf(card)).toEqual({ name: "Visa", closingDay: "5", dueDay: "12" });
+    expect(editValuesOf(bank)).toEqual({ name: "Itaú", closingDay: "", dueDay: "" });
+  });
+
+  it("is an empty body when nothing changed", () => {
+    expect(run(bank, {}).data).toEqual({});
+    expect(run(card, {}).data).toEqual({});
+  });
+
+  it("sends only what changed", () => {
+    expect(run(bank, { name: "  Santander " }).data).toEqual({ name: "Santander" });
+    expect(run(card, { dueDay: "20" }).data).toEqual({ due_day: 20 });
+    expect(run(card, { name: "Visa Oro", closingDay: "6" }).data).toEqual({
+      name: "Visa Oro",
+      closing_day: 6,
+    });
+  });
+
+  it("never sends days for bank or cash, even if the form holds some", () => {
+    expect(run(bank, { name: "X", closingDay: "5", dueDay: "6" }).data).toEqual({ name: "X" });
+  });
+
+  it("refuses an empty name and one past 80 characters (by code point)", () => {
+    expect(run(bank, { name: "  " }).error?.issues[0]?.message).toBe("Escribe un nombre.");
+    expect(run(bank, { name: "a".repeat(81) }).success).toBe(false);
+    expect(run(bank, { name: "😀".repeat(80) }).success).toBe(true);
+  });
+
+  it("requires a card's two days", () => {
+    const result = run(card, { closingDay: "", dueDay: "32" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path[0])).toEqual(["closingDay", "dueDay"]);
   });
 });

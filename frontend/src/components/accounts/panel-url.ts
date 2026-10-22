@@ -33,3 +33,17 @@ export function closePanelInUrl(param: string): void {
 
 /** The query param that names the account shown in the detail of Cuentas (`/cuentas?sel=<id>`). */
 export const SELECTED_ACCOUNT_PARAM = "sel";
+
+/** The panels of an existing account: `?cuenta=editar` and `?cuenta=cuadrar`, over `?sel=<id>`. */
+export type AccountPanelView = "editar" | "cuadrar";
+
+/**
+ * Opens the edit or the reconcile panel of an account in one write: `?sel=<id>&cuenta=<view>`. Both
+ * go together because the detail may be showing an account that no `?sel` names (the first one).
+ */
+export function openAccountPanelInUrl(view: AccountPanelView, accountId: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set(SELECTED_ACCOUNT_PARAM, accountId);
+  url.searchParams.set("cuenta", view);
+  writeUrl(url);
+}

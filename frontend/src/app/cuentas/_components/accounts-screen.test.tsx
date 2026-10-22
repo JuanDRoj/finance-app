@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   refresh: vi.fn(),
+  push: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   desktop: false,
@@ -18,7 +19,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: mocks.refresh }),
+  useRouter: () => ({ refresh: mocks.refresh, push: mocks.push }),
+  usePathname: () => "/cuentas",
   useSearchParams: () => new URLSearchParams(mocks.search),
 }));
 vi.mock("@/components/use-is-desktop", () => ({
@@ -270,20 +272,25 @@ describe("AccountsScreen archived accounts", () => {
 });
 
 describe("AccountsScreen detail and selection", () => {
-  it("has plain rows below 1024 px, because the page of an account is not there yet", async () => {
+  it("makes the rows links to the account's page, which is what a phone opens", async () => {
     await renderLoaded();
     const lists = [
       screen.getByRole("region", { name: "Disponible" }),
       screen.getByRole("region", { name: "Deuda" }),
     ];
-    for (const list of lists) expect(within(list).queryByRole("link")).toBeNull();
+    const hrefs = lists.flatMap((list) =>
+      within(list)
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("href")),
+    );
+    expect(hrefs).toEqual(["/cuentas/a1", "/cuentas/a2", "/cuentas/a3"]);
   });
 
-  it("makes the rows links from 1024 px and picks the first account when ?sel is missing", async () => {
+  it("picks the first account when ?sel is missing", async () => {
     mocks.desktop = true;
     await renderLoaded();
     const itau = screen.getByRole("link", { name: /^Itaú/ });
-    expect(itau.getAttribute("href")).toBe("/cuentas?sel=a1");
+    expect(itau.getAttribute("href")).toBe("/cuentas/a1");
     expect(itau.getAttribute("aria-current")).toBe("true");
     expect(
       screen.getByRole("link", { name: /^Visa Itaú/ }).getAttribute("aria-current"),
@@ -358,6 +365,17 @@ describe("AccountsScreen detail and selection", () => {
     await renderLoaded();
     expect(fireEvent.click(screen.getByRole("link", { name: /^Visa Itaú/ }))).toBe(true);
     expect(window.location.search).toBe("");
+  });
+
+  it("has 'Cuadrar saldo' and 'Editar' in the header of the detail, which open the panels of that account", async () => {
+    mocks.desktop = true;
+    await renderLoaded();
+    // The detail shows the first account (no ?sel): the buttons write it, with the panel to open.
+    const detail = within(screen.getByRole("region", { name: "Itaú" }));
+    fireEvent.click(detail.getByRole("button", { name: "Editar" }));
+    expect(window.location.search).toBe("?sel=a1&cuenta=editar");
+    fireEvent.click(detail.getByRole("button", { name: "Cuadrar saldo" }));
+    expect(window.location.search).toBe("?sel=a1&cuenta=cuadrar");
   });
 
   it("hides the detail from phones with CSS (it is in the DOM, `hidden lg:flex`)", async () => {

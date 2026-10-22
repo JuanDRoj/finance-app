@@ -26,6 +26,7 @@ import type { MoreSection } from "@/components/nav-sections";
 import { AuditPanel } from "./_components/audit-panel";
 import { AccountsSummary } from "../_components/accounts-summary";
 import { FirstUse } from "../_components/first-use";
+import { AccountEditDemo } from "./_components/account-demos";
 import { AccountFormDemo, CurrencyDemo } from "./_components/first-use-demos";
 import {
   BottomSheetDemo,
@@ -494,6 +495,10 @@ export default async function CatalogPage({
 
         <Section title="Formulario de cuenta">
           <AccountFormDemo />
+        </Section>
+
+        <Section title="Editar, cuadrar y archivar una cuenta">
+          <AccountEditDemo />
         </Section>
 
         <Section title="Cifras (tnum)">

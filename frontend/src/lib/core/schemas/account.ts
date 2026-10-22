@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AccountCreate } from "../data/accounts";
+import type { AccountCreate, AccountUpdate, AccountWithBalance } from "../data/accounts";
 import { parseMoneyInput } from "../money";
 import { describeMoneyInputIssue } from "./money-input";
 
@@ -129,3 +129,71 @@ export type AccountFormValues = z.input<ReturnType<typeof accountFormSchema>>;
 // line is only a second net, in case someone drops those annotations and the output drifts.
 const _check: AccountCreate = {} as z.output<ReturnType<typeof accountFormSchema>>;
 void _check;
+
+/** What the edit form holds: all text. The type is not here: it cannot change. */
+export type AccountEditValues = { name: string; closingDay: string; dueDay: string };
+
+/** The part of an account the edit schema needs. */
+type EditableAccount = Pick<AccountWithBalance, "type" | "name" | "closing_day" | "due_day">;
+
+/**
+ * Schema of the edit form (docs/diseno.md D18 › Formulario de cuenta, "Editar cuenta"): the name,
+ * and a card's two days. It becomes the body of `PATCH /spaces/{id}/accounts/{account_id}`
+ * (`AccountUpdate`) with **only what changed**; an empty body (`{}`) means "nothing to save", and
+ * the form closes without a request. Bank and cash never send days (the backend refuses them with
+ * `card_day_not_allowed`); a card's days are required, as when it was created.
+ */
+export function accountEditSchema(account: EditableAccount) {
+  const isCard = account.type === "credit_card";
+  return z
+    .object({
+      name: z
+        .string({ error: NAME_REQUIRED })
+        .trim()
+        .min(1, NAME_REQUIRED)
+        .refine((name) => [...name].length <= ACCOUNT_NAME_MAX_LENGTH, NAME_TOO_LONG),
+      closingDay: z.string(),
+      dueDay: z.string(),
+    })
+    .check((context) => {
+      if (!isCard) return;
+      for (const [path, text] of [
+        ["closingDay", context.value.closingDay],
+        ["dueDay", context.value.dueDay],
+      ] as const) {
+        if (!DAY.test(text)) {
+          context.issues.push({
+            code: "custom",
+            input: context.value,
+            path: [path],
+            message: DAY_REQUIRED,
+          });
+        }
+      }
+    })
+    .transform((values): AccountUpdate => {
+      const body: AccountUpdate = {};
+      if (values.name !== account.name) body.name = values.name;
+      if (isCard) {
+        if (Number(values.closingDay) !== account.closing_day) {
+          body.closing_day = Number(values.closingDay);
+        }
+        if (Number(values.dueDay) !== account.due_day) body.due_day = Number(values.dueDay);
+      }
+      return body;
+    });
+}
+
+/** The values the edit form starts with: the account's own. */
+export function editValuesOf(account: EditableAccount): AccountEditValues {
+  return {
+    name: account.name,
+    closingDay: account.closing_day === null ? "" : String(account.closing_day),
+    dueDay: account.due_day === null ? "" : String(account.due_day),
+  };
+}
+
+// Second net, as for the create schema: what the edit schema outputs must stay assignable to the
+// generated `AccountUpdate`.
+const _checkEdit: AccountUpdate = {} as z.output<ReturnType<typeof accountEditSchema>>;
+void _checkEdit;

@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { AccountIcon } from "@/components/accounts/account-icon";
+import { AccountLink } from "@/components/accounts/account-link";
 import { focusRing } from "@/components/ui/focus";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import { accountMetaLine } from "@/lib/core/accounts-summary";
@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
  * takes its place; it is the first version of that dashboard's "Cuentas" card. Each row is the icon
  * of its type, the name (cut with "…" if it does not fit), its secondary line and its amount. A
  * card is shown by what it owes, positive and in the debt color, as the Inicio will show it
- * (`balance_minor` is negative when you owe); the others by their balance. Each row is a link to
- * `/cuentas?sel=<id>` (FE-17): the Cuentas screen, with that account in the detail from 1024 px. On
- * a phone it is the list, which is where a tap on an account can lead until its page exists (FE-28).
+ * (`balance_minor` is negative when you owe); the others by their balance. Each row is an
+ * `AccountLink` to `/cuentas/<id>`, the account's page on a phone; from 1024 px a click goes to
+ * `/cuentas?sel=<id>`, the list with that account in the detail.
  */
 export function AccountsSummary({
   accounts,
@@ -32,9 +32,8 @@ export function AccountsSummary({
           const amount = isCard ? -account.balance_minor : account.balance_minor;
           return (
             <li key={account.id}>
-              <Link
-                href={`/cuentas?sel=${account.id}`}
-                prefetch={false}
+              <AccountLink
+                accountId={account.id}
                 className={cn(
                   "-mx-2 flex min-h-13.5 items-center gap-3 rounded-xl px-2 py-1 hover:bg-primary-soft",
                   focusRing,
@@ -57,7 +56,7 @@ export function AccountsSummary({
                 >
                   {formatMoney(amount, currency)}
                 </span>
-              </Link>
+              </AccountLink>
             </li>
           );
         })}
