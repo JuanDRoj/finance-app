@@ -104,7 +104,7 @@ type AccountFormProps = {
 
 /**
  * The form of a new account (docs/diseno.md D18), one component in two containers: a page below
- * 1024 px and the side panel from 1024 px. Only creating; editing is FE-17's.
+ * 1024 px and the side panel from 1024 px. Only creating; editing is KAN-92's (FE-28).
  *
  * - react-hook-form with `accountFormSchema(exponent)`: the form holds text and the schema turns it
  *   into the body of `POST /spaces/{id}/accounts` (the balance as an integer of the minor unit,

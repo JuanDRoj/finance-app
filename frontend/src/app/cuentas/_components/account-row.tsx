@@ -47,7 +47,7 @@ export function AccountRow({ account, currency, selected }: AccountRowProps) {
       </span>
       <span
         className={cn(
-          "max-w-[55%] shrink-0 font-heading text-item font-semibold tabular-nums",
+          "min-w-0 max-w-[60%] text-right font-heading text-item font-semibold break-all tabular-nums",
           isCard && "text-debt",
         )}
       >

@@ -208,6 +208,11 @@ describe("AccountsScreen list", () => {
       expect(label.className).toContain("truncate");
       expect(label.getAttribute("title")).toBe(name);
     }
+    // A balance is never cut: it can wrap, but it is not truncated nor kept from shrinking.
+    for (const amount of screen.getAllByText("$ 90.071.992.547.409,91")) {
+      expect(amount.className).not.toContain("truncate");
+      expect(amount.className).toContain("break-all");
+    }
     // 2 × 9007199254740991 is past the safe integers, and still exact.
     expect(screen.getByText("$ 180.143.985.094.819,82")).toBeTruthy();
   });
@@ -234,7 +239,7 @@ describe("AccountsScreen archived accounts", () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("button", { name: "Desarchivar Billetera vieja" })).toBeTruthy();
-    expect(screen.getByText("Efectivo · $ 0,00")).toBeTruthy();
+    expect(screen.getByText("$ 0,00")).toBeTruthy();
   });
 
   it("unarchives with no confirmation: POST, invalidates the space, refreshes and says so", async () => {

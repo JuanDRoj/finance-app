@@ -59,7 +59,7 @@ export function ArchivedAccounts({ accounts, space, api = browserApi }: Archived
   return (
     <section
       aria-label="Cuentas archivadas"
-      className="flex min-w-0 flex-col rounded-tile border border-dashed border-input lg:rounded-card"
+      className="tile-surface flex min-w-0 flex-col rounded-tile lg:rounded-card lg:border-dashed lg:border-input lg:bg-transparent"
     >
       <button
         type="button"
@@ -67,7 +67,7 @@ export function ArchivedAccounts({ accounts, space, api = browserApi }: Archived
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "flex min-h-13 items-center justify-between gap-3 rounded-[inherit] px-4 text-left text-item font-bold text-muted-foreground lg:min-h-11.5",
+          "flex min-h-13 items-center justify-between gap-3 rounded-[inherit] px-4 text-left text-item font-bold lg:min-h-11.5 lg:text-muted-foreground",
           focusRing,
         )}
       >
@@ -91,8 +91,10 @@ export function ArchivedAccounts({ accounts, space, api = browserApi }: Archived
               <span className="truncate text-item font-bold" title={account.name}>
                 {account.name}
               </span>
-              <span className="truncate text-caption">
-                {accountMetaLine(account)} · {formatMoney(displayedAmount(account), space.currency)}
+              <span className="truncate text-caption">{accountMetaLine(account)}</span>
+              {/* A balance is never cut: it wraps instead (only the name and the type are truncated). */}
+              <span className="text-caption break-all tabular-nums">
+                {formatMoney(displayedAmount(account), space.currency)}
               </span>
             </span>
             <Button
