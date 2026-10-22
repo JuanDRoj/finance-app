@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
@@ -24,6 +23,7 @@ import { isUnauthorized } from "@/lib/core/data/errors";
 import { spaceQueryKey } from "@/lib/core/data/spaces";
 import {
   ACCOUNT_TYPE_NAMES,
+  NETWORK_ERROR,
   describeApiError,
   validationIssuesOf,
   type ErrorDescription,
@@ -91,7 +91,10 @@ type AccountFormProps = {
    * footer, bottom right, and the fields in the part that scrolls.
    */
   variant: "page" | "panel";
-  /** Called once the account exists (the toast is already shown): the container leaves the form. */
+  /**
+   * Called once the account exists (the toast is already shown). The container leaves the form and
+   * refreshes the server data (`router.refresh()`), in the order that suits it.
+   */
   onDone: (account: AccountWithBalance) => void;
   /** The "Cancelar" of the panel. */
   onCancel?: () => void;
@@ -110,9 +113,12 @@ type AccountFormProps = {
  *   field the form does not have, goes to an `Alert` in Spanish (`describeApiError`).
  * - One request at a time: the button is busy while it runs and after it succeeds, until the
  *   container has left the form.
- * - On success: the queries of the space are invalidated, the page's server data is refreshed
- *   (`router.refresh()`: the sidebar and the Inicio come from the server), a toast says "Creaste
- *   «…»" and `onDone` runs.
+ * - Without a connection the request waits (TanStack Query pauses it) and the form says so, in the
+ *   words of any network failure; it goes out by itself when the connection returns.
+ * - On success: the queries of the space are invalidated, a toast says "Creaste «…»" and `onDone`
+ *   runs. Refreshing the server data (the sidebar and the Inicio come from the server) and leaving
+ *   the form are the container's job, because each container leaves differently and the refresh
+ *   must come at the right moment (the page returns to the Inicio; the panel closes first).
  */
 export function AccountForm({
   space,
@@ -121,7 +127,6 @@ export function AccountForm({
   onCancel,
   api = browserApi,
 }: AccountFormProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { exponent } = space.currency;
   const schema = useMemo(() => accountFormSchema(exponent), [exponent]);
@@ -148,7 +153,6 @@ export function AccountForm({
       void queryClient.invalidateQueries({ queryKey: spaceQueryKey(space.id) });
       toast.success(`Creaste «${account.name}»`);
       onDone(account);
-      router.refresh();
     },
     onError: (error) => {
       // An expired session is not a form problem: the API client's 401 rule is for queries only.
@@ -173,6 +177,10 @@ export function AccountForm({
       if (unplaced) setFormError(describeApiError(error));
     },
   });
+
+  // Without a connection TanStack Query does not fail: it pauses the request and sends it when the
+  // network is back, so the button would stay busy for good with no word of why. Say it.
+  const offline = mutation.isPaused;
 
   // Busy while it runs and once it worked: the container is leaving, a second tap must not create
   // a second account.
@@ -246,7 +254,8 @@ export function AccountForm({
           </p>
         </div>
       ) : null}
-      {formError ? <Alert title={formError.title}>{formError.message}</Alert> : null}
+      {offline ? <Alert title={NETWORK_ERROR.title}>{NETWORK_ERROR.message}</Alert> : null}
+      {formError && !offline ? <Alert title={formError.title}>{formError.message}</Alert> : null}
     </>
   );
 

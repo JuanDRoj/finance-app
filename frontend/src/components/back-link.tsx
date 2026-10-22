@@ -3,6 +3,7 @@
 import { CaretLeft } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { canGoBackInApp } from "@/components/back-navigation";
 import { buttonVariants } from "@/components/ui/button-variants";
 import { cn } from "@/lib/utils";
 
@@ -11,20 +12,6 @@ type BackLinkProps = {
   fallbackHref?: string;
   className?: string;
 };
-
-/**
- * Whether going back stays inside this app: the page has a history before it and the page that
- * sent the visitor here is of this same origin. A page opened directly (a typed address, a link
- * from elsewhere, a new tab) has neither, and "atrás" would leave the app or do nothing.
- */
-function canGoBackInApp(): boolean {
-  if (window.history.length <= 1 || document.referrer === "") return false;
-  try {
-    return new URL(document.referrer).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The "Volver" of a screen with a form (docs/diseno.md D18): a 44 px round arrow before the title.

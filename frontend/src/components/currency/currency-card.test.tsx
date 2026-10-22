@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CurrencyCard } from "./currency-card";
@@ -25,6 +25,7 @@ vi.mock("@/components/use-is-desktop", () => ({
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  onlineManager.setOnline(true);
 });
 
 const SPACE = { id: "space-1", currency: { code: "UYU" } };
@@ -58,9 +59,10 @@ beforeEach(() => {
 });
 
 function renderCard(space = SPACE) {
-  // No retries: the app retries a failed query three times with growing waits, which a test cannot wait for.
+  // The wait between retries is 0: the real one is a second, which a test would sit through. How
+  // many retries the picker asks for is its own (one), and the tests count the calls.
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } },
   });
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   // A new element each time, so that rendering again really renders (the same element would bail out).
@@ -254,7 +256,9 @@ describe("while the list loads and when it fails", () => {
   });
 
   it("shows the error in Spanish with 'Reintentar', and the list once it works", async () => {
-    mocks.get.mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }));
+    mocks.get
+      .mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }))
+      .mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }));
     renderCard();
     open();
     const dialog = await screen.findByRole("dialog");
@@ -270,6 +274,30 @@ describe("while the list loads and when it fails", () => {
     fireEvent.click(within(alert).getByRole("button", { name: "Reintentar" }));
     expect(await screen.findAllByRole("radio")).toHaveLength(6);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("asks for the list twice, one retry, before it gives the error", async () => {
+    mocks.get.mockResolvedValue(failure(500, { code: "internal_error", detail: "Boom" }));
+    renderCard();
+    open();
+    await screen.findByRole("alert");
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry when the session ended (401): it would answer the same", async () => {
+    mocks.get.mockResolvedValue(failure(401, { code: "invalid_session", detail: "Expired" }));
+    renderCard();
+    open();
+    await screen.findByRole("alert");
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers by itself if the retry works: no error is shown", async () => {
+    mocks.get.mockResolvedValueOnce(failure(503)).mockResolvedValueOnce(ok(CURRENCIES));
+    renderCard();
+    await opened();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mocks.get).toHaveBeenCalledTimes(2);
   });
 
   it("says it cannot connect when the request does not reach the backend", async () => {
@@ -418,5 +446,117 @@ describe("using the currency", () => {
     pressUse();
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/login"));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("without a connection", () => {
+  it("says so instead of a skeleton that waits for good, and shows the list when the network returns", async () => {
+    onlineManager.setOnline(false);
+    renderCard();
+    open();
+    const dialog = await screen.findByRole("dialog");
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert.textContent).toContain("No pudimos conectar");
+    expect(alert.textContent).toContain("Revisa tu conexión");
+    // Paused, not failed: nothing was sent, there is no skeleton and no retry button (it resumes).
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(dialog.querySelector("[data-slot='skeleton']")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Reintentar" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Usar esta moneda" }).getAttribute("aria-disabled"),
+    ).toBe("true");
+
+    onlineManager.setOnline(true);
+    expect(await screen.findAllByRole("radio")).toHaveLength(6);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so too when the change waits for the network, keeps the button busy, and sends it when it returns", async () => {
+    renderCard();
+    await opened();
+    fireEvent.click(radio(/Euro/));
+    onlineManager.setOnline(false);
+    pressUse();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("No pudimos conectar");
+    expect(mocks.patch).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Usar esta moneda" }).getAttribute("aria-busy")).toBe(
+      "true",
+    );
+
+    onlineManager.setOnline(true);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(mocks.patch).toHaveBeenCalledWith("/spaces/{space_id}", {
+      params: { path: { space_id: "space-1" } },
+      body: { currency: "EUR" },
+    });
+  });
+
+  it("shows no connection notice while there is a connection", async () => {
+    renderCard();
+    await opened();
+    expect(screen.queryByText("No pudimos conectar")).toBeNull();
+  });
+});
+
+describe("the look of the list, per width (the canvas)", () => {
+  it("on a phone: the name at 16 px, the code in bold and tabular, radios of 22 px", async () => {
+    renderCard();
+    await opened();
+    const row = radio(/Peso uruguayo/).closest("label") as HTMLElement;
+    const [name, code] = Array.from(row.querySelectorAll("span"));
+    expect(name?.className).toContain("text-base");
+    expect(name?.className).not.toContain("text-item");
+    expect(code?.className).toContain("font-bold");
+    expect(code?.className).toContain("tabular-nums");
+    expect(radio(/Peso uruguayo/).className).toContain("size-5.5");
+  });
+
+  it("on a desktop dialog: the name at 15 px, the code at 14 px and plain, radios of 18 px", async () => {
+    mocks.desktop = true;
+    renderCard();
+    await opened();
+    const row = radio(/Peso uruguayo/).closest("label") as HTMLElement;
+    const [name, code] = Array.from(row.querySelectorAll("span"));
+    expect(name?.className).toContain("text-item"); // 15 px
+    expect(name?.className).not.toContain("text-base");
+    expect(code?.className).toContain("text-sm"); // 14 px
+    expect(code?.className).toContain("font-normal");
+    expect(code?.className).not.toContain("font-bold");
+    expect(radio(/Peso uruguayo/).className).toContain("size-4.5");
+  });
+
+  it("makes the chosen name bold and the others medium, at both widths, without bolding the code", async () => {
+    mocks.desktop = true;
+    renderCard();
+    await opened();
+    const chosen = (radio(/Peso uruguayo/).closest("label") as HTMLElement).querySelectorAll(
+      "span",
+    );
+    const other = (radio(/Euro/).closest("label") as HTMLElement).querySelectorAll("span");
+    expect(chosen[0]?.className).toContain("font-bold");
+    expect(other[0]?.className).toContain("font-medium");
+    expect(chosen[1]?.className).not.toContain("font-bold");
+    expect((radio(/Peso uruguayo/).closest("label") as HTMLElement).className).toContain(
+      "bg-primary/8",
+    );
+  });
+});
+
+describe("the icon of the card", () => {
+  it("is a coin with a dollar sign on a phone and a banknote on the desktop card", () => {
+    renderCard();
+    const icons = Array.from(
+      (screen.getByRole("region") as HTMLElement).querySelectorAll("span[aria-hidden] svg"),
+    );
+    expect(icons).toHaveLength(2);
+    const [phone, desktop] = icons;
+    expect(phone?.getAttribute("class")).toContain("lg:hidden");
+    expect(desktop?.getAttribute("class")).toContain("hidden");
+    expect(desktop?.getAttribute("class")).toContain("lg:block");
+    // Different drawings, not the same one twice.
+    expect(phone?.innerHTML).not.toBe(desktop?.innerHTML);
   });
 });

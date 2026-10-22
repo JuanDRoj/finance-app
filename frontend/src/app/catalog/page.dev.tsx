@@ -43,8 +43,9 @@ import { ToastDemo } from "./_components/toast-demo";
 // lib/env/page-extensions.ts). Every base component in its states, at 360 px and up.
 
 const UYU = { code: "UYU", exponent: 2 } as const;
-// The space of the catalog is not a real one: `?cuenta=nueva` here would try to create an account
-// in it (the panel of the shell reads that param), and the backend would answer 404.
+// The space of the catalog is not a real one, and the catalog has no session: `?cuenta=nueva` here
+// opens the real panel of the shell (it reads that param), and sending it would reach the real
+// backend with no session cookie, which answers 401 and takes the page to /login.
 const DEMO_SPACE_ID = "00000000-0000-4000-8000-000000000000";
 const AMOUNTS = [155050, 1234567, 9, 100000000, 888888];
 const VARIANTS = ["default", "secondary", "outline", "ghost", "destructive", "link"] as const;
@@ -472,7 +473,9 @@ export default async function CatalogPage({
             hasta 1120 px; una debajo de la otra antes). &quot;Cambiar&quot; abre el diálogo (desde
             1024 px) o la hoja inferior (menos), con un servidor de mentira que responde lo que
             elijas: la lista cargando, fallando, el 409 de &quot;ya hay movimientos&quot;. El botón
-            del grillo abre el panel lateral desde 1024 px (aquí daría 404: este espacio no existe).
+            del grillo abre el panel lateral real desde 1024 px: aquí no hay sesión, así que
+            enviarlo da 401 y te lleva a /login (los servidores de mentira son los de las demos de
+            esta sección y de «Formulario de cuenta»).
           </p>
           <CurrencyDemo
             beside={

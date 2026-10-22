@@ -123,6 +123,17 @@ describe("AppShell", () => {
     expect(buttons).toEqual(["Acción", "Menú de la cuenta"]);
   });
 
+  describe("the title as a place for the focus", () => {
+    it("can be focused by script but is not in the tab order", () => {
+      render(<AppShell title="Hola, Ana">x</AppShell>);
+      const title = screen.getByRole("heading", { level: 1 });
+      expect(title.getAttribute("tabindex")).toBe("-1");
+      // The panel that created an account sends the focus here (account-panel-sheet.test.tsx).
+      title.focus();
+      expect(document.activeElement).toBe(title);
+    });
+  });
+
   describe("the line under the title", () => {
     it("shows the subtitle from 1024 px only, under the h1 and in the secondary color", () => {
       render(

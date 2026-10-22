@@ -1,26 +1,25 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountForm } from "./account-form";
 
-// The edges are mocked: the typed browser client, the router and the toast. What is under test is
+// The edges are mocked: the typed browser client and the toast. What is under test is
 // the form: what it shows for each type, what it sends, how a failure comes back to the fields or
 // the Alert, and that it cannot create two accounts.
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
-  refresh: vi.fn(),
   toastSuccess: vi.fn(),
   replace: vi.fn(),
 }));
 
 vi.mock("@/lib/api/browser", () => ({ browserApi: { POST: mocks.post } }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess } }));
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  onlineManager.setOnline(true);
 });
 
 const SPACE = { id: "space-1", currency: { code: "UYU", exponent: 2 } };
@@ -44,7 +43,6 @@ function failure(status: number, body?: unknown) {
 
 beforeEach(() => {
   mocks.post.mockReset().mockResolvedValue(created());
-  mocks.refresh.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.replace.mockReset();
   vi.stubGlobal("location", { ...window.location, replace: mocks.replace });
@@ -406,18 +404,16 @@ describe("when the backend answers with a failure", () => {
     await screen.findByRole("alert");
     expect(onDone).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
-    expect(mocks.refresh).not.toHaveBeenCalled();
   });
 });
 
 describe("when the account is created", () => {
-  it("invalidates the space's queries, refreshes the server data, says so and hands over", async () => {
+  it("invalidates the space's queries, says so and hands over", async () => {
     const { onDone, invalidate } = renderForm();
     type("Nombre", "Itaú");
     submit();
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["spaces", "space-1"] });
-    expect(mocks.refresh).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Creaste «Itaú»");
     expect(onDone).toHaveBeenCalledWith(ACCOUNT);
   });
@@ -471,5 +467,58 @@ describe("one account at a time", () => {
     await screen.findByRole("alert");
     submit();
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("without a connection", () => {
+  it("says so while the request waits, in the words of any network failure, and keeps the button busy", async () => {
+    onlineManager.setOnline(false);
+    renderForm();
+    type("Nombre", "Itaú");
+    submit();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("No pudimos conectar");
+    expect(alert.textContent).toContain("Revisa tu conexión");
+    // TanStack Query paused it: nothing went out, and the button says it is working.
+    expect(mocks.post).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Crear cuenta" }).getAttribute("aria-busy")).toBe(
+      "true",
+    );
+  });
+
+  it("sends the request by itself when the connection returns, and the notice goes", async () => {
+    onlineManager.setOnline(false);
+    const { onDone } = renderForm();
+    type("Nombre", "Itaú");
+    submit();
+    await screen.findByRole("alert");
+
+    onlineManager.setOnline(true);
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not send a second request if it is submitted again while it waits", async () => {
+    onlineManager.setOnline(false);
+    renderForm();
+    type("Nombre", "Itaú");
+    submit();
+    await screen.findByRole("alert");
+    submit();
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Crear cuenta" }).closest("form") as HTMLFormElement,
+    );
+    onlineManager.setOnline(true);
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no notice while there is a connection", async () => {
+    renderForm();
+    type("Nombre", "Itaú");
+    submit();
+    await waitFor(() => expect(mocks.post).toHaveBeenCalled());
+    expect(screen.queryByText("No pudimos conectar")).toBeNull();
   });
 });

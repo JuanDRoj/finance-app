@@ -124,7 +124,12 @@ export function AppShell({
             <div className="flex min-w-0 items-center gap-1">
               {leading}
               <div className="flex min-w-0 flex-col gap-0.5">
-                <h1 className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop">
+                <h1
+                  // Focusable by script only (`tabIndex={-1}`): after an action that changes the screen
+                  // (a panel that created an account) the focus goes here instead of ending on the body.
+                  tabIndex={-1}
+                  className="line-clamp-2 min-w-0 font-heading text-2xl leading-tight font-bold tracking-title break-words md:text-title-tablet lg:text-title-desktop"
+                >
                   {title}
                 </h1>
                 {subtitle ? (

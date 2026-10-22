@@ -1,6 +1,6 @@
 "use client";
 
-import { CurrencyDollar } from "@phosphor-icons/react/ssr";
+import { CurrencyDollar, Money } from "@phosphor-icons/react/ssr";
 import { useId, useState } from "react";
 import { CurrencyPicker } from "@/components/currency/currency-picker";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,10 @@ export function CurrencyCard({ space, className, api }: CurrencyCardProps) {
             aria-hidden
             className="flex size-10.5 shrink-0 items-center justify-center rounded-icon bg-primary-soft text-primary lg:self-start"
           >
-            <CurrencyDollar weight="duotone" className="size-5.5" />
+            {/* The canvas draws a coin with a dollar sign on the phone (duotone) and a banknote on the
+                desktop card: two icons, one hidden at each width. */}
+            <CurrencyDollar weight="duotone" className="size-5.5 lg:hidden" />
+            <Money className="hidden size-5.5 lg:block" />
           </span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5 lg:flex-none">
             <h2

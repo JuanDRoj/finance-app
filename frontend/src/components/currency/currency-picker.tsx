@@ -32,11 +32,17 @@ import { ApiError, isUnauthorized } from "@/lib/core/data/errors";
 import { updateSpaceCurrency } from "@/lib/core/data/spaces";
 import {
   CURRENCY_NAMES,
+  NETWORK_ERROR,
   describeApiError,
   isErrorResponse,
   orderCurrencies,
 } from "@/lib/core/i18n";
 import { cn } from "@/lib/utils";
+
+// One retry, not the three of the rest of the app: the person is waiting in front of a skeleton, and
+// a list of six currencies that failed twice will not load by insisting. A session that ended (401)
+// is not retried either: the answer would be the same.
+const CURRENCIES_RETRIES = 1;
 
 const TITLE = "Moneda de tu espacio";
 const DESCRIPTION =
@@ -92,7 +98,11 @@ export function CurrencyPicker({
   const queryClient = useQueryClient();
   const refreshOnClose = useRef(false);
 
-  const currencies = useQuery({ ...currenciesQueryOptions(api), enabled: open });
+  const currencies = useQuery({
+    ...currenciesQueryOptions(api),
+    enabled: open,
+    retry: (count, error) => !isUnauthorized(error) && count < CURRENCIES_RETRIES,
+  });
 
   const mutation = useMutation({
     mutationFn: (code: string) => updateSpaceCurrency(api, space.id, code),
@@ -134,11 +144,19 @@ export function CurrencyPicker({
     mutation.mutate(chosen);
   }
 
+  // Offline TanStack Query does not fail: it pauses the request until the network is back. Without
+  // a word the skeleton (or the busy button) would wait for good, so say it. Both resume by
+  // themselves, so there is no "Reintentar" here.
+  const listWaitsForNetwork = currencies.isPending && currencies.fetchStatus === "paused";
+  const changeWaitsForNetwork = mutation.isPaused;
+
   const ordered = currencies.data ? orderCurrencies(currencies.data) : undefined;
 
   const body: ReactNode = (
     <div className="flex flex-col gap-3">
-      {currencies.isPending ? (
+      {listWaitsForNetwork ? (
+        <Alert title={NETWORK_ERROR.title}>{NETWORK_ERROR.message}</Alert>
+      ) : currencies.isPending ? (
         <div aria-busy="true" className="flex flex-col gap-2">
           <span role="status" className="sr-only">
             Cargando las monedas…
@@ -178,16 +196,27 @@ export function CurrencyPicker({
                   "flex min-h-13 cursor-pointer items-center gap-3 px-4",
                   desktop && "min-h-12.5 rounded-icon px-3.5",
                   index > 0 && "border-t border-border",
-                  chosen === currency.code
-                    ? "bg-primary/8 font-bold dark:bg-primary/12"
-                    : "font-medium",
+                  chosen === currency.code && "bg-primary/8 dark:bg-primary/12",
                 )}
               >
-                <span className="min-w-0 flex-1 text-base wrap-anywhere">
+                {/* The sheet of a phone writes the name at 16 px and the code in bold; the desktop
+                    dialog, as in the canvas, the name at 15 px and the code at 14 px, plain. */}
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 wrap-anywhere",
+                    desktop ? "text-item" : "text-base",
+                    chosen === currency.code ? "font-bold" : "font-medium",
+                  )}
+                >
                   {name ?? currency.code}
                 </span>
                 {name ? (
-                  <span className="text-sm font-bold text-muted-foreground tabular-nums">
+                  <span
+                    className={cn(
+                      "text-sm text-muted-foreground",
+                      desktop ? "font-normal" : "font-bold tabular-nums",
+                    )}
+                  >
                     {currency.code}
                   </span>
                 ) : null}
@@ -197,13 +226,16 @@ export function CurrencyPicker({
                   value={currency.code}
                   checked={chosen === currency.code}
                   onChange={() => onChoose(currency.code)}
-                  className="size-5.5 shrink-0 accent-primary"
+                  className={cn("shrink-0 accent-primary", desktop ? "size-4.5" : "size-5.5")}
                 />
               </label>
             );
           })}
         </fieldset>
       )}
+      {changeWaitsForNetwork ? (
+        <Alert title={NETWORK_ERROR.title}>{NETWORK_ERROR.message}</Alert>
+      ) : null}
       {mutation.isError && !isUnauthorized(mutation.error) ? (
         <Alert title={describeApiError(mutation.error).title}>
           {describeApiError(mutation.error).message}
