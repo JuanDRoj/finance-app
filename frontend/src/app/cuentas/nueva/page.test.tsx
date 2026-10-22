@@ -124,7 +124,7 @@ describe("NewAccountPage", () => {
     );
     expect(screen.getByTestId("desktop-redirect")).toBeTruthy();
     // To the Inicio with the panel open over it.
-    expect(mocks.desktopRedirect).toHaveBeenCalledWith({ to: "/?cuenta=nueva" });
+    expect(mocks.desktopRedirect).toHaveBeenCalledWith({ to: "/cuentas?cuenta=nueva" });
   });
 
   it("keeps the account menu in the header and in the sidebar, as every screen with a session", async () => {
@@ -175,7 +175,7 @@ describe("NewAccountPage", () => {
     it("still sends a desktop visitor away, and keeps the page phone-only", async () => {
       backend({ me: failure(502) });
       await renderPage();
-      expect(mocks.desktopRedirect).toHaveBeenCalledWith({ to: "/?cuenta=nueva" });
+      expect(mocks.desktopRedirect).toHaveBeenCalledWith({ to: "/cuentas?cuenta=nueva" });
       expect((screen.getByRole("main").parentElement as HTMLElement).className).toContain(
         "lg:hidden",
       );

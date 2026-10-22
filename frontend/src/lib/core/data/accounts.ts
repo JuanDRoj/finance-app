@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import type { components } from "@/lib/api/schema";
 import type { ApiClient } from "./api-client";
 import { unwrap } from "./errors";
@@ -53,5 +54,38 @@ export async function createAccount(
 ): Promise<AccountWithBalance> {
   return unwrap(
     api.POST("/spaces/{space_id}/accounts", { params: { path: { space_id: spaceId } }, body }),
+  );
+}
+
+/**
+ * Query options of the accounts of a space (key `accountsQueryKey`). The Cuentas screen asks for
+ * the archived ones too (`includeArchived: true`) and tells them apart on the client, which is one
+ * request less than two lists.
+ */
+export function accountsQueryOptions(
+  api: ApiClient,
+  spaceId: string,
+  options: { includeArchived?: boolean } = {},
+) {
+  return queryOptions({
+    queryKey: accountsQueryKey(spaceId, options),
+    queryFn: () => listAccounts(api, spaceId, options),
+  });
+}
+
+/**
+ * Makes an archived account active again (`POST /spaces/{space_id}/accounts/{account_id}/unarchive`),
+ * whatever its balance; on an active one nothing changes. Throws an `ApiError`: `account_not_found`
+ * (404) or a 401.
+ */
+export async function unarchiveAccount(
+  api: ApiClient,
+  spaceId: string,
+  accountId: string,
+): Promise<AccountWithBalance> {
+  return unwrap(
+    api.POST("/spaces/{space_id}/accounts/{account_id}/unarchive", {
+      params: { path: { space_id: spaceId, account_id: accountId } },
+    }),
   );
 }

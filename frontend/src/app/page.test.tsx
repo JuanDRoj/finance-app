@@ -572,11 +572,11 @@ describe("HomePage", () => {
       );
     });
 
-    it("has no links in the rows: the Cuentas screen does not exist yet", async () => {
+    it("makes each row a link to Cuentas with that account chosen", async () => {
       await renderHome();
-      expect(
-        within(screen.getByRole("region", { name: "Tus cuentas" })).queryByRole("link"),
-      ).toBeNull();
+      const region = within(screen.getByRole("region", { name: "Tus cuentas" }));
+      const hrefs = region.getAllByRole("link").map((link) => link.getAttribute("href"));
+      expect(hrefs).toEqual([BANK, CASH, CARD].map((account) => `/cuentas?sel=${account.id}`));
     });
 
     it("cuts a very long name with an ellipsis instead of breaking the row", async () => {

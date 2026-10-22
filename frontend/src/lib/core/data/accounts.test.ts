@@ -1,7 +1,14 @@
 import createClient from "openapi-fetch";
 import { describe, expect, it, vi } from "vitest";
 import type { paths } from "@/lib/api/schema";
-import { accountsQueryKey, createAccount, listAccounts, type AccountCreate } from "./accounts";
+import {
+  accountsQueryKey,
+  accountsQueryOptions,
+  createAccount,
+  listAccounts,
+  unarchiveAccount,
+  type AccountCreate,
+} from "./accounts";
 import { ApiError } from "./errors";
 
 function clientAnswering(response: Response) {
@@ -114,5 +121,36 @@ describe("createAccount", () => {
       (caught: unknown) => caught,
     );
     expect(error).toMatchObject({ status: 404 });
+  });
+});
+
+describe("accountsQueryOptions", () => {
+  it("uses the key of the accounts and asks for the archived ones when told to", async () => {
+    const { api, fetch } = clientAnswering(Response.json([ACCOUNT]));
+    const options = accountsQueryOptions(api, SPACE_ID, { includeArchived: true });
+    expect(options.queryKey).toEqual(accountsQueryKey(SPACE_ID, { includeArchived: true }));
+    await expect((options.queryFn as () => Promise<unknown>)()).resolves.toEqual([ACCOUNT]);
+    expect(new URL(fetch.mock.calls[0]![0].url).search).toBe("?include_archived=true");
+  });
+});
+
+describe("unarchiveAccount", () => {
+  it("sends POST .../unarchive and returns the account", async () => {
+    const { api, fetch } = clientAnswering(Response.json(ACCOUNT));
+    await expect(unarchiveAccount(api, SPACE_ID, ACCOUNT.id)).resolves.toEqual(ACCOUNT);
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe(
+      `/spaces/${SPACE_ID}/accounts/${ACCOUNT.id}/unarchive`,
+    );
+  });
+
+  it("throws an ApiError when the account is not there", async () => {
+    const body = { code: "account_not_found", detail: "Account not found" };
+    const { api } = clientAnswering(Response.json(body, { status: 404 }));
+    await expect(unarchiveAccount(api, SPACE_ID, ACCOUNT.id)).rejects.toMatchObject({
+      status: 404,
+      body,
+    });
   });
 });

@@ -160,13 +160,13 @@ describe("BottomNav", () => {
     expect(nav.getAttribute("data-slot")).toBe("bottom-nav");
     expect(nav.className).toContain("fixed");
     expect(nav.className).toContain("lg:hidden");
-    // Today it has only Inicio, which is the current screen, and the "+" (since KAN-70 the main
-    // action opens the form of a new account).
+    // Today it has Inicio (the current screen), the "+" (since KAN-70 the main action opens the
+    // form of a new account) and Cuentas (KAN-71).
     expect(
       screen
         .getAllByRole("link")
         .map((link) => link.getAttribute("aria-label") ?? link.textContent),
-    ).toEqual(["Inicio", "Nueva cuenta"]);
+    ).toEqual(["Inicio", "Nueva cuenta", "Cuentas"]);
     expect(screen.getByRole("link", { name: "Inicio" }).getAttribute("aria-current")).toBe("page");
   });
 
