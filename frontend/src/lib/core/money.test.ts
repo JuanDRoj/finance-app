@@ -268,3 +268,85 @@ describe("parseMoneyInput", () => {
     }
   });
 });
+
+describe("parseMoneyInput por moneda", () => {
+  const ok = (minor: number) => ({ ok: true, minor });
+  const no = (issue: string) => ({ ok: false, issue });
+  const MAX = Number.MAX_SAFE_INTEGER;
+
+  // The exponents are the ones of the backend seed (migration 0001): the parser only knows the
+  // exponent, so these tests also pin that UYU, COP and USD read the same and CLP has no decimals.
+  describe.each([UYU, COP, USD])("$code (exponent 2)", (currency) => {
+    const { exponent } = currency;
+
+    it("reads what a person types into the minor unit", () => {
+      expect(parseMoneyInput("1550,50", exponent)).toEqual(ok(155050));
+      expect(parseMoneyInput("1550.50", exponent)).toEqual(ok(155050));
+      expect(parseMoneyInput("15", exponent)).toEqual(ok(1500));
+      expect(parseMoneyInput("0,29", exponent)).toEqual(ok(29));
+      expect(parseMoneyInput("0,01", exponent)).toEqual(ok(1));
+      expect(parseMoneyInput("1,15", exponent)).toEqual(ok(115));
+      expect(parseMoneyInput("4.35", exponent)).toEqual(ok(435));
+      expect(parseMoneyInput(",5", exponent)).toEqual(ok(50));
+      expect(parseMoneyInput("7,", exponent)).toEqual(ok(700));
+      expect(parseMoneyInput("007", exponent)).toEqual(ok(700));
+    });
+
+    it("refuses what it cannot read, and says why", () => {
+      expect(parseMoneyInput("", exponent)).toEqual(no("empty"));
+      expect(parseMoneyInput("1,505", exponent)).toEqual(no("too_many_decimals"));
+      expect(parseMoneyInput("1.234", exponent)).toEqual(no("too_many_decimals"));
+      expect(parseMoneyInput("1.550,50", exponent)).toEqual(no("invalid"));
+      expect(parseMoneyInput("-5", exponent)).toEqual(no("negative_not_allowed"));
+    });
+
+    it("stops at the largest safe integer, like the backend", () => {
+      expect(parseMoneyInput("90071992547409,91", exponent)).toEqual(ok(MAX));
+      expect(parseMoneyInput("90071992547409,92", exponent)).toEqual(no("too_large"));
+    });
+
+    it("reads back what minorToDecimalString writes", () => {
+      for (const minor of [0, 1, 5, 29, 100, 155050, MAX]) {
+        expect(parseMoneyInput(minorToDecimalString(minor, exponent), exponent)).toEqual(ok(minor));
+      }
+    });
+  });
+
+  describe("CLP (exponent 0)", () => {
+    const { exponent } = CLP;
+
+    it("reads whole pesos and ignores an empty decimal part", () => {
+      expect(parseMoneyInput("1500", exponent)).toEqual(ok(1500));
+      expect(parseMoneyInput("15", exponent)).toEqual(ok(15));
+      expect(parseMoneyInput("1500,", exponent)).toEqual(ok(1500));
+      expect(parseMoneyInput("007", exponent)).toEqual(ok(7));
+      expect(parseMoneyInput("0", exponent)).toEqual(ok(0));
+    });
+
+    it("accepts no decimals at all, and 1.500 is not read as a thousand five hundred", () => {
+      expect(parseMoneyInput("1,5", exponent)).toEqual(no("too_many_decimals"));
+      expect(parseMoneyInput("1.500", exponent)).toEqual(no("too_many_decimals"));
+      expect(parseMoneyInput("1.234", exponent)).toEqual(no("too_many_decimals"));
+    });
+
+    it("stops at the largest safe integer, like the backend", () => {
+      expect(parseMoneyInput("9007199254740991", exponent)).toEqual(ok(MAX));
+      expect(parseMoneyInput("9007199254740992", exponent)).toEqual(no("too_large"));
+    });
+
+    it("reads back what minorToDecimalString writes", () => {
+      for (const minor of [0, 1, 5, 29, 100, 155050, MAX]) {
+        expect(parseMoneyInput(minorToDecimalString(minor, exponent), exponent)).toEqual(ok(minor));
+      }
+    });
+  });
+
+  it("reads 1.234 as a decimal number, never as thousands: it depends only on the exponent", () => {
+    // Two decimals (UYU, COP, USD) and none (CLP): three decimals are too many.
+    expect(parseMoneyInput("1.234", UYU.exponent)).toEqual(no("too_many_decimals"));
+    expect(parseMoneyInput("1.234", CLP.exponent)).toEqual(no("too_many_decimals"));
+    // With room for three decimals it is one unit and 234 thousandths.
+    expect(parseMoneyInput("1.234", KWD.exponent)).toEqual(ok(1234));
+    expect(parseMoneyInput("1,234", KWD.exponent)).toEqual(ok(1234));
+  });
+});

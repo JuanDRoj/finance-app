@@ -22,7 +22,8 @@ export type MoneyFieldProps = Omit<TextFieldProps, "type" | "startIcon" | "endAc
  * react-hook-form works.
  *
  * It only edits text. Turn it into minor units with `parseMoneyInput` (`lib/core/money.ts`) and
- * the exponent of the currency: this field never does arithmetic. The symbol is decorative; the
+ * the exponent of the currency (or `moneyAmountSchema` for a movement's amount): this field never
+ * does arithmetic. The symbol is decorative; the
  * name of the currency ("Peso uruguayo · UYU") is read to assistive technology as part of the
  * description, so nobody types an amount without knowing its currency.
  */
