@@ -196,6 +196,18 @@ describe("moneyAmountSchema: inside an object", () => {
   });
 });
 
+describe("moneyAmountSchema: an invalid exponent", () => {
+  it.each([-1, 1.5, 21, Number.NaN])("throws when the schema is built with %s", (exponent) => {
+    // At construction, not on the first text: a wrong exponent is a bug of the caller (it comes
+    // from the space's currency), and it must not wait for a person to type to show up.
+    expect(() => moneyAmountSchema(exponent)).toThrow(RangeError);
+  });
+
+  it.each([0, 1, 2, 3, 4, 20])("builds the schema with exponent %i", (exponent) => {
+    expect(() => moneyAmountSchema(exponent)).not.toThrow();
+  });
+});
+
 describe("zero is the schema's rule, not the parser's", () => {
   it("keeps parseMoneyInput accepting zero, as a balance and a reconciliation need", () => {
     expect(parseMoneyInput("0", 2)).toEqual({ ok: true, minor: 0 });

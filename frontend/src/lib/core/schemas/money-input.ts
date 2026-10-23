@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { components } from "@/lib/api/schema";
-import { parseMoneyInput, type MoneyInputIssue } from "../money";
+import { assertExponent, parseMoneyInput, type MoneyInputIssue } from "../money";
 
 type MoneyIssueContext = {
   /** Exponent of the space's currency: how many decimals the field accepts. */
@@ -61,9 +61,11 @@ export const AMOUNT_NOT_POSITIVE = "El monto debe ser mayor que 0.";
  * through integers and strings (see `parseMoneyInput`): never a float. The messages are the Spanish
  * text under the field, the same ones `describeMoneyInputIssue` gives every form with an amount.
  * Each field keeps its own `transform`, so an object schema reports an amount error together with
- * the errors of its other fields.
+ * the errors of its other fields. An invalid `exponent` (not an integer from 0 to 20) throws a
+ * `RangeError` when the schema is built, not when it first validates a text.
  */
 export function moneyAmountSchema(exponent: number) {
+  assertExponent(exponent);
   return z.string({ error: "Escribe un monto." }).transform((text, context): number => {
     const parsed = parseMoneyInput(text, exponent);
     if (parsed.ok && parsed.minor > 0) return parsed.minor;
