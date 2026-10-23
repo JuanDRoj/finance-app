@@ -22,7 +22,7 @@ export type FormatMoneyOptions = {
 const MINUS_SIGN = "\u2212"; // typographic minus (U+2212); Intl emits an ASCII hyphen
 const MAX_EXPONENT = 20;
 
-function assertExponent(exponent: number): void {
+export function assertExponent(exponent: number): void {
   if (!Number.isInteger(exponent) || exponent < 0 || exponent > MAX_EXPONENT) {
     throw new RangeError(`Invalid currency exponent: ${exponent}`);
   }
