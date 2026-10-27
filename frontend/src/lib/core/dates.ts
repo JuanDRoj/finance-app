@@ -20,6 +20,10 @@ const INSTANT_OPTIONS: Readonly<Record<InstantStyle, Intl.DateTimeFormatOptions>
 
 const LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+// The first and last year of a date: those of Python's `datetime.date`, which the backend uses (0001 to 9999).
+const MIN_YEAR = 1;
+const MAX_YEAR = 9999;
+
 // ISO 8601 with a mandatory `Z` or `±hh:mm` offset. Without one, `new Date(text)` reads the text
 // in the device's time zone and the instant would silently change from phone to phone.
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
@@ -76,6 +80,57 @@ export function todayInTimezone(timeZone: string, now: Date = new Date()): strin
   }).formatToParts(now);
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+/**
+ * The `Date` (at 00:00 UTC) of a real calendar day written `YYYY-MM-DD`, or `null` if it is not one
+ * ("2026-02-30"). The year starts at 1, like Python's `datetime.date` that the backend parses a
+ * movement's date with: "0000-01-01" would pass a calendar check here and be a 422 there.
+ */
+function utcDateOf(date: string): Date | null {
+  const match = LOCAL_DATE.exec(date);
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  if (year < MIN_YEAR) return null;
+  // `new Date(0)` is midnight UTC; `setUTCFullYear` (unlike `Date.UTC`) takes a year from 1 to 99 as is.
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
+  // "02-30" rolls over to March: it is not a real day if the parts do not come back as given.
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return utc;
+}
+
+/** Whether `text` is a real calendar day written `YYYY-MM-DD` (what an `<input type="date">` gives, or ""). */
+export function isLocalDate(text: string): boolean {
+  return utcDateOf(text) !== null;
+}
+
+/**
+ * The calendar day `days` after (or before, if negative) a local date, as `YYYY-MM-DD`. Pure
+ * calendar arithmetic on the day, with no time zone and no daylight saving, so "yesterday" of
+ * `todayInTimezone(space.timezone)` is `shiftLocalDate(today, -1)` and can never skip or repeat a
+ * day. Throws a `RangeError` for a text that is not a real day, a `days` that is not an integer, or
+ * a move out of years 0001 to 9999.
+ */
+export function shiftLocalDate(date: string, days: number): string {
+  const utc = utcDateOf(date);
+  if (!utc) throw new RangeError(`Expected a real YYYY-MM-DD date: "${date}"`);
+  if (!Number.isInteger(days)) throw new RangeError(`Expected a whole number of days: ${days}`);
+  utc.setUTCDate(utc.getUTCDate() + days);
+  // Past the first or last day of the calendar there is no `YYYY-MM-DD` to give back.
+  if (utc.getUTCFullYear() < MIN_YEAR || utc.getUTCFullYear() > MAX_YEAR) {
+    throw new RangeError(`The date is out of range after moving ${days} days: "${date}"`);
+  }
+  const year = String(utc.getUTCFullYear()).padStart(4, "0");
+  const month = String(utc.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(utc.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**

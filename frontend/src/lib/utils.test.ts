@@ -138,6 +138,30 @@ describe("cn", () => {
     expect(cn("text-brand-compact", "text-panel-title")).toBe("text-panel-title");
   });
 
+  it("resolves the sizes of the big amount (KAN-94) against Tailwind's and keeps them apart from colors", () => {
+    // 38 px on the phone, 28 px from 1024 px (a different variant, so both stay), and the symbols.
+    expect(cn("text-lg", "text-amount")).toBe("text-amount");
+    expect(cn("text-amount", "text-lg")).toBe("text-lg");
+    expect(cn("text-amount", "lg:text-amount-panel")).toBe("text-amount lg:text-amount-panel");
+    expect(cn("text-amount-symbol", "lg:text-amount-symbol-panel")).toBe(
+      "text-amount-symbol lg:text-amount-symbol-panel",
+    );
+    expect(cn("text-amount-panel", "text-amount")).toBe("text-amount");
+    expect(cn("text-amount-symbol", "text-amount-symbol-panel")).toBe("text-amount-symbol-panel");
+    // The figures keep their size next to the color of a debt, and the other way round.
+    expect(cn("text-amount", "text-debt")).toBe("text-amount text-debt");
+    expect(cn("text-debt", "text-amount-panel")).toBe("text-debt text-amount-panel");
+    // And a size of another token still replaces them.
+    expect(cn("text-amount", "text-panel-title")).toBe("text-panel-title");
+  });
+
+  it("resolves the tracking of the big amount against Tailwind's and the title's", () => {
+    expect(cn("tracking-amount", "tracking-tight")).toBe("tracking-tight");
+    expect(cn("tracking-tight", "tracking-amount")).toBe("tracking-amount");
+    expect(cn("tracking-title", "tracking-amount")).toBe("tracking-amount");
+    expect(cn("tracking-amount", "lg:tracking-normal")).toBe("tracking-amount lg:tracking-normal");
+  });
+
   it("keeps font families and weights apart", () => {
     expect(cn("font-brand", "font-extrabold")).toBe("font-brand font-extrabold");
     expect(cn("font-heading", "font-bold")).toBe("font-heading font-bold");
