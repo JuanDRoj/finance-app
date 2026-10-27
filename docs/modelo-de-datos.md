@@ -318,7 +318,7 @@ v1
 
 Las claves `Idempotency-Key` que ya vio `POST /spaces/{id}/transactions` (KAN-93), para que un doble toque o un reintento tras una respuesta perdida cree un solo movimiento. Vive en el módulo `transactions`.
 
-| space_id | `NOT NULL`; con `user_id` y `key` forma la PK compuesta `pk_idempotency_keys`, que es el UNIQUE del `ON CONFLICT` del reclamo |
+| space_id | `NOT NULL`; con `user_id` y `key` forma la PK compuesta `pk_idempotency_keys`, que es el UNIQUE del `ON CONFLICT` del reclamo. Es también la segunda columna de las dos FK compuestas (`(user_id, space_id)` y `(transaction_id, space_id)`): la BD exige que el miembro y el movimiento sean de este espacio (ver "Un asiento no cruza espacios") |
 | --- | --- |
 | user_idFK | `NOT NULL`; FK compuesta `(user_id, space_id)` → `space_members` (el usuario es miembro del espacio), `ON DELETE CASCADE` |
 | key | `uuid` `NOT NULL`; el que manda el cliente en el header. La misma clave de otro usuario o de otro espacio es otra fila |
@@ -326,7 +326,7 @@ Las claves `Idempotency-Key` que ya vio `POST /spaces/{id}/transactions` (KAN-93
 | transaction_idFK | **nullable a propósito**: NULL solo dentro del request que reclamó la clave, entre el reclamo y la creación del movimiento (esa fila no está confirmada, así que toda fila confirmada tiene su movimiento). FK compuesta `(transaction_id, space_id)` → `transactions(id, space_id)`, `ON DELETE CASCADE` (la app nunca borra en duro). Con NULL esa FK no se evalúa (MATCH SIMPLE) |
 | created_at | `timestamptz` (UTC), `now()` por defecto; el service escribe el `now` del request. Una clave vale 24 h desde aquí |
 
-Sin más índices: la PK sirve a todas las consultas. Una clave vencida no se borra: la reemplaza el siguiente reclamo con la misma clave, aunque su cuerpo sea otro. La purga (un `DELETE ... WHERE created_at < ...`, con su índice por `created_at`) queda para el cron del hito 2. Un request que falla no deja clave (se deshace toda su transacción), y el reintento de una clave vigente devuelve el movimiento como está ahora, también si se borró después.
+Sin más índices: la PK sirve a todas las consultas. Reintentar una clave vigente no escribe datos, pero el reclamo deja esa fila bloqueada (`FOR NO KEY UPDATE`) hasta el fin del request, así que dos reintentos simultáneos de la misma clave van uno tras otro; es inocuo, porque después solo lee. Una clave vencida no se borra: la reemplaza el siguiente reclamo con la misma clave, aunque su cuerpo sea otro. La purga (un `DELETE ... WHERE created_at < ...`, con su índice por `created_at`) queda para el cron del hito 2. Un request que falla no deja clave (se deshace toda su transacción), y el reintento de una clave vigente devuelve el movimiento como está ahora, también si se borró después.
 
 ### budgets
  

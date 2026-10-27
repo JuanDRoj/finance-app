@@ -97,13 +97,17 @@ async def create_movement(
     (a double tap, a retry after a lost response) create one movement:
 
     1. The key is **claimed first** (`claim_idempotency_key`, one atomic `INSERT ... ON CONFLICT`),
-       before any account is locked. A second request with the same key waits there, holding no
-       lock, until the first one ends. If the first one rolled back (a 422, say), the key never
-       existed and the second one goes on as the owner; if it committed, the second one finds the
-       key.
-    2. If the key was already live, nothing is written: the same body answers with the movement
-       the key created (read again by id, so it is the movement as it is now, deleted or not, and
-       it is not validated again), and another body is a 409 `idempotency_key_reused`.
+       before any account is locked. A second request with the same key waits there until the
+       first one ends; while it waits it holds no lock (it has only read). If the first one rolled
+       back (a 422, say), the key never existed and the second one goes on as the owner; if it
+       committed, the second one finds the key.
+    2. If the key was already live, no data is written, but the claim leaves that key row locked
+       (`FOR NO KEY UPDATE`: PostgreSQL locks the conflicting row even when the `WHERE` of the
+       `DO UPDATE` is false) until the request ends. It is harmless: nothing else is locked
+       afterwards (a replay only reads), and the only effect is that two replays of the same key
+       in flight run one after the other. The same body answers with the movement the key created
+       (read again by id, so it is the movement as it is now, deleted or not, and it is not
+       validated again), and another body is a 409 `idempotency_key_reused`.
     3. Otherwise the movement is created as always and the key is tied to it (`transaction_id`),
        all in the transaction of the request, so the key exists if and only if the movement does.
 

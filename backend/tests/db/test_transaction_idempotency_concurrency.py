@@ -5,7 +5,14 @@ and only then creates the movement. Two requests with the same key therefore mee
 the second one has to wait for the transaction of the first and, in READ COMMITTED, goes on
 knowing what the first one did. If the first one commits, the key is taken and the second one
 answers with the first movement (or with a 409 if its body differs); if it rolls back, the key never
-existed and the second one creates its own movement.
+existed and the second one creates its own movement. The same happens when the key is expired and
+the first one replaces it (the `DO UPDATE` branch): the second one waits, then re-evaluates the
+`WHERE` on the new version, finds it live and answers with the new movement, leaving the old one
+untouched.
+
+Against a live key `DO UPDATE ... WHERE` writes nothing, but PostgreSQL still locks the conflicting
+row (`FOR NO KEY UPDATE`) until the request ends: the last tests show it with `NOWAIT` and with two
+replays that run one after the other.
 
 As in `test_account_reconcile_concurrency.py` the overlap is forced instead of hoped for
 (`tests/overlap.py`): the first operation writes but does not end, the second has to block on it,
@@ -18,7 +25,7 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +34,7 @@ from alembic import command
 from alembic.config import Config
 from pydantic import TypeAdapter
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -34,8 +42,10 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.core.errors import ConflictError
 from app.modules.spaces.models import SpaceMember
 from app.modules.transactions import service as transactions_service
+from app.modules.transactions.idempotency import IDEMPOTENCY_KEY_TTL
 from app.modules.transactions.schemas import MovementCreate
 from app.modules.users import service as users_service
 from tests.overlap import Operation, overlap
@@ -44,6 +54,7 @@ from tests.transactions_helpers import make_account, make_category, make_user_an
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TIMEOUT_SECONDS = 20
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
+LONG_AGO = NOW - IDEMPOTENCY_KEY_TTL - timedelta(hours=1)  # a key created then is expired at NOW
 KEY = uuid.UUID("0199a000-0000-4000-8000-00000000000a")
 OTHER_KEY = uuid.UUID("0199a000-0000-4000-8000-00000000000b")
 adapter: TypeAdapter[Any] = TypeAdapter(MovementCreate)
@@ -101,7 +112,12 @@ async def _scalar(engine: AsyncEngine, sql: str, **params: object) -> object:
 
 
 def _create(
-    world: World, key: uuid.UUID, data: MovementCreate, *, user_id: uuid.UUID | None = None
+    world: World,
+    key: uuid.UUID,
+    data: MovementCreate,
+    *,
+    user_id: uuid.UUID | None = None,
+    now: datetime = NOW,
 ) -> Operation:
     async def operation(session: AsyncSession) -> object:
         return await transactions_service.create_movement(
@@ -110,10 +126,18 @@ def _create(
             user_id or world.user_id,
             data,
             idempotency_key=key,
-            now=NOW,
+            now=now,
         )
 
     return operation
+
+
+async def _committed_key(engine: AsyncEngine, world: World, *, now: datetime) -> object:
+    """Create a movement with `KEY` (the usual expense) as of `now` and commit; returns it."""
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        created = await _create(world, KEY, world.expense(), now=now)(session)
+        await session.commit()
+        return created
 
 
 async def _movements(engine: AsyncEngine) -> object:
@@ -206,6 +230,164 @@ async def test_when_the_first_creation_rolls_back_the_key_never_existed_and_the_
     assert await _scalar(engine, "SELECT transaction_id FROM idempotency_keys") == getattr(
         second, "id", None
     )
+
+
+# an expired key: the DO UPDATE branch ----------------------------------------------------------
+
+
+async def test_two_claims_on_an_expired_key_replace_it_once_and_both_answer_the_new_movement(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    world = await _committed_world(engine)
+    old = await _committed_key(engine, world, now=LONG_AGO)
+
+    first, second = await overlap(
+        engines, _create(world, KEY, world.expense()), _create(world, KEY, world.expense())
+    )
+
+    # The first one replaced the expired row; the second waited, re-evaluated the WHERE on the new
+    # version (live now, created at NOW) and answered with the new movement.
+    assert getattr(first, "id", None) is not None
+    assert getattr(first, "id", None) != getattr(old, "id", None)
+    assert second == first
+    assert await _movements(engine) == 2  # the old one stays untouched
+    assert await _entries(engine) == 2
+    assert await _balance(engine, world) == -3100
+    assert await _keys(engine) == 1  # replaced, not duplicated
+    assert await _scalar(engine, "SELECT transaction_id FROM idempotency_keys") == getattr(
+        first, "id", None
+    )
+    assert await _scalar(engine, "SELECT created_at FROM idempotency_keys") == NOW
+
+
+async def test_a_second_claim_with_another_body_on_a_key_just_replaced_gets_the_409(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    world = await _committed_world(engine)
+    old = await _committed_key(engine, world, now=LONG_AGO)
+
+    first, second = await overlap(
+        engines,
+        _create(world, KEY, world.expense(1550)),
+        _create(world, KEY, world.expense(2000)),
+    )
+
+    # The key is live again with the body of the first one; the second one's body is another.
+    assert getattr(first, "id", None) not in (None, getattr(old, "id", None))
+    assert getattr(second, "code", None) == "idempotency_key_reused"
+    assert await _movements(engine) == 2
+    assert await _balance(engine, world) == -3100
+    assert await _scalar(engine, "SELECT transaction_id FROM idempotency_keys") == getattr(
+        first, "id", None
+    )
+
+
+async def test_an_expired_key_replaced_and_rolled_back_leaves_the_old_row_as_it_was(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    world = await _committed_world(engine)
+    old = await _committed_key(engine, world, now=LONG_AGO)
+
+    first, second = await overlap(
+        engines,
+        _create(world, KEY, world.expense(1550)),
+        _create(world, KEY, world.expense(2000)),
+        first_commits=False,
+    )
+
+    # Nothing of the first one survived: the old row was expired, so the second one replaces it
+    # (its own body, no 409) and the old movement is untouched.
+    assert getattr(first, "id", None) is not None
+    assert getattr(second, "id", None) not in (
+        None,
+        getattr(old, "id", None),
+        getattr(first, "id", None),
+    )
+    assert await _movements(engine) == 2
+    assert await _balance(engine, world) == -1550 - 2000
+    assert await _keys(engine) == 1
+    assert await _scalar(engine, "SELECT transaction_id FROM idempotency_keys") == getattr(
+        second, "id", None
+    )
+
+
+# a live key: nothing is written, but the row stays locked until the request ends -------------
+
+
+LOCK_THE_KEY = "SELECT key FROM idempotency_keys WHERE key = :key {mode} NOWAIT"
+
+
+async def _lock_is_granted(engine: AsyncEngine, mode: str) -> bool:
+    """Whether a row lock of `mode` on the key is granted right now (`NOWAIT`, no timing)."""
+    async with engine.connect() as conn:
+        try:
+            await conn.execute(text(LOCK_THE_KEY.format(mode=mode)), {"key": KEY})
+        except DBAPIError as exc:
+            if "could not obtain lock" not in str(exc.orig):
+                raise  # any other database error is a bug of the test
+            return False
+        return True
+
+
+async def test_a_replay_in_flight_keeps_the_key_row_locked_until_it_ends(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine, prober, _ = engines
+    world = await _committed_world(engine)
+    created = await _committed_key(engine, world, now=NOW)
+    assert await _lock_is_granted(prober, "FOR NO KEY UPDATE")  # control: nobody holds it
+
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        again = await _create(world, KEY, world.expense())(session)  # a replay: it writes nothing
+
+        assert again == created
+        # PostgreSQL locks the conflicting row even if the WHERE of the DO UPDATE is false...
+        assert not await _lock_is_granted(prober, "FOR NO KEY UPDATE")
+        assert not await _lock_is_granted(prober, "FOR SHARE")
+        # ...but only against writers and lockers of the row: a foreign key (FOR KEY SHARE) passes.
+        assert await _lock_is_granted(prober, "FOR KEY SHARE")
+        await session.commit()
+
+    assert await _lock_is_granted(prober, "FOR NO KEY UPDATE")
+    assert await _movements(engine) == 1  # and it wrote no movement
+
+
+async def test_the_409_also_keeps_the_key_row_locked_until_it_ends(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine, prober, _ = engines
+    world = await _committed_world(engine)
+    await _committed_key(engine, world, now=NOW)
+
+    async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+        with pytest.raises(ConflictError):
+            await _create(world, KEY, world.expense(2000))(session)
+
+        # The request has failed but its transaction is still open (get_session rolls it back).
+        assert not await _lock_is_granted(prober, "FOR NO KEY UPDATE")
+        await session.rollback()
+
+    assert await _lock_is_granted(prober, "FOR NO KEY UPDATE")
+
+
+async def test_two_replays_of_the_same_live_key_run_one_after_the_other(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    engine = engines[0]
+    world = await _committed_world(engine)
+    created = await _committed_key(engine, world, now=NOW)
+
+    # `overlap` fails by timeout unless the second replay really blocks on the first one's lock.
+    first, second = await overlap(
+        engines, _create(world, KEY, world.expense()), _create(world, KEY, world.expense())
+    )
+
+    assert first == second == created
+    assert await _movements(engine) == 1
+    assert await _keys(engine) == 1
 
 
 # controls: what must not wait --------------------------------------------------------------------

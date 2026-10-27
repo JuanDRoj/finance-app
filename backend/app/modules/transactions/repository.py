@@ -107,11 +107,19 @@ async def claim_idempotency_key(
 
     One atomic statement: `INSERT ... ON CONFLICT DO UPDATE ... WHERE created_at <= expired_before`.
     A new key is inserted; an expired one is replaced (new hash, no movement yet, `created_at` =
-    `now`); a live one is left as it is and nothing is returned. If another transaction has the key
-    claimed and has not finished, this waits for it: when it commits the conflict is real and the
-    answer is False, and when it rolls back the insert goes on and the key is ours. So two requests
-    with the same key meet here, before either of them touches an account. The row is written
-    without a movement (`transaction_id` NULL); `attach_idempotency_key` ties them.
+    `now`); a live one keeps its data and nothing is returned. If another transaction has the key
+    claimed and has not finished, this waits for it (holding no lock while it waits): when it
+    commits the conflict is real and the answer is False, and when it rolls back the insert goes on
+    and the key is ours. So two requests with the same key meet here, before either of them touches
+    an account. The row is written without a movement (`transaction_id` NULL);
+    `attach_idempotency_key` ties them.
+
+    Against a live key nothing is written, but the row does not stay free: PostgreSQL locks the
+    conflicting row (`FOR NO KEY UPDATE`) before it evaluates the `WHERE`, even when it is false,
+    and keeps the lock until the transaction ends. Harmless, because the replay or the 409 that
+    follows only reads, so it never takes another lock; the only effect is that two replays of the
+    same key in flight run one after the other (see
+    `tests/db/test_transaction_idempotency_concurrency.py`).
     """
     new_row = insert(IdempotencyKey).values(
         space_id=space_id, user_id=user_id, key=key, request_hash=request_hash, created_at=now
