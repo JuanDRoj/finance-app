@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DateField } from "./date-field";
+import { DateField, type DateFieldHandle } from "./date-field";
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -95,16 +95,41 @@ describe("DateField on a phone (sheet)", () => {
     expect(value()).toBe("2026-12-31");
   });
 
-  it("shows the date input after 'Otra fecha', takes the focus there and keeps the day", async () => {
+  it("shows the date input after 'Otra fecha' and keeps the day, without taking the focus", async () => {
     render(<Harness variant="sheet" />);
-    fireEvent.click(chip("Otra fecha"));
+    const other = chip("Otra fecha");
+    other.focus();
+    fireEvent.click(other);
     const input = screen.getByLabelText("Fecha del movimiento") as HTMLInputElement;
     expect(input.type).toBe("date");
     expect(input.value).toBe(TODAY);
     expect(chip("Otra fecha").checked).toBe(true);
     expect(chip("Hoy").checked).toBe(false);
-    await waitFor(() => expect(document.activeElement).toBe(input));
+    // The focus stays on the chip, and then there is nothing more to wait for.
+    await Promise.resolve();
+    expect(document.activeElement).toBe(other);
     expect(value()).toBe(TODAY);
+  });
+
+  it("never moves the focus by itself when a chip is chosen: with the arrow keys a radio is chosen as the focus reaches it (WCAG 3.2.2)", async () => {
+    render(<Harness variant="sheet" />);
+    // The browser chooses the next radio and fires `change` on it, with the focus already there.
+    for (const name of ["Ayer", "Otra fecha", "Hoy", "Otra fecha"]) {
+      const radio = chip(name);
+      radio.focus();
+      fireEvent.click(radio);
+      await Promise.resolve();
+      expect(document.activeElement, name).toBe(radio);
+    }
+    expect(screen.getByLabelText("Fecha del movimiento")).not.toBe(document.activeElement);
+  });
+
+  it("leaves the date input next in the order of Tab after the chips", () => {
+    render(<Harness variant="sheet" />);
+    fireEvent.click(chip("Otra fecha"));
+    const chips = screen.getAllByRole("radio");
+    const input = screen.getByLabelText("Fecha del movimiento");
+    expect(chips.at(-1)?.compareDocumentPosition(input)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("follows what is typed in the input and stays on 'Otra fecha', even if it is today's", () => {
@@ -220,22 +245,73 @@ describe("DateField on desktop (panel)", () => {
   });
 });
 
-describe("DateField: the ref", () => {
-  it("gives the form the date input, to focus when the date is wrong", () => {
-    for (const variant of ["sheet", "panel"] as const) {
-      const ref = createRef<HTMLInputElement>();
-      render(
+describe("DateField: the focus the form asks for", () => {
+  function renderWithHandle(
+    variant: "sheet" | "panel",
+    props: { initial?: string; error?: string } = {},
+  ) {
+    const handle = createRef<DateFieldHandle>();
+    function WithHandle() {
+      const [value, setValue] = useState(props.initial ?? TODAY);
+      return (
         <DateField
-          ref={ref}
-          value=""
-          onChange={() => {}}
+          ref={handle}
+          value={value}
+          onChange={setValue}
           today={TODAY}
           variant={variant}
-          error="Elige una fecha."
-        />,
+          error={props.error}
+        />
       );
-      expect(ref.current?.type).toBe("date");
-      cleanup();
     }
+    render(<WithHandle />);
+    return handle;
+  }
+
+  it("focuses the input of the panel", () => {
+    const handle = renderWithHandle("panel", { error: "Elige una fecha." });
+    handle.current?.focus();
+    expect(document.activeElement).toBe(screen.getByLabelText("Fecha"));
+  });
+
+  it("focuses the input of the sheet when it is in the page", () => {
+    const handle = renderWithHandle("sheet", { initial: "", error: "Elige una fecha." });
+    handle.current?.focus();
+    expect(document.activeElement).toBe(screen.getByLabelText("Fecha del movimiento"));
+  });
+
+  it("shows the input and focuses it when the sheet had 'Hoy' chosen and the date is wrong (a 422)", async () => {
+    const handle = renderWithHandle("sheet", { error: "Escribe una fecha válida." });
+    expect(screen.queryByLabelText("Fecha del movimiento")).toBeNull();
+    act(() => handle.current?.focus());
+    const input = screen.getByLabelText("Fecha del movimiento");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    // It is "Otra fecha" now, with the day unchanged, and the error is linked to the input.
+    expect(chip("Otra fecha").checked).toBe(true);
+    expect((input as HTMLInputElement).value).toBe(TODAY);
+    expect(input.getAttribute("aria-describedby")).toBe(screen.getByRole("alert").id);
+  });
+
+  it("does the same when 'Ayer' was chosen", async () => {
+    const handle = renderWithHandle("sheet", { initial: YESTERDAY, error: "x" });
+    act(() => handle.current?.focus());
+    const input = screen.getByLabelText("Fecha del movimiento");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect((input as HTMLInputElement).value).toBe(YESTERDAY);
+  });
+
+  it("is a handle with focus() and nothing else of the input", () => {
+    const handle = renderWithHandle("panel");
+    expect(Object.keys(handle.current ?? {})).toEqual(["focus"]);
+  });
+
+  it("is given up when the field unmounts", () => {
+    const handle = createRef<DateFieldHandle>();
+    const { unmount } = render(
+      <DateField ref={handle} value="" onChange={() => {}} today={TODAY} variant="panel" />,
+    );
+    expect(handle.current).not.toBeNull();
+    unmount();
+    expect(handle.current).toBeNull();
   });
 });

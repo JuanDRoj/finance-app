@@ -216,6 +216,12 @@ export function MovementForm({
     setValue("toAccountId", only ? only.id : "");
   }
 
+  // Set the moment a request is about to start, and let go only if it fails. `busy` below comes from
+  // the render before, and `handleSubmit` validates asynchronously: a held Enter fires several
+  // submits that all pass the validation before the first render shows the button busy. This is what
+  // stops them (the backend has no `Idempotency-Key` yet, so each one would be a duplicate movement).
+  const sending = useRef(false);
+
   const mutation = useMutation({
     mutationFn: ({ body }: { body: MovementCreate; categoryName: string | null }) =>
       createTransaction(api, space.id, body),
@@ -233,6 +239,7 @@ export function MovementForm({
       onDone();
     },
     onError: (error) => {
+      sending.current = false;
       // An expired session is not a form problem: the API client's 401 rule is for queries only.
       if (isUnauthorized(error)) {
         window.location.replace("/login");
@@ -282,21 +289,22 @@ export function MovementForm({
   // a second movement.
   const busy = mutation.isPending || mutation.isSuccess;
 
-  const submit = handleSubmit((body) => {
-    if (busy) return;
+  function send(body: MovementCreate) {
+    if (sending.current || busy) return;
+    sending.current = true;
     setFormError(null);
     mutation.mutate({
       body,
       categoryName: body.type === "transfer" ? null : categoryNameOf(tree, body.category_id),
     });
-  });
+  }
 
   function onSubmit(event: SyntheticEvent<HTMLFormElement>) {
     if (blocked) {
       event.preventDefault();
       return;
     }
-    return submit(event);
+    return handleSubmit(send)(event);
   }
 
   const panel = variant === "panel";

@@ -1,19 +1,26 @@
 "use client";
 
-import { useEffect, useId, useState, type Ref } from "react";
+import { useEffect, useId, useImperativeHandle, useState, type Ref } from "react";
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { focusRing } from "@/components/ui/focus";
 import { Input } from "@/components/ui/input";
 import { shiftLocalDate } from "@/lib/core/dates";
 import { cn } from "@/lib/utils";
 
+/**
+ * What the form gets through `ref` to take the focus to the date when it finds it wrong. Not the
+ * `<input>` itself: in the sheet the input is only in the page after "Otra fecha", so `focus()`
+ * shows it first (and goes to "Otra fecha") when it is not there.
+ */
+export type DateFieldHandle = { focus: () => void };
+
 type DateFieldProps = {
   /** The day, `YYYY-MM-DD`, or `""` while the date input is empty or half typed. */
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
-  /** The `<input type="date">`: where the focus goes when the form finds the date wrong. */
-  ref?: Ref<HTMLInputElement>;
+  /** Where the form puts the focus when the date is wrong (see `DateFieldHandle`). */
+  ref?: Ref<DateFieldHandle>;
   name?: string;
   /** Today in the **space's** time zone (`todayInTimezone(space.timezone)`), never the device's. */
   today: string;
@@ -35,8 +42,10 @@ type Choice = "today" | "yesterday" | "other";
  * today, with calendar arithmetic (`shiftLocalDate`), so they never move a day with the device's zone.
  *
  * - **`sheet`.** A radio group of chips (native radios, hidden, the ring of focus on the chip) and, when
- *   "Otra fecha" is chosen, the date input below, which takes the focus. A value that is neither today
- *   nor yesterday is "Otra fecha" by itself.
+ *   "Otra fecha" is chosen, the date input below. Choosing a chip never moves the focus (with the
+ *   arrow keys a radio is chosen as the focus reaches it, and the focus jumping to another field on
+ *   its own would break WCAG 3.2.2); the input comes next in the order of Tab. A value that is neither
+ *   today nor yesterday is "Otra fecha" by itself.
  * - **`panel`.** The date input and, beside it, "Hoy" and "Ayer" as buttons with `aria-pressed`
  *   (40 px with a mouse, 44 px with the finger: D17).
  */
@@ -66,7 +75,24 @@ export function DateField({
         ? "yesterday"
         : "other";
 
-  // "Otra fecha" reveals the input (in the sheet) and the focus goes to it, once it is in the page.
+  // The form asks for the focus when the date is wrong (`DateFieldHandle`). In the sheet the input may
+  // not be in the page (today or yesterday chosen): it is shown by choosing "Otra fecha", and the
+  // focus goes to it once it is there. This is the only time the focus moves by itself.
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus() {
+        const input = document.getElementById(inputId);
+        if (input) {
+          input.focus();
+          return;
+        }
+        setOtherPicked(true);
+        setFocusRequest((count) => count + 1);
+      },
+    }),
+    [inputId],
+  );
   useEffect(() => {
     if (focusRequest > 0) document.getElementById(inputId)?.focus();
   }, [focusRequest, inputId]);
@@ -75,12 +101,10 @@ export function DateField({
     setOtherPicked(next === "other");
     if (next === "today") onChange(today);
     if (next === "yesterday") onChange(yesterday);
-    if (next === "other") setFocusRequest((count) => count + 1);
   }
 
   const input = (
     <Input
-      ref={ref}
       id={inputId}
       name={name}
       type="date"

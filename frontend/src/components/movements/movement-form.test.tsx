@@ -537,6 +537,50 @@ describe("registering a movement", () => {
     expect(button.getAttribute("aria-busy")).toBe("true");
   });
 
+  it("registers it once even if the form is submitted twice in a row, before it renders busy", async () => {
+    // A held Enter fires several submits at once; `handleSubmit` validates asynchronously, so the
+    // `busy` of the render before cannot be what stops the second one.
+    const { onDone } = renderForm();
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    const form = document.querySelector("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    // Let anything still in flight land before counting.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers it once for two submits in a row while the request is still running", async () => {
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    renderForm();
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    const form = document.querySelector("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(mocks.post).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets it be sent again once a failure released the guard", async () => {
+    mocks.post.mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "boom" }));
+    const { onDone } = renderForm();
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    const form = document.querySelector("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.submit(form);
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+
   it("registers it with Enter in the amount, as the quickest way", async () => {
     const { onDone } = renderForm();
     type("Monto", "100");
@@ -702,6 +746,42 @@ describe("when the backend refuses", () => {
     fill();
     expect(await screen.findByText("Escribe una fecha válida.")).toBeTruthy();
     expect(screen.getByText("Es demasiado largo.")).toBeTruthy();
+  });
+
+  it("takes the focus to the date input when the backend refuses the date, though 'Hoy' hid it", async () => {
+    mocks.post.mockResolvedValue(
+      unprocessable({ type: "date_invalid", loc: ["body", "expense", "date"] }),
+    );
+    renderForm();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Monto")));
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    expect(screen.queryByLabelText("Fecha del movimiento")).toBeNull();
+    save();
+    expect(await screen.findByText("Escribe una fecha válida.")).toBeTruthy();
+    // The input is not in the page with "Hoy" chosen: the form shows it ("Otra fecha") and focuses it.
+    const input = await screen.findByLabelText("Fecha del movimiento");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect((screen.getByRole("radio", { name: "Otra fecha" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    // The day was not touched: it can be corrected.
+    expect((input as HTMLInputElement).value).toBe("2026-10-26");
+  });
+
+  it("takes the focus to the date input of the panel when the backend refuses the date", async () => {
+    mocks.post.mockResolvedValue(
+      unprocessable({ type: "date_invalid", loc: ["body", "expense", "date"] }),
+    );
+    renderForm({ variant: "panel" });
+    // The amount takes the focus as the form appears (a tick later): wait for it, as a person would.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Monto")));
+    type("Monto", "100");
+    type("Categoría", "cat-Ropa");
+    save();
+    expect(await screen.findByText("Escribe una fecha válida.")).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Fecha")));
   });
 
   it("shows what no field can show in an Alert in Spanish", async () => {
