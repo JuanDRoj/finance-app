@@ -3,6 +3,7 @@ import { ApiError } from "./data/errors";
 import {
   ACCOUNT_TYPE_NAMES,
   CURRENCY_NAMES,
+  MOVEMENT_SAVE_LABEL,
   TRANSACTION_TYPE_NAMES,
   describeAccountType,
   describeApiError,
@@ -266,6 +267,24 @@ describe("codes of the movements (KAN-74, KAN-94)", () => {
     expect(message).toContain("Elige dos cuentas distintas.");
     expect(`${title} ${message}`).not.toContain("transfer_same_account");
     expect(`${title} ${message}`).not.toContain("English");
+  });
+});
+
+describe("MOVEMENT_SAVE_LABEL", () => {
+  it("names the button of each type a person registers, with the type in lower case", () => {
+    expect(MOVEMENT_SAVE_LABEL).toEqual({
+      expense: "Guardar gasto",
+      income: "Guardar ingreso",
+      transfer: "Guardar transferencia",
+    });
+  });
+
+  it("is the name of the type in TRANSACTION_TYPE_NAMES after 'Guardar'", () => {
+    for (const type of ["expense", "income", "transfer"] as const) {
+      expect(MOVEMENT_SAVE_LABEL[type]).toBe(
+        `Guardar ${TRANSACTION_TYPE_NAMES[type].toLowerCase()}`,
+      );
+    }
   });
 });
 

@@ -114,6 +114,7 @@ export default async function HomePage() {
       user={user}
       space={space}
       subtitle={formatWeekdayDate(new Date(), space.timezone)}
+      noAccounts={accounts.length === 0}
     >
       {/* Side by side from 1024 px, up to 1120 px: the main card takes two parts and the currency one. */}
       <div className="flex flex-col gap-3.5 lg:max-w-280 lg:flex-row lg:flex-wrap lg:items-stretch">

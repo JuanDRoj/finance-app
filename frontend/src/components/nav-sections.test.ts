@@ -4,6 +4,7 @@ import {
   MORE_SECTIONS,
   NAV,
   NAV_SECTIONS,
+  NEW_ACCOUNT_ACTION,
   PRIMARY_ACTION,
   barItems,
   isMoreActive,
@@ -60,18 +61,35 @@ describe("what the navigation shows today", () => {
     expect(NAV).toEqual({ sections: NAV_SECTIONS, more: MORE_SECTIONS, action: PRIMARY_ACTION });
   });
 
-  // The "+" and the sidebar button open the form of an account until the panel to register a
-  // movement exists (FE-20, which changes this and the test). Never a link to a screen that does
-  // not exist: /cuentas/nueva is the page of the form.
-  it("opens the form of a new account with the main action", () => {
+  // The "+" and the sidebar button register a movement (FE-20, KAN-76): the sheet, or the panel from
+  // 1024 px, over the current screen. The URL it writes is also its link, so it never leads to a page
+  // that does not exist.
+  it("registers a movement with the main action: the sheet at every width, with the key N", () => {
     expect(PRIMARY_ACTION).toEqual({
+      href: "/?movimiento=nuevo",
+      label: "Registrar movimiento",
+      buttonText: "Registrar",
+      panel: { param: "movimiento", value: "nuevo" },
+      panelOnPhone: true,
+      shortcut: "N",
+    });
+    // The link is the URL the panel writes, so a new tab opens the Inicio with the sheet open.
+    const { panel, href } = PRIMARY_ACTION ?? {};
+    expect(href).toBe(`/?${panel?.param}=${panel?.value}`);
+  });
+
+  it("falls back to the form of a new account while the space has no account", () => {
+    expect(NEW_ACCOUNT_ACTION).toEqual({
       href: "/cuentas/nueva",
       label: "Nueva cuenta",
       buttonText: "Nueva cuenta",
       panel: { param: "cuenta", value: "nueva" },
     });
-    // The visible text is the accessible name of the sidebar button (WCAG 2.5.3): no "N" hint yet.
-    expect(PRIMARY_ACTION?.buttonText).toBe(PRIMARY_ACTION?.label);
+    // The visible text is the accessible name of the sidebar button (WCAG 2.5.3), and there is no
+    // shortcut hint on it; a phone gets the page of the form, not a sheet.
+    expect(NEW_ACCOUNT_ACTION.buttonText).toBe(NEW_ACCOUNT_ACTION.label);
+    expect(NEW_ACCOUNT_ACTION.shortcut).toBeUndefined();
+    expect(NEW_ACCOUNT_ACTION.panelOnPhone).toBeUndefined();
   });
 
   it("keeps the 'Más' tab pointing at /mas", () => {

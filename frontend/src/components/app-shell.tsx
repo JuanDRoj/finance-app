@@ -2,6 +2,8 @@ import { Suspense, type ReactNode } from "react";
 import { AccountPanelHost } from "@/components/accounts/account-panel";
 import { BfcacheGuard } from "@/components/bfcache-guard";
 import { BottomNav } from "@/components/bottom-nav";
+import { MovementPanelHost } from "@/components/movements/movement-panel";
+import { NEW_ACCOUNT_ACTION } from "@/components/nav-sections";
 import { DESKTOP_GROUP_VERTICAL_PADDING } from "@/components/shell-layout";
 import { Sidebar } from "@/components/sidebar";
 import { UserMenu, type UserMenuUser } from "@/components/user-menu";
@@ -24,11 +26,20 @@ type AppShellProps = {
    */
   user?: Pick<UserRead, "display_name" | "email">;
   /**
-   * The space of the screen, from `GET /spaces`: its name and currency for the sidebar row, and its
-   * id and currency for the side panel that creates an account in it (`AccountPanelHost`). A page
-   * that could not load it leaves it out: the sidebar then has no space row and no panel opens.
+   * The space of the screen, from `GET /spaces`: its name and currency for the sidebar row, its id
+   * and currency for the side panel that creates an account in it (`AccountPanelHost`) and, with its
+   * `timezone` ("hoy" is the space's, never the device's), for "Registrar movimiento"
+   * (`MovementPanelHost`). A page that could not load it leaves it out: the sidebar then has no
+   * space row and no panel opens.
    */
-  space?: Pick<SpaceRead, "id" | "name" | "currency">;
+  space?: Pick<SpaceRead, "id" | "name" | "currency" | "timezone">;
+  /**
+   * The page knows the space has **no active account** (the Inicio and Cuentas load them): the "+"
+   * and the button of the sidebar then say "Nueva cuenta" and open its form, and the key N does too,
+   * because nothing can be registered yet (docs/diseno.md D17). A page that does not know leaves it
+   * out and keeps "Registrar": the sheet itself hands over to "Nueva cuenta" when it finds no account.
+   */
+  noAccounts?: boolean;
   /**
    * The secondary line under the `h1` (docs/diseno.md D17 › Escritorio v2: "Miércoles 21 de
    * octubre"). Shown from 1024 px only; below it the header is just the title and the avatar.
@@ -83,6 +94,7 @@ export function AppShell({
   user,
   space,
   subtitle,
+  noAccounts,
   leading,
   hideBottomNav,
   phoneOnly,
@@ -93,6 +105,9 @@ export function AppShell({
     email: user.email,
     initials: initialsOf(user),
   };
+
+  // `undefined` keeps the main action of `NAV` ("Registrar movimiento").
+  const action = noAccounts ? NEW_ACCOUNT_ACTION : undefined;
 
   return (
     <div className="relative isolate min-h-dvh overflow-x-clip">
@@ -112,7 +127,7 @@ export function AppShell({
           DESKTOP_GROUP_VERTICAL_PADDING,
         )}
       >
-        <Sidebar user={menuUser} space={space} />
+        <Sidebar user={menuUser} space={space} action={action} />
         {/* `min-w-0`: a flex item is as wide as its widest content by default, and a long word
             would widen the column past the screen instead of wrapping. */}
         <div className={cn("min-w-0 lg:flex-1", phoneOnly && "lg:hidden")}>
@@ -158,12 +173,17 @@ export function AppShell({
           </main>
         </div>
       </div>
-      {/* The side panel of the main action (from 1024 px): it reads `?cuenta=nueva` from the URL, which
-          is why it waits behind a Suspense boundary, as `useSearchParams` asks. */}
+      {/* The panels of the main actions: "Nueva cuenta" (`?cuenta=nueva`, from 1024 px) and "Registrar
+          movimiento" (`?movimiento=nuevo`, a sheet or a panel). They read the URL, which is why they
+          wait behind a Suspense boundary, as `useSearchParams` asks. */}
       <Suspense fallback={null}>
         <AccountPanelHost space={space && { id: space.id, currency: space.currency }} />
+        <MovementPanelHost
+          space={space && { id: space.id, currency: space.currency, timezone: space.timezone }}
+          noAccounts={noAccounts}
+        />
       </Suspense>
-      {hideBottomNav ? null : <BottomNav />}
+      {hideBottomNav ? null : <BottomNav action={action} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NavConfig } from "./nav-sections";
+import { NEW_ACCOUNT_ACTION, type NavConfig } from "./nav-sections";
 import { Sidebar, SidebarBody } from "./sidebar";
 
 // The client islands have their own tests; here only what the sidebar hands them matters, and what
@@ -96,10 +96,42 @@ describe("SidebarBody", () => {
       expect(screen.queryByRole("link")).toBeNull();
     });
 
-    it("is drawn with the real navigation: 'Nueva cuenta' until the panel to register exists", () => {
+    it("is drawn with the real navigation: 'Registrar', which opens the sheet over the screen", () => {
       render(<SidebarBody user={USER} space={SPACE} />);
+      const link = screen.getByRole("link", { name: "Registrar" });
+      expect(link.getAttribute("href")).toBe("/?movimiento=nuevo");
+      expect(screen.queryByRole("link", { name: "Nueva cuenta" })).toBeNull();
+    });
+
+    it("shows the key N as a decorative hint and announces it as a shortcut", () => {
+      render(<SidebarBody user={USER} space={SPACE} />);
+      const link = screen.getByRole("link", { name: "Registrar" });
+      const hint = link.querySelector("span[aria-hidden='true']");
+      expect(hint?.textContent).toBe("N");
+      expect(link.getAttribute("aria-keyshortcuts")).toBe("N");
+      // The hint is not part of the name (WCAG 2.5.3): the name is the visible word "Registrar".
+      expect(link.getAttribute("aria-label")).toBeNull();
+    });
+
+    it("says 'Nueva cuenta', with no hint of a key, while the page knows there are no accounts", () => {
+      render(<SidebarBody user={USER} space={SPACE} action={NEW_ACCOUNT_ACTION} />);
       const link = screen.getByRole("link", { name: "Nueva cuenta" });
       expect(link.getAttribute("href")).toBe("/cuentas/nueva");
+      expect(link.getAttribute("aria-keyshortcuts")).toBeNull();
+      expect(link.querySelector("span[aria-hidden='true']")).toBeNull();
+      expect(link.textContent).toBe("Nueva cuenta");
+      expect(screen.queryByRole("link", { name: "Registrar" })).toBeNull();
+    });
+
+    it("takes the action of its prop over the one of the config, and none draws no button", () => {
+      const { rerender } = render(
+        <SidebarBody user={USER} space={SPACE} nav={WITH_ACTION} action={null} />,
+      );
+      expect(screen.queryByRole("link")).toBeNull();
+      rerender(
+        <SidebarBody user={USER} space={SPACE} nav={WITHOUT_ACTION} action={NEW_ACCOUNT_ACTION} />,
+      );
+      expect(screen.getByRole("link", { name: "Nueva cuenta" })).toBeTruthy();
     });
 
     it("is a link named by its own text when there is one, without an aria-label", () => {
@@ -110,7 +142,7 @@ describe("SidebarBody", () => {
       expect(link.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     });
 
-    it("does not show the 'N' shortcut hint: the shortcut does not exist yet", () => {
+    it("does not show a shortcut hint for an action that has no shortcut", () => {
       render(<SidebarBody user={USER} space={SPACE} nav={WITH_ACTION} />);
       expect(screen.getByRole("link", { name: "Nueva cuenta" }).textContent).toBe("Nueva cuenta");
     });
@@ -161,6 +193,15 @@ describe("Sidebar", () => {
     for (const expected of ["hidden", "lg:block", "lg:w-60", "lg:min-w-54"]) {
       expect(classes, expected).toContain(expected);
     }
+  });
+
+  it("draws 'Registrar' by default and the action it is given instead (no accounts: 'Nueva cuenta')", () => {
+    const { unmount } = render(<Sidebar user={USER} space={SPACE} />);
+    expect(screen.getByRole("link", { name: "Registrar" })).toBeTruthy();
+    unmount();
+    render(<Sidebar user={USER} space={SPACE} action={NEW_ACCOUNT_ACTION} />);
+    expect(screen.getByRole("link", { name: "Nueva cuenta" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Registrar" })).toBeNull();
   });
 
   it("keeps the card one screen tall and sticky, and scrolls inside if the window is low", () => {

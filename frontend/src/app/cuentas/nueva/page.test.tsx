@@ -26,6 +26,8 @@ vi.mock("@/components/bottom-nav", () => ({
 }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 vi.mock("@/components/accounts/account-panel", () => ({ AccountPanelHost: () => null }));
+// The sheet of "Registrar movimiento" reads the URL and the router too (KAN-76).
+vi.mock("@/components/movements/movement-panel", () => ({ MovementPanelHost: () => null }));
 vi.mock("@/components/primary-action-link", () => ({
   PrimaryActionLink: ({ children }: { children: React.ReactNode }) => <a href="/x">{children}</a>,
 }));

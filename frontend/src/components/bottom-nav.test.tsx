@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { House, ListBullets, Tag, Wallet } from "@phosphor-icons/react/ssr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BottomNav, BottomNavBar } from "./bottom-nav";
-import type { NavConfig } from "./nav-sections";
+import { NEW_ACCOUNT_ACTION, type NavConfig } from "./nav-sections";
 
 const mocks = vi.hoisted(() => ({ pathname: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: mocks.pathname }));
@@ -160,22 +160,93 @@ describe("BottomNav", () => {
     expect(nav.getAttribute("data-slot")).toBe("bottom-nav");
     expect(nav.className).toContain("fixed");
     expect(nav.className).toContain("lg:hidden");
-    // Today it has Inicio (the current screen), the "+" (since KAN-70 the main action opens the
-    // form of a new account) and Cuentas (KAN-71).
+    // Today it has Inicio (the current screen), the "+" (since KAN-76 the main action registers a
+    // movement) and Cuentas (KAN-71).
     expect(
       screen
         .getAllByRole("link")
         .map((link) => link.getAttribute("aria-label") ?? link.textContent),
-    ).toEqual(["Inicio", "Nueva cuenta", "Cuentas"]);
+    ).toEqual(["Inicio", "Registrar movimiento", "Cuentas"]);
     expect(screen.getByRole("link", { name: "Inicio" }).getAttribute("aria-current")).toBe("page");
   });
 
-  it("leads the '+' to the page of the form of a new account: a phone has no side panel", () => {
+  it("makes the '+' the link of 'Registrar movimiento': the same URL the sheet opens with", () => {
     render(<BottomNav />);
-    const plus = screen.getByRole("link", { name: "Nueva cuenta" });
-    expect(plus.getAttribute("href")).toBe("/cuentas/nueva");
+    const plus = screen.getByRole("link", { name: "Registrar movimiento" });
+    expect(plus.getAttribute("href")).toBe("/?movimiento=nuevo");
     expect(plus.textContent).toBe("");
     expect(plus.className).toContain("size-13");
+  });
+
+  it("opens the sheet over the screen at any width instead of navigating: a phone has it too", () => {
+    window.history.replaceState(null, "", "/cuentas?sel=abc");
+    // A phone: below 1024 px.
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+    render(<BottomNav />);
+    const plus = screen.getByRole("link", { name: "Registrar movimiento" });
+    let followed = false;
+    const listener = (event: Event) => {
+      followed = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", listener);
+    fireEvent.click(plus);
+    document.removeEventListener("click", listener);
+    expect(followed).toBe(false);
+    expect(window.location.pathname).toBe("/cuentas");
+    expect(window.location.search).toBe("?sel=abc&movimiento=nuevo");
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("keeps the normal meaning of the link with Ctrl or Cmd: a new tab opens the sheet on the Inicio", () => {
+    render(<BottomNav />);
+    const plus = screen.getByRole("link", { name: "Registrar movimiento" });
+    let followed = false;
+    const listener = (event: Event) => {
+      followed = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", listener);
+    fireEvent.click(plus, { ctrlKey: true });
+    document.removeEventListener("click", listener);
+    expect(followed).toBe(true);
+    expect(window.location.search).toBe("");
+  });
+
+  it("shows 'Nueva cuenta' as the '+' while the space has no account: a page on a phone", () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
+    render(<BottomNav action={NEW_ACCOUNT_ACTION} />);
+    const plus = screen.getByRole("link", { name: "Nueva cuenta" });
+    expect(plus.getAttribute("href")).toBe("/cuentas/nueva");
+    expect(screen.queryByRole("link", { name: "Registrar movimiento" })).toBeNull();
+    // Below 1024 px that action is a page, not a panel.
+    let followed = false;
+    const listener = (event: Event) => {
+      followed = !event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener("click", listener);
+    fireEvent.click(plus);
+    document.removeEventListener("click", listener);
+    expect(followed).toBe(true);
+    expect(window.location.search).toBe("");
+    vi.unstubAllGlobals();
+  });
+
+  it("draws no '+' when told the action is none", () => {
+    render(<BottomNav action={null} />);
+    expect(screen.queryByRole("link", { name: "Registrar movimiento" })).toBeNull();
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Inicio",
+      "Cuentas",
+    ]);
   });
 
   it("clears the safe areas: the bottom edge and the sides", () => {

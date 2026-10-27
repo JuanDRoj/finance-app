@@ -36,6 +36,7 @@ import {
   PickersDemo,
 } from "./_components/base-demos";
 import { LoadingDemo } from "./_components/loading-demo";
+import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
 import { NavPreview } from "./_components/nav-preview";
 import { SessionDemo } from "./_components/session-demo";
 import { ToastDemo } from "./_components/toast-demo";
@@ -160,7 +161,12 @@ export default async function CatalogPage({
     <AppShell
       title={headerTitle}
       user={DEMO_USER}
-      space={{ id: DEMO_SPACE_ID, name: "Mi espacio", currency: { code: "UYU", exponent: 2 } }}
+      space={{
+        id: DEMO_SPACE_ID,
+        name: "Mi espacio",
+        currency: { code: "UYU", exponent: 2 },
+        timezone: "America/Montevideo",
+      }}
       hideBottomNav={hideBottomNav}
     >
       <div className="flex flex-col gap-8">
@@ -499,6 +505,22 @@ export default async function CatalogPage({
 
         <Section title="Editar, cuadrar y archivar una cuenta">
           <AccountEditDemo />
+        </Section>
+
+        <Section title="Monto grande (Registrar movimiento)">
+          <p className="text-sm text-muted-foreground">
+            <code>MoneyField size=&quot;hero&quot;</code>: bajo 1024 px, sin caja, cifra de 38 px
+            con un subrayado de 2 px; desde 1024 px, una caja de 60 px con cifra de 28 px. Mira el
+            hueco entre el símbolo y la cifra con &quot;$&quot;, &quot;US$&quot;, &quot;R$&quot; y
+            &quot;€&quot;, y el monto máximo (16 dígitos) sin desbordar.
+          </p>
+          <Card variant="solid">
+            <HeroMoneyDemo />
+          </Card>
+        </Section>
+
+        <Section title="Registrar movimiento (hoja y panel)">
+          <MovementSheetDemo />
         </Section>
 
         <Section title="Cifras (tnum)">

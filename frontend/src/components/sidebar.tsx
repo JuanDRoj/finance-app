@@ -1,6 +1,6 @@
 import { Plus } from "@phosphor-icons/react/ssr";
 import { KanzaBrand } from "@/components/brand/kanza-brand";
-import { NAV, type NavConfig } from "@/components/nav-sections";
+import { NAV, type NavConfig, type PrimaryAction } from "@/components/nav-sections";
 import { PrimaryActionLink } from "@/components/primary-action-link";
 import { SIDEBAR_CARD_POSITION } from "@/components/shell-layout";
 import { SidebarNav } from "@/components/sidebar-nav";
@@ -27,6 +27,11 @@ type SidebarBodyProps = {
   /** Only the catalog passes it, to show the whole navigation; the app reads `NAV`. */
   nav?: NavConfig;
   pathname?: string;
+  /**
+   * The main action, replacing the one of `nav` (or `NAV`): `AppShell` passes "Nueva cuenta" while
+   * the space has no active account. `null` draws no button.
+   */
+  action?: PrimaryAction | null;
 };
 
 /**
@@ -35,8 +40,8 @@ type SidebarBodyProps = {
  * the entries of "Más" (Categorías) and the account of the user with its menu. Not a component of
  * its own in the app: `Sidebar` is its only user, apart from the catalog.
  */
-export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
-  const action = (nav ?? NAV).action;
+export function SidebarBody({ user, space, nav, pathname, action: actionProp }: SidebarBodyProps) {
+  const action = actionProp === undefined ? (nav ?? NAV).action : actionProp;
   const initial = space ? spaceInitialOf(space.name) : null;
 
   return (
@@ -61,10 +66,13 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
       ) : null}
 
       {action ? (
-        // The text is the name: no `aria-label` (WCAG 2.5.3). The "N" hint comes with the shortcut.
+        // The text is the name: no `aria-label` (WCAG 2.5.3). The "N" hint is decorative and the key
+        // is announced with `aria-keyshortcuts`; `MovementPanelHost` listens for it.
         <PrimaryActionLink
           href={action.href}
           panel={action.panel}
+          panelOnPhone={action.panelOnPhone}
+          aria-keyshortcuts={action.shortcut}
           className={cn(
             "flex min-h-11.5 items-center justify-center gap-2 rounded-full bg-sidebar-primary px-4 text-item font-bold text-sidebar-primary-foreground transition-[transform,opacity] duration-150 ease-out hover:opacity-90 active:scale-[0.98]",
             sidebarFocusRing,
@@ -72,6 +80,14 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
         >
           <Plus aria-hidden weight="bold" className="size-4.5 shrink-0" />
           {action.buttonText}
+          {action.shortcut ? (
+            <span
+              aria-hidden
+              className="ml-0.5 rounded-md bg-sidebar-primary-foreground/12 px-1.5 py-px text-caption"
+            >
+              {action.shortcut}
+            </span>
+          ) : null}
         </PrimaryActionLink>
       ) : null}
 
@@ -98,11 +114,15 @@ export function SidebarBody({ user, space, nav, pathname }: SidebarBodyProps) {
  * `data-slot="sidebar"` is what the catalog's audit panel looks for. A Server Component: only the
  * links (`SidebarNav`) and the account menu (`UserMenu`) are client islands.
  */
-export function Sidebar({ user, space }: Readonly<{ user?: UserMenuUser; space?: SidebarSpace }>) {
+export function Sidebar({
+  user,
+  space,
+  action,
+}: Readonly<{ user?: UserMenuUser; space?: SidebarSpace; action?: PrimaryAction | null }>) {
   return (
     <div data-slot="sidebar" className="hidden lg:block lg:w-60 lg:min-w-54 lg:shrink">
       <div className={cn(SIDEBAR_CARD_POSITION, SIDEBAR_CARD)}>
-        <SidebarBody user={user} space={space} />
+        <SidebarBody user={user} space={space} action={action} />
       </div>
     </div>
   );
