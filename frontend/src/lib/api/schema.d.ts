@@ -399,6 +399,11 @@ export interface paths {
          *     Accounts and categories must belong to the space and be active, or a 422 names the field
          *     (`loc` is `["body", "<type>", "<field>"]`): an id of another space answers like one that does
          *     not exist.
+         *
+         *     With the optional `Idempotency-Key` header the request can be repeated safely: the same key
+         *     (same user and space) with the same body creates nothing and answers 201 with the same
+         *     movement; with another body it is a 409 `idempotency_key_reused`. The header must be a UUID
+         *     (422 on the header otherwise).
          */
         post: operations["create_transaction_spaces__space_id__transactions_post"];
         delete?: never;
@@ -1807,7 +1812,10 @@ export interface operations {
     create_transaction_spaces__space_id__transactions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description A UUID the client generates for each attempt to register a movement, and reuses when it retries the same request (a double tap, a lost response). With the same key, user and space, a repeated request creates nothing and answers 201 with the same movement; the same key with another body is a 409 `idempotency_key_reused`. A key counts for 24 hours. A request that fails (4xx or 5xx) does not use the key. */
+                "Idempotency-Key"?: string | null;
+            };
             path: {
                 space_id: string;
             };
@@ -1839,6 +1847,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

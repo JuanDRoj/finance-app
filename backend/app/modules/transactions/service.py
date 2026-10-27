@@ -11,6 +11,7 @@ from app.modules.categories import service as categories_service
 from app.modules.spaces import service as spaces_service
 from app.modules.transactions import repository
 from app.modules.transactions.entries import build_entries, referenced_accounts
+from app.modules.transactions.idempotency import IDEMPOTENCY_KEY_TTL, request_fingerprint
 from app.modules.transactions.models import Entry, Transaction
 from app.modules.transactions.schemas import (
     ACCOUNT_ARCHIVED,
@@ -19,10 +20,12 @@ from app.modules.transactions.schemas import (
     CATEGORY_ARCHIVED,
     CATEGORY_KIND_MISMATCH,
     CATEGORY_NOT_FOUND,
+    IDEMPOTENCY_KEY_REUSED,
     AdjustmentCreate,
     BalanceSummaryRead,
     ExpenseCreate,
     IncomeCreate,
+    MovementCreate,
     TransactionCreate,
     TransactionRead,
 )
@@ -75,6 +78,89 @@ async def create_transaction(
     session.add(transaction)
     # One flush writes the transaction and then its entries (the relationship orders them).
     await session.flush()
+    return TransactionRead.model_validate(transaction)
+
+
+async def create_movement(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    data: MovementCreate,
+    *,
+    idempotency_key: uuid.UUID | None,
+    now: datetime,
+) -> TransactionRead:
+    """What `POST /spaces/{id}/transactions` does: `create_transaction`, once per `Idempotency-Key`.
+
+    Without a key it is exactly `create_transaction`. With one, the key is unique per
+    `(space, user, key)`, and the order of things is what makes two requests with the same key
+    (a double tap, a retry after a lost response) create one movement:
+
+    1. The key is **claimed first** (`claim_idempotency_key`, one atomic `INSERT ... ON CONFLICT`),
+       before any account is locked. A second request with the same key waits there until the
+       first one ends; while it waits it holds no lock (it has only read). If the first one rolled
+       back (a 422, say), the key never existed and the second one goes on as the owner; if it
+       committed, the second one finds the key.
+    2. If the key was already live, no data is written, but the claim leaves that key row locked
+       (`FOR NO KEY UPDATE`: PostgreSQL locks the conflicting row even when the `WHERE` of the
+       `DO UPDATE` is false) until the request ends. It is harmless: nothing else is locked
+       afterwards (a replay only reads), and the only effect is that two replays of the same key
+       in flight run one after the other. The same body answers with the movement the key created
+       (read again by id, so it is the movement as it is now, deleted or not, and it is not
+       validated again), and another body is a 409 `idempotency_key_reused`.
+    3. Otherwise the movement is created as always and the key is tied to it (`transaction_id`),
+       all in the transaction of the request, so the key exists if and only if the movement does.
+
+    A request that fails leaves no key (the whole transaction rolls back), so a corrected retry may
+    use the same key. A key is live for `IDEMPOTENCY_KEY_TTL` counted from `now`; an expired one is
+    replaced by the new claim, whatever its body was.
+    """
+    if idempotency_key is None:
+        return await create_transaction(session, space_id, user_id, data)
+    fingerprint = request_fingerprint(data)
+    claimed = await repository.claim_idempotency_key(
+        session,
+        space_id=space_id,
+        user_id=user_id,
+        key=idempotency_key,
+        request_hash=fingerprint,
+        now=now,
+        expired_before=now - IDEMPOTENCY_KEY_TTL,
+    )
+    if not claimed:
+        return await _replay(session, space_id, user_id, idempotency_key, fingerprint)
+    created = await create_transaction(session, space_id, user_id, data)
+    await repository.attach_idempotency_key(
+        session, space_id=space_id, user_id=user_id, key=idempotency_key, transaction_id=created.id
+    )
+    return created
+
+
+async def _replay(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    key: uuid.UUID,
+    fingerprint: bytes,
+) -> TransactionRead:
+    """The answer for a key that is already live: its movement, or a 409 if the body differs."""
+    stored = await repository.get_idempotency_key(
+        session, space_id=space_id, user_id=user_id, key=key
+    )
+    if stored is None or stored.transaction_id is None:
+        # The claim saw a committed row, which always has its movement: not reachable unless the
+        # invariant is broken. That is a bug (500 with a trace), not something to tell the client.
+        raise RuntimeError("An idempotency key that is live has no movement")
+    if stored.request_hash != fingerprint:
+        raise ConflictError(
+            IDEMPOTENCY_KEY_REUSED,
+            "This Idempotency-Key was already used with a different request body",
+        )
+    transaction = await repository.get_with_entries(
+        session, space_id=space_id, transaction_id=stored.transaction_id
+    )
+    if transaction is None:
+        raise RuntimeError("An idempotency key points at a movement that does not exist")
     return TransactionRead.model_validate(transaction)
 
 

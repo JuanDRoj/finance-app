@@ -24,6 +24,7 @@ BALANCE_OUT_OF_RANGE = "balance_out_of_range"
 CATEGORY_NOT_FOUND = "category_not_found"
 CATEGORY_ARCHIVED = "category_archived"
 CATEGORY_KIND_MISMATCH = "transaction_category_kind_mismatch"
+IDEMPOTENCY_KEY_REUSED = "idempotency_key_reused"
 TRANSFER_SAME_ACCOUNT = "transfer_same_account"
 
 # `[0-9]` and `fullmatch`: `\d` also matches Unicode digits and `$` a trailing newline.

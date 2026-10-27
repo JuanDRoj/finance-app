@@ -2397,7 +2397,7 @@
     },
     "/spaces/{space_id}/transactions": {
       "post": {
-        "description": "Register an expense, an income or a transfer; the backend builds the entries.\n\nThe body depends on `type`. An expense and an income take an account, a category of their kind\nand a positive amount; a transfer takes two different accounts (paying a card is a transfer)\nand a positive amount. `amount_minor` is always positive, in the minor unit of the currency of\nthe space: the backend applies the sign (on a credit card an expense raises the debt and a\ntransfer from a bank lowers it). The movement is born `confirmed`.\n\nAccounts and categories must belong to the space and be active, or a 422 names the field\n(`loc` is `[\"body\", \"<type>\", \"<field>\"]`): an id of another space answers like one that does\nnot exist.",
+        "description": "Register an expense, an income or a transfer; the backend builds the entries.\n\nThe body depends on `type`. An expense and an income take an account, a category of their kind\nand a positive amount; a transfer takes two different accounts (paying a card is a transfer)\nand a positive amount. `amount_minor` is always positive, in the minor unit of the currency of\nthe space: the backend applies the sign (on a credit card an expense raises the debt and a\ntransfer from a bank lowers it). The movement is born `confirmed`.\n\nAccounts and categories must belong to the space and be active, or a 422 names the field\n(`loc` is `[\"body\", \"<type>\", \"<field>\"]`): an id of another space answers like one that does\nnot exist.\n\nWith the optional `Idempotency-Key` header the request can be repeated safely: the same key\n(same user and space) with the same body creates nothing and answers 201 with the same\nmovement; with another body it is a 409 `idempotency_key_reused`. The header must be a UUID\n(422 on the header otherwise).",
         "operationId": "create_transaction_spaces__space_id__transactions_post",
         "parameters": [
           {
@@ -2408,6 +2408,25 @@
               "format": "uuid",
               "title": "Space Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "A UUID the client generates for each attempt to register a movement, and reuses when it retries the same request (a double tap, a lost response). With the same key, user and space, a repeated request creates nothing and answers 201 with the same movement; the same key with another body is a 409 `idempotency_key_reused`. A key counts for 24 hours. A request that fails (4xx or 5xx) does not use the key.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A UUID the client generates for each attempt to register a movement, and reuses when it retries the same request (a double tap, a lost response). With the same key, user and space, a repeated request creates nothing and answers 201 with the same movement; the same key with another body is a 409 `idempotency_key_reused`. A key counts for 24 hours. A request that fails (4xx or 5xx) does not use the key.",
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -2470,6 +2489,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "content": {
