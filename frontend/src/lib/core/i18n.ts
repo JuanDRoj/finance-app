@@ -307,7 +307,7 @@ export const TRANSACTION_TYPE_NAMES: Readonly<
 /** A kind of movement as the person reads it. One this map does not know shows as "Movimiento". */
 export function describeTransactionType(type: string): string {
   return Object.hasOwn(TRANSACTION_TYPE_NAMES, type)
-    ? (TRANSACTION_TYPE_NAMES[type as keyof typeof TRANSACTION_TYPE_NAMES] ?? "Movimiento")
+    ? TRANSACTION_TYPE_NAMES[type as keyof typeof TRANSACTION_TYPE_NAMES]
     : "Movimiento";
 }
 

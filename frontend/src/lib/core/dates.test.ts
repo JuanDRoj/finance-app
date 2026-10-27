@@ -156,6 +156,14 @@ describe("isLocalDate", () => {
     expect(isLocalDate("2026-10-26T00:00:00")).toBe(false);
     expect(isLocalDate(" 2026-10-26")).toBe(false);
   });
+
+  it("starts at year 1, like the date of the backend (Python): year 0 would be a 422 there", () => {
+    expect(isLocalDate("0000-01-01")).toBe(false);
+    expect(isLocalDate("0000-12-31")).toBe(false);
+    expect(isLocalDate("0001-01-01")).toBe(true);
+    expect(isLocalDate("0050-06-15")).toBe(true);
+    expect(isLocalDate("9999-12-31")).toBe(true);
+  });
 });
 
 describe("shiftLocalDate", () => {
@@ -191,6 +199,15 @@ describe("shiftLocalDate", () => {
   it("keeps a four-digit year", () => {
     expect(shiftLocalDate("0999-12-31", 1)).toBe("1000-01-01");
     expect(shiftLocalDate("1000-01-01", -1)).toBe("0999-12-31");
+  });
+
+  it("throws a RangeError when the move leaves years 0001 to 9999", () => {
+    expect(shiftLocalDate("0001-01-02", -1)).toBe("0001-01-01");
+    expect(() => shiftLocalDate("0001-01-01", -1)).toThrow(RangeError);
+    expect(shiftLocalDate("9999-12-30", 1)).toBe("9999-12-31");
+    expect(() => shiftLocalDate("9999-12-31", 1)).toThrow(RangeError);
+    // A date of year 0 is not a date to begin with.
+    expect(() => shiftLocalDate("0000-01-01", 1)).toThrow(RangeError);
   });
 
   it("throws a RangeError for a date that is not a real day or days that are not whole", () => {

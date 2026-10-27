@@ -189,12 +189,18 @@ describe("movementFormSchema: the date", () => {
     expect(bodyOf(values({ date: "2028-02-29" }))).toMatchObject({ date: "2028-02-29" });
   });
 
-  it.each(["", "2026-10", "26/10/2026", "2026-02-30", "2027-02-29", "2026-10-26T00:00:00"])(
-    "refuses %j",
-    (date) => {
-      expect(errorsOf(values({ date }))).toEqual({ date: "Elige una fecha." });
-    },
-  );
+  it.each([
+    "",
+    "2026-10",
+    "26/10/2026",
+    "2026-02-30",
+    "2027-02-29",
+    "2026-10-26T00:00:00",
+    // The backend's date starts at year 1: year 0 is a 422 there.
+    "0000-01-01",
+  ])("refuses %j", (date) => {
+    expect(errorsOf(values({ date }))).toEqual({ date: "Elige una fecha." });
+  });
 });
 
 describe("movementFormSchema: the description", () => {
