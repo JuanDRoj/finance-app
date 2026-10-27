@@ -78,6 +78,47 @@ export function todayInTimezone(timeZone: string, now: Date = new Date()): strin
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+/** The `Date` (at 00:00 UTC) of a real calendar day written `YYYY-MM-DD`, or `null` if it is not one ("2026-02-30"). */
+function utcDateOf(date: string): Date | null {
+  const match = LOCAL_DATE.exec(date);
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  // `new Date(0)` is midnight UTC; `setUTCFullYear` (unlike `Date.UTC`) takes a year from 0 to 99 as is.
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
+  // "02-30" rolls over to March: it is not a real day if the parts do not come back as given.
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return utc;
+}
+
+/** Whether `text` is a real calendar day written `YYYY-MM-DD` (what an `<input type="date">` gives, or ""). */
+export function isLocalDate(text: string): boolean {
+  return utcDateOf(text) !== null;
+}
+
+/**
+ * The calendar day `days` after (or before, if negative) a local date, as `YYYY-MM-DD`. Pure
+ * calendar arithmetic on the day, with no time zone and no daylight saving, so "yesterday" of
+ * `todayInTimezone(space.timezone)` is `shiftLocalDate(today, -1)` and can never skip or repeat a
+ * day. Throws a `RangeError` for a text that is not a real day or a `days` that is not an integer.
+ */
+export function shiftLocalDate(date: string, days: number): string {
+  const utc = utcDateOf(date);
+  if (!utc) throw new RangeError(`Expected a real YYYY-MM-DD date: "${date}"`);
+  if (!Number.isInteger(days)) throw new RangeError(`Expected a whole number of days: ${days}`);
+  utc.setUTCDate(utc.getUTCDate() + days);
+  const year = String(utc.getUTCFullYear()).padStart(4, "0");
+  const month = String(utc.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(utc.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * A date as the header of the Inicio writes it: the weekday first, in capitals, and no comma
  * ("Miércoles 21 de octubre"). It is "today" in the space's time zone (`spaces.timezone`), never

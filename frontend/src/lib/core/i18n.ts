@@ -129,7 +129,19 @@ const FIELD_ERROR_BY_TYPE: Record<string, string> = {
   decimal_parsing: "Escribe un número válido.",
   greater_than: "El valor es demasiado bajo.",
   less_than: "El valor es demasiado alto.",
+  less_than_equal: "El valor es demasiado alto.",
   value_error: "El valor no es válido.",
+  // A field the form did not send, or sent when it should not: not something to fix in the field.
+  extra_forbidden: "Hay un dato que no podemos aceptar.",
+  // `POST /spaces/{id}/transactions` (BE-18): the account or the category of the movement.
+  account_not_found: "Esa cuenta ya no existe. Elige otra.",
+  account_archived: "Esa cuenta está archivada. Elige otra.",
+  category_not_found: "Esa categoría ya no existe. Elige otra.",
+  category_archived: "Esa categoría está archivada. Elige otra.",
+  transaction_category_kind_mismatch: "Esa categoría no es de este tipo de movimiento. Elige otra.",
+  transfer_same_account: "Elige dos cuentas distintas.",
+  date_invalid: "Escribe una fecha válida.",
+  union_tag_invalid: "Elige un tipo de movimiento.",
   // `POST /spaces/{id}/accounts` (BE-16): the closing and due days belong to credit cards only.
   card_day_required: "Elige un día del 1 al 31.",
   card_day_not_allowed: "Solo las tarjetas tienen día de cierre y de vencimiento.",
@@ -276,6 +288,27 @@ export function describeAccountType(type: string): string {
   return Object.hasOwn(ACCOUNT_TYPE_NAMES, type)
     ? (ACCOUNT_TYPE_NAMES[type as keyof typeof ACCOUNT_TYPE_NAMES] ?? "Cuenta")
     : "Cuenta";
+}
+
+/**
+ * Names of the kinds of movement (`TransactionRead.type`) in Spanish: the one place that translates
+ * them. A person registers the first three; an adjustment only comes from "Cuadrar saldo" and is
+ * shown, never chosen.
+ */
+export const TRANSACTION_TYPE_NAMES: Readonly<
+  Record<components["schemas"]["TransactionRead"]["type"], string>
+> = {
+  expense: "Gasto",
+  income: "Ingreso",
+  transfer: "Transferencia",
+  adjustment: "Ajuste",
+};
+
+/** A kind of movement as the person reads it. One this map does not know shows as "Movimiento". */
+export function describeTransactionType(type: string): string {
+  return Object.hasOwn(TRANSACTION_TYPE_NAMES, type)
+    ? (TRANSACTION_TYPE_NAMES[type as keyof typeof TRANSACTION_TYPE_NAMES] ?? "Movimiento")
+    : "Movimiento";
 }
 
 /**

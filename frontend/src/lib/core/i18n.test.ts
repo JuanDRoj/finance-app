@@ -3,9 +3,11 @@ import { ApiError } from "./data/errors";
 import {
   ACCOUNT_TYPE_NAMES,
   CURRENCY_NAMES,
+  TRANSACTION_TYPE_NAMES,
   describeAccountType,
   describeApiError,
   describeCurrency,
+  describeTransactionType,
   fieldErrorMessage,
   isErrorResponse,
   isValidationErrorBody,
@@ -185,6 +187,106 @@ describe("codes of the accounts and the currency (KAN-91)", () => {
     expect(message).toContain("a salvo");
     expect(message).not.toContain("Corrígelo");
     expect(`${title} ${message}`).not.toContain("currency_unsupported");
+  });
+});
+
+describe("codes of the movements (KAN-74, KAN-94)", () => {
+  // The 422 `type`s of `POST /spaces/{id}/transactions` (backend/app/modules/transactions) and the
+  // Pydantic ones its body can raise, each with the text under the field.
+  const TYPES: readonly (readonly [string, string])[] = [
+    ["account_not_found", "Esa cuenta ya no existe. Elige otra."],
+    ["account_archived", "Esa cuenta está archivada. Elige otra."],
+    ["category_not_found", "Esa categoría ya no existe. Elige otra."],
+    ["category_archived", "Esa categoría está archivada. Elige otra."],
+    [
+      "transaction_category_kind_mismatch",
+      "Esa categoría no es de este tipo de movimiento. Elige otra.",
+    ],
+    ["transfer_same_account", "Elige dos cuentas distintas."],
+    ["date_invalid", "Escribe una fecha válida."],
+    ["union_tag_invalid", "Elige un tipo de movimiento."],
+    ["less_than_equal", "El valor es demasiado alto."],
+    ["extra_forbidden", "Hay un dato que no podemos aceptar."],
+  ];
+
+  it.each(TYPES)("marks a field with the 422 type %s in Spanish", (type, text) => {
+    expect(fieldErrorMessage(type)).toBe(text);
+    expect(fieldErrorMessage(type)).not.toBe(fieldErrorMessage("some_future_type"));
+    expect(fieldErrorMessage(type)).not.toContain(type);
+  });
+
+  it("keeps the types the movements share with other forms as they were", () => {
+    expect(fieldErrorMessage("missing")).toBe("Este campo es obligatorio.");
+    expect(fieldErrorMessage("greater_than")).toBe("El valor es demasiado bajo.");
+    expect(fieldErrorMessage("string_too_long")).toBe("Es demasiado largo.");
+  });
+
+  it("lists the fields of a 422 of a movement with the type still in the location", () => {
+    // The union puts the `type` of the movement between `body` and the field: the form strips it
+    // (`movementFormFieldOf`); `validationIssuesOf` only drops `body`.
+    const body = {
+      detail: [
+        { type: "account_archived", loc: ["body", "expense", "account_id"], msg: "English" },
+        {
+          type: "transaction_category_kind_mismatch",
+          loc: ["body", "expense", "category_id"],
+          msg: "English",
+        },
+      ],
+    };
+    expect(validationIssuesOf(apiError(422, body))).toEqual([
+      { path: "expense.account_id", message: "Esa cuenta está archivada. Elige otra." },
+      {
+        path: "expense.category_id",
+        message: "Esa categoría no es de este tipo de movimiento. Elige otra.",
+      },
+    ]);
+  });
+
+  it("does not turn the 409 code account_archived (reconcile) into the text of the field", () => {
+    const { title, message } = describeApiError(
+      apiError(409, { detail: "The account is archived", code: "account_archived" }),
+    );
+    expect(title).toBe("Esa cuenta está archivada");
+    expect(message).toContain("Desarchívala desde Cuentas");
+  });
+
+  it("says a single 422 problem precisely, in Spanish and without the raw type", () => {
+    const body = {
+      detail: [
+        {
+          type: "transfer_same_account",
+          loc: ["body", "transfer", "to_account_id"],
+          msg: "English",
+        },
+      ],
+    };
+    const { title, message } = describeApiError(apiError(422, body));
+    expect(title).toBe("Revisa los datos");
+    expect(message).toContain("Elige dos cuentas distintas.");
+    expect(`${title} ${message}`).not.toContain("transfer_same_account");
+    expect(`${title} ${message}`).not.toContain("English");
+  });
+});
+
+describe("describeTransactionType", () => {
+  it("names the four kinds of movement in Spanish", () => {
+    expect(describeTransactionType("expense")).toBe("Gasto");
+    expect(describeTransactionType("income")).toBe("Ingreso");
+    expect(describeTransactionType("transfer")).toBe("Transferencia");
+    expect(describeTransactionType("adjustment")).toBe("Ajuste");
+    expect(Object.keys(TRANSACTION_TYPE_NAMES)).toEqual([
+      "expense",
+      "income",
+      "transfer",
+      "adjustment",
+    ]);
+  });
+
+  it("never shows the raw value nor reads inherited keys", () => {
+    for (const type of ["refund", "constructor", "toString", "__proto__", ""]) {
+      expect(describeTransactionType(type)).toBe("Movimiento");
+    }
   });
 });
 

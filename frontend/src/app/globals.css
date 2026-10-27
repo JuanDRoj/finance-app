@@ -177,6 +177,12 @@
   --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.22); /* a centered dialog */
   --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.16); /* the bottom sheet */
   --text-panel-title: 1.375rem; /* 22px: title of the side panel and of a dialog */
+  /* KAN-94 (FE-29), from the Kanza canvas (docs/diseno.md D17 › Escritorio v2, D19): the big amount of "Registrar movimiento". */
+  --text-amount: 2.375rem; /* 38px: the amount in the bottom sheet of a phone */
+  --text-amount-symbol: 1.625rem; /* 26px: the currency symbol before it */
+  --text-amount-panel: 1.75rem; /* 28px: the amount in the side panel of desktop */
+  --text-amount-symbol-panel: 1.375rem; /* 22px: the currency symbol before it */
+  --tracking-amount: -0.02em; /* the amount in the bottom sheet of a phone */
 }
 
 @theme inline {

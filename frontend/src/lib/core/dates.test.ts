@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatInstant, formatLocalDate, formatWeekdayDate, todayInTimezone } from "./dates";
+import {
+  formatInstant,
+  formatLocalDate,
+  formatWeekdayDate,
+  isLocalDate,
+  shiftLocalDate,
+  todayInTimezone,
+} from "./dates";
 
 describe("test environment", () => {
   it("runs with a negative-offset time zone, so a device-zone regression fails everywhere", () => {
@@ -129,6 +136,68 @@ describe("todayInTimezone", () => {
 
   it("rejects an invalid time zone", () => {
     expect(() => todayInTimezone("Mars/Olympus")).toThrow(RangeError);
+  });
+});
+
+describe("isLocalDate", () => {
+  it("accepts a real calendar day written YYYY-MM-DD", () => {
+    expect(isLocalDate("2026-10-26")).toBe(true);
+    expect(isLocalDate("2028-02-29")).toBe(true);
+    expect(isLocalDate("2026-12-31")).toBe(true);
+  });
+
+  it("rejects what an empty or half-typed date input gives, and days that do not exist", () => {
+    expect(isLocalDate("")).toBe(false);
+    expect(isLocalDate("2026-10")).toBe(false);
+    expect(isLocalDate("26-10-2026")).toBe(false);
+    expect(isLocalDate("2026-13-01")).toBe(false);
+    expect(isLocalDate("2026-02-30")).toBe(false);
+    expect(isLocalDate("2027-02-29")).toBe(false);
+    expect(isLocalDate("2026-10-26T00:00:00")).toBe(false);
+    expect(isLocalDate(" 2026-10-26")).toBe(false);
+  });
+});
+
+describe("shiftLocalDate", () => {
+  it("moves a day back and forward", () => {
+    expect(shiftLocalDate("2026-10-26", -1)).toBe("2026-10-25");
+    expect(shiftLocalDate("2026-10-26", 1)).toBe("2026-10-27");
+    expect(shiftLocalDate("2026-10-26", 0)).toBe("2026-10-26");
+    expect(shiftLocalDate("2026-10-26", -30)).toBe("2026-09-26");
+  });
+
+  it("crosses the end of a month, of a year and a leap day", () => {
+    expect(shiftLocalDate("2026-11-01", -1)).toBe("2026-10-31");
+    expect(shiftLocalDate("2026-03-01", -1)).toBe("2026-02-28");
+    expect(shiftLocalDate("2028-03-01", -1)).toBe("2028-02-29");
+    expect(shiftLocalDate("2027-01-01", -1)).toBe("2026-12-31");
+    expect(shiftLocalDate("2026-12-31", 1)).toBe("2027-01-01");
+  });
+
+  it("does not skip or repeat a day when the clocks change (it has no time zone)", () => {
+    // Montevideo has no daylight saving now; New York changed its clocks on 2026-11-01 and 2026-03-08.
+    expect(shiftLocalDate("2026-11-02", -1)).toBe("2026-11-01");
+    expect(shiftLocalDate("2026-11-01", -1)).toBe("2026-10-31");
+    expect(shiftLocalDate("2026-03-09", -1)).toBe("2026-03-08");
+    expect(shiftLocalDate("2026-03-08", -1)).toBe("2026-03-07");
+  });
+
+  it("gives yesterday of the space's today", () => {
+    // 02:30 UTC on the 15th is still the 14th in Montevideo: yesterday is the 13th.
+    const today = todayInTimezone("America/Montevideo", new Date("2026-10-15T02:30:00Z"));
+    expect(shiftLocalDate(today, -1)).toBe("2026-10-13");
+  });
+
+  it("keeps a four-digit year", () => {
+    expect(shiftLocalDate("0999-12-31", 1)).toBe("1000-01-01");
+    expect(shiftLocalDate("1000-01-01", -1)).toBe("0999-12-31");
+  });
+
+  it("throws a RangeError for a date that is not a real day or days that are not whole", () => {
+    expect(() => shiftLocalDate("", 1)).toThrow(RangeError);
+    expect(() => shiftLocalDate("2026-02-30", 1)).toThrow(RangeError);
+    expect(() => shiftLocalDate("2026-10-26", 0.5)).toThrow(RangeError);
+    expect(() => shiftLocalDate("2026-10-26", Number.NaN)).toThrow(RangeError);
   });
 });
 

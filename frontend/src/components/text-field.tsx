@@ -18,6 +18,11 @@ export type TextFieldProps = Omit<ComponentProps<"input">, "id" | "aria-invalid"
    */
   startIcon?: ReactNode;
   /**
+   * Extra classes for the box that holds `startIcon` (`left-3.5`, vertically centered), merged
+   * after its own: the big amount field of a movement moves the symbol with them.
+   */
+  startIconClassName?: string;
+  /**
    * An interactive control inside the right edge, at most 44 px wide (an icon `Button`, such as
    * the show/hide password toggle). It needs its own accessible name. The text gets room so it
    * never runs under it.
@@ -52,6 +57,7 @@ export function TextField({
   className,
   inputClassName,
   startIcon,
+  startIconClassName,
   endAction,
   "aria-describedby": extraDescribedBy,
   ...inputProps
@@ -76,7 +82,10 @@ export function TextField({
         {startIcon ? (
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-muted-foreground [&_svg]:size-5"
+            className={cn(
+              "pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-muted-foreground [&_svg]:size-5",
+              startIconClassName,
+            )}
           >
             {startIcon}
           </span>

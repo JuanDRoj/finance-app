@@ -118,4 +118,152 @@ describe("MoneyField", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0]?.[0]).toEqual({ balance: "0,29" });
   });
+
+  it("keeps the 48 px default field apart from the big one: no hero classes, no CSS variable", () => {
+    render(<MoneyField label="Saldo actual" currency={UYU} />);
+    expect(input().className).not.toMatch(/text-amount|border-b-2|lg:h-15/);
+    expect(input().style.getPropertyValue("--symbol-chars")).toBe("");
+  });
+});
+
+describe('MoneyField size="hero" (KAN-94)', () => {
+  function hero(props: Partial<React.ComponentProps<typeof MoneyField>> = {}) {
+    return render(<MoneyField label="Monto" currency={UYU} size="hero" {...props} />);
+  }
+
+  it("is the big amount: 38 px figures on the phone and 28 px from 1024 px, in Montserrat 600, tabular", () => {
+    hero();
+    const { className } = input("Monto");
+    for (const expected of [
+      "font-heading",
+      "font-semibold",
+      "tabular-nums",
+      "text-amount",
+      "lg:text-amount-panel",
+    ]) {
+      expect(className.split(" ")).toContain(expected);
+    }
+    // It replaces the 18 px of the default field, and stays at 16 px or more (iOS zooms below that).
+    expect(className.split(" ")).not.toContain("text-lg");
+    expect(className).not.toMatch(/(^|\s)text-(xs|sm|base)(\s|$)/);
+  });
+
+  it("is an underline on the phone (no box) and a 60 px box from 1024 px", () => {
+    hero();
+    const classes = input("Monto").className.split(" ");
+    // The phone: a 2 px underline in primary, transparent, no side border, no box radius.
+    for (const expected of [
+      "border-0",
+      "border-b-2",
+      "border-primary",
+      "bg-transparent",
+      "rounded-none",
+    ]) {
+      expect(classes).toContain(expected);
+    }
+    // Desktop: the field of the other forms, 60 px tall, with its border color and solid background.
+    for (const expected of [
+      "lg:h-15",
+      "lg:border",
+      "lg:border-input",
+      "lg:bg-card-solid",
+      "lg:rounded-field",
+    ]) {
+      expect(classes).toContain(expected);
+    }
+    // The 48 px, boxed look of the default field is gone below 1024 px.
+    expect(classes).not.toContain("h-12");
+    expect(classes).not.toContain("px-4");
+  });
+
+  it("turns the underline red when invalid, and draws the red box only on desktop", () => {
+    hero({ error: "El monto debe ser mayor que 0." });
+    const field = input("Monto");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    const classes = field.className.split(" ");
+    expect(classes).toContain("aria-invalid:border-destructive");
+    expect(classes).toContain("aria-invalid:ring-0");
+    // The box's border color would lose to `lg:border-input`, so it is stated under `lg:` too.
+    expect(classes).toContain("lg:aria-invalid:border-destructive");
+    expect(classes).toContain("lg:aria-invalid:ring-1");
+    expect(classes).not.toContain("aria-invalid:ring-1");
+    expect(screen.getByRole("alert").textContent).toContain("El monto debe ser mayor que 0.");
+  });
+
+  it.each([
+    ["UYU", "$", "1"],
+    ["USD", "US$", "3"],
+    ["BRL", "R$", "2"],
+    ["EUR", "€", "1"],
+  ])(
+    "makes room for the symbol of %s (%s) with a variable, not a fixed padding",
+    (code, symbol, chars) => {
+      const { container } = hero({ currency: { code, exponent: 2 } });
+      const field = input("Monto");
+      expect(container.querySelector("[aria-hidden='true']")?.textContent).toBe(symbol);
+      expect(field.style.getPropertyValue("--symbol-chars")).toBe(chars);
+      // The room is a class that reads the variable (it changes with the width), not an inline padding.
+      expect(field.style.paddingLeft).toBe("");
+      expect(field.className).toContain("pl-[calc(var(--symbol-chars)");
+      expect(field.className).toContain("lg:pl-[calc(1.125rem+var(--symbol-chars)");
+    },
+  );
+
+  it("sizes the symbol with the figures: 26 px, then 22 px from 1024 px, on the left edge of the phone", () => {
+    const { container } = hero();
+    const symbol = container.querySelector("[aria-hidden='true'] > span") as HTMLElement;
+    expect(symbol.className).toContain("text-amount-symbol");
+    expect(symbol.className).toContain("lg:text-amount-symbol-panel");
+    expect(symbol.className).not.toContain("text-lg");
+    const box = symbol.parentElement as HTMLElement;
+    // 0 px from the edge on the phone and 18 px inside the box from 1024 px, with the `left-3.5` of the default gone.
+    expect(box.className.split(" ")).toContain("left-0");
+    expect(box.className.split(" ")).toContain("lg:left-4.5");
+    expect(box.className.split(" ")).not.toContain("left-3.5");
+  });
+
+  it("is still a decimal-keyboard text field bound to its label, with the currency read aloud", () => {
+    hero({ description: "Lo que gastaste." });
+    const field = input("Monto");
+    expect(field.type).toBe("text");
+    expect(field.inputMode).toBe("decimal");
+    expect(field.getAttribute("autocomplete")).toBe("off");
+    const describedBy = (field.getAttribute("aria-describedby") ?? "").split(" ");
+    const texts = describedBy.map((id) => document.getElementById(id)?.textContent);
+    expect(texts).toContain("Moneda: Peso uruguayo · UYU");
+    expect(texts).toContain("Lo que gastaste.");
+  });
+
+  it("keeps the debt color and lets a class of the caller win", () => {
+    hero({ tone: "debt", inputClassName: "tracking-tight" });
+    const classes = input("Monto").className.split(" ");
+    expect(classes).toContain("text-debt");
+    expect(classes).not.toContain("text-foreground");
+    expect(classes).toContain("tracking-tight");
+    expect(classes).not.toContain("tracking-amount");
+  });
+
+  it("keeps a style of the caller next to the variable", () => {
+    hero({ style: { color: "red" } });
+    expect(input("Monto").style.getPropertyValue("--symbol-chars")).toBe("1");
+    expect(input("Monto").style.color).toBe("red");
+  });
+
+  it("works with register(): the text reaches the form", async () => {
+    const onSubmit = vi.fn();
+    function Form() {
+      const { register, handleSubmit } = useForm({ defaultValues: { amount: "" } });
+      return (
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <MoneyField label="Monto" currency={UYU} size="hero" {...register("amount")} />
+          <button type="submit">Enviar</button>
+        </form>
+      );
+    }
+    render(<Form />);
+    fireEvent.change(input("Monto"), { target: { value: "2340,50" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]?.[0]).toEqual({ amount: "2340,50" });
+  });
 });
