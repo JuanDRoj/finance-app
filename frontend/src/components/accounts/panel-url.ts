@@ -10,8 +10,15 @@
 
 export type PanelRef = { param: string; value: string };
 
-/** The panel the form of a new account opens in (`PRIMARY_ACTION.panel`). */
+/** The panel the form of a new account opens in (`NEW_ACCOUNT_ACTION.panel`). */
 export const NEW_ACCOUNT_PANEL: PanelRef = { param: "cuenta", value: "nueva" };
+
+/**
+ * The panel "Registrar movimiento" opens in (`PRIMARY_ACTION.panel`, KAN-76): `?movimiento=nuevo`.
+ * Below 1024 px it is the bottom sheet, from 1024 px the side panel; the same URL opens either.
+ * FE-23 will add `?movimiento=editar` for editing one.
+ */
+export const MOVEMENT_PANEL: PanelRef = { param: "movimiento", value: "nuevo" };
 
 function writeUrl(url: URL): void {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
@@ -28,6 +35,18 @@ export function openPanelInUrl({ param, value }: PanelRef): void {
 export function closePanelInUrl(param: string): void {
   const url = new URL(window.location.href);
   url.searchParams.delete(param);
+  writeUrl(url);
+}
+
+/**
+ * Swaps one panel for another in a single write: takes `?{from}` out and puts `?{param}={value}`.
+ * Used when "Registrar movimiento" finds there is no account to register on and hands over to "Nueva
+ * cuenta": one write, so the URL never has both and the history gets no entry.
+ */
+export function replacePanelInUrl(from: string, { param, value }: PanelRef): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(from);
+  url.searchParams.set(param, value);
   writeUrl(url);
 }
 

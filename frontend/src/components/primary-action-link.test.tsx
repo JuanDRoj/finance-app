@@ -95,6 +95,29 @@ describe("PrimaryActionLink", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("with panelOnPhone it opens the panel below 1024 px too: the sheet of a movement", () => {
+    atWidth(false);
+    renderLink({ panelOnPhone: true, panel: { param: "movimiento", value: "nuevo" } });
+    expect(click()).toBe(false);
+    expect(window.location.search).toBe("?movimiento=nuevo");
+  });
+
+  it("with panelOnPhone it still opens it from 1024 px, and keeps the meaning of a modified click", () => {
+    renderLink({ panelOnPhone: true, panel: { param: "movimiento", value: "nuevo" } });
+    expect(click()).toBe(false);
+    expect(window.location.search).toBe("?movimiento=nuevo");
+    window.history.replaceState(null, "", "/");
+    expect(click({ ctrlKey: true })).toBe(true);
+    expect(window.location.search).toBe("");
+  });
+
+  it("without panelOnPhone a phone navigates: the form of an account is a page", () => {
+    atWidth(false);
+    renderLink({ panelOnPhone: false });
+    expect(click()).toBe(true);
+    expect(window.location.search).toBe("");
+  });
+
   it("is a plain link without a panel, at any width", () => {
     renderLink({ panel: undefined });
     expect(click()).toBe(true);

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { NEW_ACCOUNT_PANEL, closePanelInUrl, openPanelInUrl } from "./panel-url";
+import {
+  MOVEMENT_PANEL,
+  NEW_ACCOUNT_PANEL,
+  closePanelInUrl,
+  openPanelInUrl,
+  replacePanelInUrl,
+} from "./panel-url";
 
 afterEach(() => window.history.replaceState(null, "", "/"));
 
@@ -40,6 +46,25 @@ describe("the panel in the URL", () => {
     const before = window.history.length;
     openPanelInUrl(NEW_ACCOUNT_PANEL);
     closePanelInUrl("cuenta");
+    expect(window.history.length).toBe(before);
+  });
+
+  it("names the panel of a movement ?movimiento=nuevo, as PRIMARY_ACTION says", () => {
+    expect(MOVEMENT_PANEL).toEqual({ param: "movimiento", value: "nuevo" });
+  });
+
+  it("swaps one panel for another in one write, keeping the rest of the URL", () => {
+    window.history.replaceState(null, "", "/cuentas?sel=abc&movimiento=nuevo#lista");
+    replacePanelInUrl("movimiento", NEW_ACCOUNT_PANEL);
+    expect(window.location.pathname).toBe("/cuentas");
+    expect(window.location.search).toBe("?sel=abc&cuenta=nueva");
+    expect(window.location.hash).toBe("#lista");
+  });
+
+  it("swaps even if the panel to leave was not in the URL, and adds no history entries", () => {
+    const before = window.history.length;
+    replacePanelInUrl("movimiento", NEW_ACCOUNT_PANEL);
+    expect(window.location.search).toBe("?cuenta=nueva");
     expect(window.history.length).toBe(before);
   });
 });

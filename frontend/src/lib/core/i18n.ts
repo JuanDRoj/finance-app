@@ -312,6 +312,19 @@ export function describeTransactionType(type: string): string {
 }
 
 /**
+ * The text of the button that registers a movement, by type (docs/diseno.md D17 › Escritorio v2,
+ * D19): "Guardar gasto", "Guardar ingreso" or "Guardar transferencia". An adjustment is not
+ * registered by hand, so it has none.
+ */
+export const MOVEMENT_SAVE_LABEL: Readonly<
+  Record<Exclude<components["schemas"]["TransactionRead"]["type"], "adjustment">, string>
+> = {
+  expense: "Guardar gasto",
+  income: "Guardar ingreso",
+  transfer: "Guardar transferencia",
+};
+
+/**
  * The currencies of `GET /currencies` in the order the person picks from (the order of
  * `CURRENCY_NAMES`: UYU, COP, USD, ARS, BRL, EUR). One the map does not know (the backend seeded a
  * new currency) goes after them, in the order the backend sent. Returns a new array.

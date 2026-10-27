@@ -17,6 +17,8 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
 vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/accounts/account-panel", () => ({ AccountPanelHost: () => null }));
+// The sheet of "Registrar movimiento" reads the URL and the router too (KAN-76).
+vi.mock("@/components/movements/movement-panel", () => ({ MovementPanelHost: () => null }));
 vi.mock("@/components/bottom-nav", () => ({ BottomNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 vi.mock("@/components/back-link", () => ({ BackLink: () => <span>Volver</span> }));

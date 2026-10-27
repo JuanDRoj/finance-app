@@ -34,6 +34,8 @@ vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 // The side panel and the card of the currency are client islands with their own tests (they need a
 // QueryClientProvider and the router): the stand-in of the card records what the page hands it.
 vi.mock("@/components/accounts/account-panel", () => ({ AccountPanelHost: () => null }));
+// The sheet of "Registrar movimiento" reads the URL and the router too (KAN-76).
+vi.mock("@/components/movements/movement-panel", () => ({ MovementPanelHost: () => null }));
 vi.mock("@/components/currency/currency-card", () => ({
   CurrencyCard: (props: { space: { id: string; currency: { code: string } } }) => {
     mocks.currencyCard(props);
@@ -510,6 +512,15 @@ describe("HomePage", () => {
   describe("with accounts", () => {
     beforeEach(() => backend({ accounts: ok([BANK, CASH, CARD]) }));
 
+    it("offers 'Registrar' in the sidebar, which opens the sheet over the screen", async () => {
+      await renderHome();
+      const sidebar = within(document.querySelector("[data-slot='sidebar']") as HTMLElement);
+      expect(sidebar.getByRole("link", { name: "Registrar" }).getAttribute("href")).toBe(
+        "/?movimiento=nuevo",
+      );
+      expect(sidebar.queryByRole("link", { name: "Nueva cuenta" })).toBeNull();
+    });
+
     it("lists them under 'Tus cuentas' instead of the invitation", async () => {
       await renderHome();
       const region = screen.getByRole("region", { name: "Tus cuentas" });
@@ -630,6 +641,13 @@ describe("HomePage", () => {
       expect(screen.queryByText("Empieza por tus cuentas")).toBeNull();
       expect(screen.queryByRole("link", { name: "Crear mi primera cuenta" })).toBeNull();
       expect(mocks.currencyCard).not.toHaveBeenCalled();
+    });
+
+    it("keeps 'Registrar' in the sidebar: a failed list is not 'no accounts'", async () => {
+      backend({ accounts: failure(502) });
+      await renderHome();
+      const sidebar = within(document.querySelector("[data-slot='sidebar']") as HTMLElement);
+      expect(sidebar.getByRole("link", { name: "Registrar" })).toBeTruthy();
     });
 
     it("keeps the greeting, the sidebar with the space and the account menus", async () => {

@@ -18,6 +18,8 @@ vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
 vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/accounts/account-panel", () => ({ AccountPanelHost: () => null }));
+// The sheet of "Registrar movimiento" reads the URL and the router too (KAN-76).
+vi.mock("@/components/movements/movement-panel", () => ({ MovementPanelHost: () => null }));
 vi.mock("@/components/bottom-nav", () => ({ BottomNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 vi.mock("@/components/brand/brand-font", () => ({
@@ -109,6 +111,38 @@ describe("AccountsPage", () => {
     await renderPage();
     const action = within(screen.getByRole("banner")).getByRole("link", { name: "Nueva cuenta" });
     expect(action.getAttribute("href")).toBe("/cuentas/nueva");
+  });
+
+  describe("the main action of the shell (KAN-76)", () => {
+    const sidebar = () => within(document.querySelector("[data-slot='sidebar']") as HTMLElement);
+
+    it("is 'Registrar', which opens the sheet over the screen, when there are active accounts", async () => {
+      await renderPage();
+      const link = sidebar().getByRole("link", { name: "Registrar" });
+      expect(link.getAttribute("href")).toBe("/?movimiento=nuevo");
+      expect(sidebar().queryByRole("link", { name: "Nueva cuenta" })).toBeNull();
+    });
+
+    it("is 'Nueva cuenta' when there are no accounts at all", async () => {
+      backend({ accounts: ok([]) });
+      await renderPage();
+      expect(sidebar().getByRole("link", { name: "Nueva cuenta" }).getAttribute("href")).toBe(
+        "/cuentas/nueva",
+      );
+      expect(sidebar().queryByRole("link", { name: "Registrar" })).toBeNull();
+    });
+
+    it("is 'Nueva cuenta' when every account is archived: nothing can be registered on those", async () => {
+      backend({ accounts: ok([ARCHIVED]) });
+      await renderPage();
+      expect(sidebar().getByRole("link", { name: "Nueva cuenta" })).toBeTruthy();
+    });
+
+    it("stays 'Registrar' when the accounts failed to load: the page never takes that for 'no accounts'", async () => {
+      backend({ accounts: failure(500, { code: "internal_error", detail: "boom" }) });
+      await renderPage();
+      expect(sidebar().getByRole("link", { name: "Registrar" })).toBeTruthy();
+    });
   });
 
   it.each([

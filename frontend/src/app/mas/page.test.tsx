@@ -30,6 +30,8 @@ vi.mock("@/components/sidebar-nav", () => ({ SidebarNav: () => null }));
 vi.mock("@/components/bottom-nav", () => ({ BottomNav: () => null }));
 vi.mock("@/components/bfcache-guard", () => ({ BfcacheGuard: () => null }));
 vi.mock("@/components/accounts/account-panel", () => ({ AccountPanelHost: () => null }));
+// The sheet of "Registrar movimiento" reads the URL and the router too (KAN-76).
+vi.mock("@/components/movements/movement-panel", () => ({ MovementPanelHost: () => null }));
 // `next/font` only works inside Next's compiler: the sidebar's logo writes the name with it.
 vi.mock("@/components/brand/brand-font", () => ({
   brandFont: { variable: "brand-font-variable" },

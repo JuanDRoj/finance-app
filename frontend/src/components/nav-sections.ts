@@ -1,4 +1,5 @@
 import { DotsThree, House, Wallet } from "@phosphor-icons/react/ssr";
+import { MOVEMENT_PANEL, NEW_ACCOUNT_PANEL, type PanelRef } from "@/components/accounts/panel-url";
 
 /** Any Phosphor icon (the library does not export its `Icon` type from the `/ssr` entry). */
 type NavIcon = typeof House;
@@ -23,16 +24,26 @@ export type MoreSection = NavSection & {
  * D17 › Navegación del Hito 1).
  */
 export type PrimaryAction = {
-  /** Where it goes below 1024 px (and with no JavaScript): a page of its own. */
+  /** Where it goes with no JavaScript, or in a new tab: a page that opens the same panel. */
   href: string;
   label: string;
   buttonText: string;
   /**
    * From 1024 px the action does not leave the screen: it opens its side panel over it, by adding
-   * `?{param}={value}` to the current URL (`AccountPanelHost` reads it). Without it, the action
-   * is just a link.
+   * `?{param}={value}` to the current URL (a panel host reads it). Without it, the action is just a
+   * link.
    */
-  panel?: { param: string; value: string };
+  panel?: PanelRef;
+  /**
+   * Opens the panel **below** 1024 px too (as the bottom sheet), instead of going to `href`. The
+   * form of an account is a page on a phone; "Registrar movimiento" is a sheet over the screen.
+   */
+  panelOnPhone?: boolean;
+  /**
+   * The key that opens it from the keyboard on desktop ("N"). The sidebar shows it as a hint on the
+   * button; the host that listens for it is `MovementPanelHost`.
+   */
+  shortcut?: string;
 };
 
 /** Everything the navigation shows. Components read it from `NAV`; the catalog passes its own. */
@@ -65,17 +76,32 @@ export const MORE_SECTIONS: readonly MoreSection[] = [];
 export const MORE_ITEM: NavSection = { id: "more", href: "/mas", label: "Más", icon: DotsThree };
 
 /**
- * What the "+" of the bottom bar and the button of the sidebar do. Until the panel to register a
- * movement exists (FE-20) they open the form of a new account (docs/diseno.md D17, D18): a page
- * below 1024 px (`/cuentas/nueva`) and, from 1024 px, the side panel over the current screen
- * (`?cuenta=nueva`). FE-20 changes the destination and the texts to "Registrar movimiento" and
- * "Registrar". It is `null` only while there is no screen to open at all.
+ * What the "+" of the bottom bar and the button of the sidebar do (docs/diseno.md D17, D19): open
+ * "Registrar movimiento", the bottom sheet below 1024 px and the side panel from there, over the
+ * current screen (`?movimiento=nuevo`; the same URL is the link with no JavaScript), with the key
+ * N as a shortcut on desktop. A screen that knows the space has no active account uses
+ * `NEW_ACCOUNT_ACTION` instead. It is `null` only while there is no screen to open at all.
  */
 export const PRIMARY_ACTION: PrimaryAction | null = {
+  href: `/?${MOVEMENT_PANEL.param}=${MOVEMENT_PANEL.value}`,
+  label: "Registrar movimiento",
+  buttonText: "Registrar",
+  panel: MOVEMENT_PANEL,
+  panelOnPhone: true,
+  shortcut: "N",
+};
+
+/**
+ * The main action while the space has no active account: nothing can be registered yet, so the "+"
+ * and the sidebar button say "Nueva cuenta" and open its form (docs/diseno.md D17, D18): the page
+ * `/cuentas/nueva` below 1024 px and, from 1024 px, the side panel (`?cuenta=nueva`). `AppShell`
+ * picks it when its page says there are no accounts (`noAccounts`: Inicio and Cuentas know).
+ */
+export const NEW_ACCOUNT_ACTION: PrimaryAction = {
   href: "/cuentas/nueva",
   label: "Nueva cuenta",
   buttonText: "Nueva cuenta",
-  panel: { param: "cuenta", value: "nueva" },
+  panel: NEW_ACCOUNT_PANEL,
 };
 
 export const NAV: NavConfig = {

@@ -132,6 +132,9 @@ export default async function AccountsPage() {
       user={user}
       space={space}
       subtitle={subtitle}
+      // Only when the list loaded: if it failed the page does not know, and never takes "could not
+      // load" for "no accounts" (the sheet of "Registrar" resolves it itself).
+      noAccounts={accounts ? splitArchived(accounts).active.length === 0 : undefined}
       actions={<NewAccountAction />}
     >
       <HydrationBoundary state={dehydrate(queryClient)}>

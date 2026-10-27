@@ -1,10 +1,17 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "./app-shell";
+import { NEW_ACCOUNT_ACTION } from "./nav-sections";
 
 // The shell's client pieces have their own tests (they need the router or a QueryClientProvider).
 // Here: what the shell decides, which is where each piece goes and what it leaves out.
-const mocks = vi.hoisted(() => ({ userMenu: vi.fn(), sidebar: vi.fn(), panelHost: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  userMenu: vi.fn(),
+  sidebar: vi.fn(),
+  bottomNav: vi.fn(),
+  panelHost: vi.fn(),
+  movementHost: vi.fn(),
+}));
 
 vi.mock("./user-menu", () => ({
   UserMenu: (props: { variant?: string; className?: string }) => {
@@ -19,13 +26,22 @@ vi.mock("./sidebar", () => ({
   },
 }));
 vi.mock("./bottom-nav", () => ({
-  BottomNav: () => <nav data-slot="bottom-nav" aria-label="Principal" />,
+  BottomNav: (props: unknown) => {
+    mocks.bottomNav(props);
+    return <nav data-slot="bottom-nav" aria-label="Principal" />;
+  },
 }));
 vi.mock("./bfcache-guard", () => ({ BfcacheGuard: () => null }));
 vi.mock("./accounts/account-panel", () => ({
   AccountPanelHost: (props: unknown) => {
     mocks.panelHost(props);
     return <div data-testid="panel-host" />;
+  },
+}));
+vi.mock("./movements/movement-panel", () => ({
+  MovementPanelHost: (props: unknown) => {
+    mocks.movementHost(props);
+    return <div data-testid="movement-host" />;
   },
 }));
 
@@ -35,11 +51,18 @@ afterEach(cleanup);
 beforeEach(() => {
   mocks.userMenu.mockReset();
   mocks.sidebar.mockReset();
+  mocks.bottomNav.mockReset();
   mocks.panelHost.mockReset();
+  mocks.movementHost.mockReset();
 });
 
 const USER = { display_name: "Ana Pérez", email: "ana@example.com" };
-const SPACE = { id: "space-1", name: "Mi espacio", currency: { code: "UYU", exponent: 2 } };
+const SPACE = {
+  id: "space-1",
+  name: "Mi espacio",
+  currency: { code: "UYU", exponent: 2 },
+  timezone: "America/Montevideo",
+};
 
 describe("AppShell", () => {
   it("keeps the avatar in the header below 1024 px and hides it from there", () => {
@@ -195,6 +218,61 @@ describe("AppShell", () => {
     it("is mounted without a space too (a screen that could not load it), and opens nothing", () => {
       render(<AppShell title="Inicio">x</AppShell>);
       expect(mocks.panelHost).toHaveBeenCalledWith({ space: undefined });
+    });
+  });
+
+  describe("'Registrar movimiento' (KAN-76)", () => {
+    it("mounts its host once, with the id, the currency and the time zone of the space", () => {
+      render(
+        <AppShell title="Inicio" space={SPACE}>
+          x
+        </AppShell>,
+      );
+      expect(screen.getAllByTestId("movement-host")).toHaveLength(1);
+      expect(mocks.movementHost).toHaveBeenCalledWith({
+        space: {
+          id: "space-1",
+          currency: { code: "UYU", exponent: 2 },
+          timezone: "America/Montevideo",
+        },
+        noAccounts: undefined,
+      });
+    });
+
+    it("mounts it without a space too, and it opens nothing", () => {
+      render(<AppShell title="Inicio">x</AppShell>);
+      expect(mocks.movementHost).toHaveBeenCalledWith({ space: undefined, noAccounts: undefined });
+    });
+
+    it("keeps the main action of the navigation (Registrar) when the page does not say otherwise", () => {
+      render(
+        <AppShell title="Inicio" space={SPACE}>
+          x
+        </AppShell>,
+      );
+      expect(mocks.sidebar.mock.calls[0]?.[0]).toMatchObject({ action: undefined });
+      expect(mocks.bottomNav.mock.calls[0]?.[0]).toMatchObject({ action: undefined });
+    });
+
+    it("turns the sidebar button, the + and the host to 'Nueva cuenta' when the page knows there are no accounts", () => {
+      render(
+        <AppShell title="Inicio" space={SPACE} noAccounts>
+          x
+        </AppShell>,
+      );
+      expect(mocks.sidebar.mock.calls[0]?.[0]).toMatchObject({ action: NEW_ACCOUNT_ACTION });
+      expect(mocks.bottomNav.mock.calls[0]?.[0]).toMatchObject({ action: NEW_ACCOUNT_ACTION });
+      expect(mocks.movementHost.mock.calls[0]?.[0]).toMatchObject({ noAccounts: true });
+    });
+
+    it("does not draw the + when the screen leaves out the bottom bar, but the host stays", () => {
+      render(
+        <AppShell title="Nueva cuenta" space={SPACE} hideBottomNav>
+          x
+        </AppShell>,
+      );
+      expect(screen.queryByRole("navigation", { name: "Principal" })).toBeNull();
+      expect(screen.getAllByTestId("movement-host")).toHaveLength(1);
     });
   });
 });

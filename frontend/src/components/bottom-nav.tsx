@@ -12,7 +12,9 @@ import {
   splitAroundAction,
   type NavConfig,
   type NavSection,
+  type PrimaryAction,
 } from "@/components/nav-sections";
+import { PrimaryActionLink } from "@/components/primary-action-link";
 import { focusRing } from "@/components/ui/focus";
 import { cn } from "@/lib/utils";
 
@@ -77,8 +79,12 @@ export function BottomNavBar({ nav, pathname, className, ...props }: BottomNavBa
     >
       {before.map(tab)}
       {nav.action ? (
-        <Link
+        // A `PrimaryActionLink`: a real link to the page of the action (no JavaScript, a new tab) that,
+        // for "Registrar movimiento", opens the sheet over the screen at every width.
+        <PrimaryActionLink
           href={nav.action.href}
+          panel={nav.action.panel}
+          panelOnPhone={nav.action.panelOnPhone}
           aria-label={nav.action.label}
           className={cn(
             "flex size-13 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-fab md:size-13.5",
@@ -87,7 +93,7 @@ export function BottomNavBar({ nav, pathname, className, ...props }: BottomNavBa
           )}
         >
           <Plus aria-hidden weight="bold" className="size-6" />
-        </Link>
+        </PrimaryActionLink>
       ) : null}
       {after.map(tab)}
     </nav>
@@ -100,12 +106,14 @@ export function BottomNavBar({ nav, pathname, className, ...props }: BottomNavBa
  * is 480 px wide and centered. From 1024 px it is gone (`lg:hidden`) and the sidebar takes over.
  * `data-slot="bottom-nav"` is what `globals.css` looks for to raise the toast above it, and what
  * the catalog's audit panel looks for. `AppShell` draws it unless the screen asks not to (a form).
+ * `action` replaces the main action of `NAV` (`AppShell` passes "Nueva cuenta" while the space has no
+ * active account); `null` draws no "+".
  */
-export function BottomNav() {
+export function BottomNav({ action }: Readonly<{ action?: PrimaryAction | null }>) {
   const pathname = usePathname();
   return (
     <BottomNavBar
-      nav={NAV}
+      nav={action === undefined ? NAV : { ...NAV, action }}
       pathname={pathname}
       data-slot="bottom-nav"
       className="fixed bottom-(--bottom-nav-offset) left-[max(0.75rem,env(safe-area-inset-left,0px))] z-40 right-[max(0.75rem,env(safe-area-inset-right,0px))] md:right-auto md:left-1/2 md:w-120 md:-translate-x-1/2 lg:hidden"
