@@ -17,6 +17,8 @@ erDiagram
   SPACES ||--o{ TRANSACTIONS : "contiene"
   CATEGORIES |o--o{ CATEGORIES : "subcategoria de"
   TRANSACTIONS ||--|{ ENTRIES : "se descompone en"
+  SPACE_MEMBERS ||--o{ IDEMPOTENCY_KEYS : "reintenta con"
+  TRANSACTIONS |o--o{ IDEMPOTENCY_KEYS : "creada con"
   ACCOUNTS ||--o{ ENTRIES : "afecta"
   CATEGORIES |o--o{ ENTRIES : "clasifica"
   RECURRING_TEMPLATES |o--o{ TRANSACTIONS : "genera"
@@ -100,6 +102,14 @@ erDiagram
     bigint amount_minor "con signo"
     uuid category_id FK "null en transfer"
   }
+  IDEMPOTENCY_KEYS {
+    uuid space_id PK
+    uuid user_id PK
+    uuid key PK "Idempotency-Key"
+    bytea request_hash "sha256 del cuerpo"
+    uuid transaction_id FK "null solo mientras se crea"
+    timestamptz created_at
+  }
   GOAL_ALLOCATIONS {
     uuid id PK
     uuid goal_id FK
@@ -132,6 +142,8 @@ erDiagram
  
 **Un asiento no cruza espacios**`entries` repite `space_id` y sus tres FK son compuestas: `(transaction_id, space_id)`, `(account_id, space_id)` y `(category_id, space_id)` apuntan a `(id, space_id)`, que es único en `transactions`, `accounts` y `categories`. La BD rechaza un entry cuya transacción, cuenta o categoría estén en otro espacio, aunque el service lo olvide. Las tablas futuras que referencien filas del espacio siguen el mismo patrón.
  
+**Un reintento no duplica un movimiento**`POST /spaces/{id}/transactions` acepta el header `Idempotency-Key`: la clave es única por `(space_id, user_id, key)` (PK de `idempotency_keys`) y guarda el sha256 del cuerpo y el movimiento que creó, en la misma transacción de BD. La misma clave con el mismo cuerpo devuelve el mismo movimiento sin crear otro; con otro cuerpo da 409 `idempotency_key_reused`. Dos requests simultáneos con la misma clave se serializan en el `INSERT ... ON CONFLICT` de la clave y dejan un solo movimiento. Las claves valen 24 h.
+
 **Categorías en dos niveles, del mismo tipo y con nombre único**Una subcategoría cuelga de una principal de su mismo espacio y su mismo `kind`, y no hay tercer nivel: lo impone una FK compuesta `(parent_id, space_id, kind, has_parent)` → `(id, space_id, kind, is_main)` con dos columnas generadas (`is_main`, `has_parent`). El nombre es único entre hermanas, sin distinguir mayúsculas y contando las archivadas (`uq_categories_main_name` por espacio y tipo, `uq_categories_sub_name` por principal). Por eso la siembra de las predefinidas es idempotente.
  
 ## Tablas
@@ -300,6 +312,22 @@ Los asientos: cómo afecta cada cuenta. Una transacción tiene uno o más.
 
 Sin `created_at`: los entries se derivan de la transacción y se rehacen al editarla. No hay `UNIQUE (transaction_id, account_id)`, porque dividir una compra en varias categorías de la misma cuenta lo rompería. Qué tipo lleva categoría y que una transferencia sume cero no lo controla la BD (el entry no conoce su tipo): lo garantiza `build_entries`, con tests.
  
+### idempotency_keys
+
+v1
+
+Las claves `Idempotency-Key` que ya vio `POST /spaces/{id}/transactions` (KAN-93), para que un doble toque o un reintento tras una respuesta perdida cree un solo movimiento. Vive en el módulo `transactions`.
+
+| space_id | `NOT NULL`; con `user_id` y `key` forma la PK compuesta `pk_idempotency_keys`, que es el UNIQUE del `ON CONFLICT` del reclamo |
+| --- | --- |
+| user_idFK | `NOT NULL`; FK compuesta `(user_id, space_id)` → `space_members` (el usuario es miembro del espacio), `ON DELETE CASCADE` |
+| key | `uuid` `NOT NULL`; el que manda el cliente en el header. La misma clave de otro usuario o de otro espacio es otra fila |
+| request_hash | `bytea` `NOT NULL`: sha256 (32 bytes, `ck_idempotency_keys_request_hash_length`) del cuerpo ya validado, para distinguir un reintento de la misma clave con otro cuerpo |
+| transaction_idFK | **nullable a propósito**: NULL solo dentro del request que reclamó la clave, entre el reclamo y la creación del movimiento (esa fila no está confirmada, así que toda fila confirmada tiene su movimiento). FK compuesta `(transaction_id, space_id)` → `transactions(id, space_id)`, `ON DELETE CASCADE` (la app nunca borra en duro). Con NULL esa FK no se evalúa (MATCH SIMPLE) |
+| created_at | `timestamptz` (UTC), `now()` por defecto; el service escribe el `now` del request. Una clave vale 24 h desde aquí |
+
+Sin más índices: la PK sirve a todas las consultas. Una clave vencida no se borra: la reemplaza el siguiente reclamo con la misma clave, aunque su cuerpo sea otro. La purga (un `DELETE ... WHERE created_at < ...`, con su índice por `created_at`) queda para el cron del hito 2. Un request que falla no deja clave (se deshace toda su transacción), y el reintento de una clave vigente devuelve el movimiento como está ahora, también si se borró después.
+
 ### budgets
  
 v1.1

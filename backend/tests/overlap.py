@@ -7,8 +7,10 @@ never blocked, the watcher times out and the test fails: it shows the serialisat
 assuming it. Whoever goes second sees what the first one committed (READ COMMITTED).
 
 Used by `test_category_archive_concurrency.py`, `test_account_archive_concurrency.py`,
-`test_account_reconcile_concurrency.py` and `test_space_currency_concurrency.py`;
-`test_first_login_concurrency.py` follows the same pattern.
+`test_account_reconcile_concurrency.py`, `test_space_currency_concurrency.py` and
+`test_transaction_idempotency_concurrency.py`; `test_first_login_concurrency.py` follows the same
+pattern. With `first_commits=False` the first operation rolls back instead of committing, to prove
+that whoever waited on it goes on as if it had never run.
 """
 
 import asyncio
@@ -31,12 +33,17 @@ Operation = Callable[[AsyncSession], Awaitable[object]]
 
 
 async def overlap(
-    engines: tuple[AsyncEngine, ...], first: Operation, second: Operation
+    engines: tuple[AsyncEngine, ...],
+    first: Operation,
+    second: Operation,
+    *,
+    first_commits: bool = True,
 ) -> tuple[object, object]:
     """Run `first` (it writes, does not commit) and `second` (it has to block on it).
 
     `engines` is `(actor A, actor B, watcher)`. Returns what each one returned; an `AppError`
     raised by `second` is returned, not raised (its session closes without committing).
+    `first_commits=False` makes `first` roll back once `second` is seen waiting.
     """
     engine_a, engine_b, watcher = engines
     first_has_written = asyncio.Event()
@@ -46,8 +53,11 @@ async def overlap(
         async with async_sessionmaker(engine_a, expire_on_commit=False)() as session:
             result = await first(session)
             first_has_written.set()
-            await second_is_waiting.wait()  # the second one is blocked on our row until we commit
-            await session.commit()
+            await second_is_waiting.wait()  # the second one is blocked on our row until we end
+            if first_commits:
+                await session.commit()
+            else:
+                await session.rollback()
             return result
 
     async def run_second() -> object:

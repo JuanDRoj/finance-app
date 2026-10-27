@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    LargeBinary,
     Text,
     UniqueConstraint,
     func,
@@ -118,3 +119,46 @@ class Entry(Base):
     # Indexed like the other two: deleting a category checks its entries by this key (RESTRICT),
     # and the reports by category (budgets, dashboard) filter by it.
     category_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+
+
+class IdempotencyKey(Base):
+    """An `Idempotency-Key` already seen by `POST /spaces/{id}/transactions`, with what it created.
+
+    The primary key is `(space_id, user_id, key)`: the same key of another user or of another space
+    is another row. `request_hash` is the sha256 of the validated body
+    (`idempotency.request_fingerprint`), so the same key with another body is detected.
+    `transaction_id` is NULL only inside the request that claimed the key, between the claim and
+    the creation of the movement: that row is not committed, so nobody else reads it, and every
+    committed row has its movement. The rows are written with `INSERT ... ON CONFLICT`
+    (`repository.claim_idempotency_key`), never through the ORM unit of work. A key counts for
+    `IDEMPOTENCY_KEY_TTL`; an expired one is replaced when its key is claimed again, and nothing
+    deletes them yet.
+
+    The user must be a member of the space (composite foreign key to `space_members`) and the
+    movement must be in the same space (composite foreign key to `transactions`, like the entries).
+    Both cascade: a key means nothing without its member or its movement.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (
+        CheckConstraint("octet_length(request_hash) = 32", name="request_hash_length"),
+        ForeignKeyConstraint(
+            ["user_id", "space_id"],
+            ["space_members.user_id", "space_members.space_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["transaction_id", "space_id"],
+            ["transactions.id", "transactions.space_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    space_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    key: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    request_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column()
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
