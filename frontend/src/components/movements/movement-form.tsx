@@ -21,12 +21,13 @@ import { Button } from "@/components/ui/button";
 import { SheetBody, SheetFooter } from "@/components/ui/sheet";
 import { browserApi } from "@/lib/api/browser";
 import { buildCategoryTree, categoryNameOf } from "@/lib/core/categories";
-import type { AccountWithBalance } from "@/lib/core/data/accounts";
+import { apiErrorCode, type AccountWithBalance } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import type { CategoryKind, CategoryRead } from "@/lib/core/data/categories";
 import { isUnauthorized } from "@/lib/core/data/errors";
 import { spaceQueryKey } from "@/lib/core/data/spaces";
 import {
+  IDEMPOTENCY_KEY_REUSED,
   createTransaction,
   transactionsQueryKey,
   type MovementCreate,
@@ -123,8 +124,12 @@ export type MovementFormProps = {
  * - A 422 marks the fields it names (`validationIssuesOf` + `movementFormFieldOf`, which drops the
  *   type from the `loc`); an account or a category the backend refuses is also cleared and its list
  *   is asked again. What no field can show goes to an `Alert` in Spanish; a 401 goes to `/login`.
- * - One request at a time (the backend has no `Idempotency-Key` yet): the button is busy while it
- *   runs and after it worked. Without a connection the request waits and the form says so.
+ * - One request at a time: the button is busy while it runs and after it worked. Every attempt
+ *   carries an `Idempotency-Key` (one UUID per opening of the sheet, reused by the retries after a
+ *   network failure, a 5xx or a 422, renewed once the movement is saved), so a lost response cannot
+ *   register it twice. A 409 `idempotency_key_reused` means an earlier attempt was saved with other
+ *   data: the form says so and refreshes the balances. Without a connection the request waits and
+ *   the form says so.
  * - On success: the account used is remembered, the accounts and the movements of the space are
  *   invalidated, a toast says "Registraste «…»" (no "Deshacer") and `onDone` runs.
  */
@@ -219,13 +224,30 @@ export function MovementForm({
   // Set the moment a request is about to start, and let go only if it fails. `busy` below comes from
   // the render before, and `handleSubmit` validates asynchronously: a held Enter fires several
   // submits that all pass the validation before the first render shows the button busy. This is what
-  // stops them (the backend has no `Idempotency-Key` yet, so each one would be a duplicate movement).
+  // stops them: the `Idempotency-Key` below would make a repeat harmless, but it would still be a
+  // pointless request, and the guard also covers the window before the first render.
   const sending = useRef(false);
 
+  // The `Idempotency-Key` (BE-24) of this opening of the sheet or panel: one UUID, born with the
+  // first attempt to save (an event handler, never the render) and sent again with every retry, so a
+  // lost response or a 5xx cannot register the movement twice. It is dropped, so the next attempt
+  // gets a new one, only when the movement was saved or the backend said the key was already used
+  // with other data. It is kept through a 422: the backend rolls back a failed request and does not
+  // use the key, so the corrected body goes with the same key; and if an earlier attempt did get
+  // saved, the 409 is the true warning of a duplicate. The form mounts again on every opening.
+  const idempotencyKey = useRef<string | null>(null);
+
   const mutation = useMutation({
-    mutationFn: ({ body }: { body: MovementCreate; categoryName: string | null }) =>
-      createTransaction(api, space.id, body),
+    mutationFn: ({
+      body,
+      key,
+    }: {
+      body: MovementCreate;
+      categoryName: string | null;
+      key: string;
+    }) => createTransaction(api, space.id, body, key),
     onSuccess: (_saved, { body, categoryName }) => {
+      idempotencyKey.current = null;
       saveLastAccountId(
         space.id,
         body.type === "transfer" ? body.from_account_id : body.account_id,
@@ -243,6 +265,16 @@ export function MovementForm({
       // An expired session is not a form problem: the API client's 401 rule is for queries only.
       if (isUnauthorized(error)) {
         window.location.replace("/login");
+        return;
+      }
+      // An earlier attempt with this key was saved, with other data: a movement exists now. The
+      // sheet stays open with the warning; a new save from here is a deliberate new movement, so it
+      // gets a new key. The balances and the movements are stale until they are asked again.
+      if (apiErrorCode(error) === IDEMPOTENCY_KEY_REUSED) {
+        idempotencyKey.current = null;
+        void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
+        void queryClient.invalidateQueries({ queryKey: transactionsQueryKey(space.id) });
+        setFormError(describeApiError(error));
         return;
       }
       const issues = validationIssuesOf(error);
@@ -293,9 +325,11 @@ export function MovementForm({
     if (sending.current || busy) return;
     sending.current = true;
     setFormError(null);
+    idempotencyKey.current ??= crypto.randomUUID();
     mutation.mutate({
       body,
       categoryName: body.type === "transfer" ? null : categoryNameOf(tree, body.category_id),
+      key: idempotencyKey.current,
     });
   }
 

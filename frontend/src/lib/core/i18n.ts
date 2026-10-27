@@ -72,6 +72,14 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     title: "Esa cuenta está archivada",
     message: "Desarchívala desde Cuentas para poder cuadrar su saldo.",
   },
+  // `POST .../transactions` (BE-24): the same `Idempotency-Key` as a movement that already worked,
+  // but with another body. It only happens when an earlier attempt was saved (usually a response
+  // lost to a dropped connection) and the person then changed the data and tried again.
+  idempotency_key_reused: {
+    title: "Ya se guardó un movimiento con otros datos",
+    message:
+      "Parece que se guardó cuando se cortó la conexión. Revisa el saldo de tus cuentas antes de guardar de nuevo.",
+  },
   internal_error: {
     title: "Algo salió mal de nuestro lado",
     message: `Inténtalo de nuevo en unos minutos. ${SAFE}`,
