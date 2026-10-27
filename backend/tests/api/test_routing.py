@@ -1,10 +1,14 @@
 import re
 import uuid
+from collections.abc import Callable
 
-from fastapi import APIRouter, Depends, FastAPI
+import pytest
+from fastapi import APIRouter, Depends, FastAPI, WebSocket
 from fastapi.routing import iter_route_contexts
 from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from app.main import create_app
 from app.modules.auth.dependencies import get_current_user
@@ -302,57 +306,140 @@ async def test_the_session_guard_detects_a_route_that_does_not_require_a_session
     assert await _operations_without_session(app, api_client) == ["GET /leaky"]
 
 
-def _hidden_space_paths(app: FastAPI) -> list[str]:
-    """Paths under `/spaces/{space_id}` served but left out of the schema.
+# Routes served but absent from the schema ---------------------------------------------------------
 
-    `include_in_schema` is read from the effective route, which also counts the flag set on
-    `include_router(...)` or on the `APIRouter`, not only on the decorator.
+# R2 walks `app.openapi()`, so a route left out of the schema would skip the session check. The
+# only routes allowed to be served without being in the schema are the documentation ones that
+# FastAPI itself creates: Swagger UI (`/docs`) and its OAuth2 redirect, ReDoc (`/redoc`) and the
+# schema (`/openapi.json`, which does not describe itself). They exist only with ENV=local
+# (`docs_enabled()`; staging and production serve none, see `test_docs_exposure.py`), hold no user
+# data and need no session on purpose: a developer reads the contract through them. Starlette adds
+# HEAD to each GET. Listed one by one, not by a prefix like `/docs*`, so a new route next to them
+# still has to be looked at.
+HIDDEN_FROM_THE_SCHEMA = {
+    (method, path)
+    for path in ("/docs", "/docs/oauth2-redirect", "/openapi.json", "/redoc")
+    for method in ("GET", "HEAD")
+}
+
+
+def _served_operations(app: FastAPI) -> set[tuple[str, str]]:
+    """`(METHOD, path)` of everything the app serves, hidden from the schema or not.
+
+    `app.routes` holds included routers lazily (FastAPI 0.142), so `iter_route_contexts` flattens
+    them with their effective, prefixed path. A route without methods (a mounted app, a WebSocket)
+    counts as `ANY`. Nothing here reads `include_in_schema`: a mount does not even have it, and a
+    plain Starlette route says `True` but is never drawn by FastAPI's schema.
     """
-    return [
-        context.path
+    return {
+        (method, context.path)
         for context in iter_route_contexts(app.routes)
         if context.path is not None
-        and context.path.startswith(SPACE_PREFIX)
-        and not context.include_in_schema
-    ]
+        for method in context.methods or {"ANY"}
+    }
 
 
-def test_no_space_route_is_hidden_from_the_schema() -> None:
+def _served_outside_the_schema(app: FastAPI) -> list[tuple[str, str]]:
+    return sorted(_served_operations(app) - set(_operations(app)))
+
+
+def test_every_served_route_is_in_the_schema_except_the_listed_documentation_routes() -> None:
     app = create_app()
 
-    served = [
-        context.path
-        for context in iter_route_contexts(app.routes)
-        if context.path is not None and context.path.startswith(SPACE_PREFIX)
-    ]
-    assert len(served) >= len(EXPECTED_SPACE_OPERATIONS)  # the check below is not vacuous
-    assert _hidden_space_paths(app) == []
+    # The check must not pass vacuously: it sees the routes the guards protect.
+    served_paths = {path for _, path in _served_operations(app)}
+    assert {path for _, path in EXPECTED_SPACE_OPERATIONS} <= served_paths
+    outside = set(_served_outside_the_schema(app))
+    assert sorted(outside - HIDDEN_FROM_THE_SCHEMA) == []  # a route nobody decided to hide
+    assert sorted(HIDDEN_FROM_THE_SCHEMA - outside) == []  # an entry of the list that is gone
 
 
-def test_the_hidden_route_check_sees_every_way_of_leaving_a_route_out_of_the_schema() -> None:
-    app = create_app()
-    on_the_decorator = APIRouter(prefix="/spaces/{space_id}/a")
-    on_the_router = APIRouter(prefix="/spaces/{space_id}/b", include_in_schema=False)
-    on_the_include = APIRouter(prefix="/spaces/{space_id}/c")
+def _hide_on_the_decorator(app: FastAPI) -> None:
+    router = APIRouter(prefix="/spaces/{space_id}/a")
 
-    @on_the_decorator.get("", include_in_schema=False)
-    async def hidden_by_the_decorator() -> int:
+    @router.get("", include_in_schema=False)
+    async def hidden() -> int:
         return 1
 
-    @on_the_router.get("")
-    async def hidden_by_the_router() -> int:
+    app.include_router(router)
+
+
+def _hide_on_the_router(app: FastAPI) -> None:
+    router = APIRouter(prefix="/spaces/{space_id}/b", include_in_schema=False)
+
+    @router.get("")
+    async def hidden() -> int:
         return 1
 
-    @on_the_include.get("")
-    async def hidden_by_the_include() -> int:
+    app.include_router(router)
+
+
+def _hide_on_the_include(app: FastAPI) -> None:
+    router = APIRouter(prefix="/spaces/{space_id}/c")
+
+    @router.get("")
+    async def hidden() -> int:
         return 1
 
-    app.include_router(on_the_decorator)
-    app.include_router(on_the_router)
-    app.include_router(on_the_include, include_in_schema=False)
+    app.include_router(router, include_in_schema=False)
 
-    assert _hidden_space_paths(app) == [
-        "/spaces/{space_id}/a",
-        "/spaces/{space_id}/b",
-        "/spaces/{space_id}/c",
-    ]
+
+def _hide_outside_the_spaces(app: FastAPI) -> None:
+    router = APIRouter(prefix="/elsewhere")
+
+    @router.post("", include_in_schema=False)
+    async def hidden() -> int:
+        return 1
+
+    app.include_router(router)
+
+
+def _serve_a_plain_starlette_route(app: FastAPI) -> None:
+    async def plain(request: Request) -> PlainTextResponse:
+        return PlainTextResponse("plain")
+
+    # Says include_in_schema=True, but FastAPI only draws its own APIRoute in the schema.
+    app.add_route("/plain", plain, methods=["GET"])
+
+
+def _mount_another_app(app: FastAPI) -> None:
+    app.mount("/sub", FastAPI())
+
+
+def _serve_a_websocket(app: FastAPI) -> None:
+    async def socket(websocket: WebSocket) -> None:
+        await websocket.close()
+
+    app.add_api_websocket_route("/socket", socket)
+
+
+@pytest.mark.parametrize(
+    ("serve", "expected"),
+    [
+        (_hide_on_the_decorator, [("GET", "/spaces/{space_id}/a")]),
+        (_hide_on_the_router, [("GET", "/spaces/{space_id}/b")]),
+        (_hide_on_the_include, [("GET", "/spaces/{space_id}/c")]),
+        (_hide_outside_the_spaces, [("POST", "/elsewhere")]),
+        (_serve_a_plain_starlette_route, [("GET", "/plain"), ("HEAD", "/plain")]),
+        (_mount_another_app, [("ANY", "/sub")]),
+        (_serve_a_websocket, [("ANY", "/socket")]),
+    ],
+    ids=[
+        "hidden_on_the_decorator",
+        "hidden_on_the_router",
+        "hidden_on_the_include",
+        "hidden_outside_the_spaces",
+        "plain_starlette_route",
+        "mounted_app",
+        "websocket",
+    ],
+)
+def test_the_schema_check_sees_every_way_of_serving_a_route_outside_the_schema(
+    serve: Callable[[FastAPI], None], expected: list[tuple[str, str]]
+) -> None:
+    app = create_app()  # a fresh app: nothing is left registered in the shared one
+    serve(app)
+
+    unlisted = [op for op in _served_outside_the_schema(app) if op not in HIDDEN_FROM_THE_SCHEMA]
+
+    assert unlisted == expected

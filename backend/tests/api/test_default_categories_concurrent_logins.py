@@ -13,7 +13,12 @@ fixtures share one connection and cannot show a race) and **four** logins enter 
   with SQL: one space, 34 categories (15 main, 19 sub), no duplicates, and nothing shared between
   the spaces of different users.
 
-Four is the most the pool allows (2 + 3 overflow = 5 connections, one per request).
+Why four and not five: the pool has 5 connections (2 + 3 overflow) and each login in flight holds
+one until it commits. Four leaves one free as a margin, so the contention under test is the only
+thing the logins can wait on: if every connection were taken, a request could also wait for the
+pool (up to `DB_POOL_TIMEOUT`, 30 s, as long as the test timeout) and that wait would be
+indistinguishable from a lock problem. Four is also twice the parties of the existing test and the
+number of users of the second test below.
 """
 
 import asyncio
