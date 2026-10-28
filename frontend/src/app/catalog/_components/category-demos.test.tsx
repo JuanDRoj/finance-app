@@ -124,7 +124,9 @@ describe("CategoryFormsDemo", () => {
     expect(await screen.findByText("Se guardaron los cambios.")).toBeTruthy();
   });
 
-  it("opens the side panels: new, new from 'Agregar subcategoría' and edit", async () => {
+  // One panel per test: each renders the whole demo (two forms with 66 icons each, plus the panel),
+  // and the three in one test took long enough to hit the 5 s limit on a loaded machine.
+  it("opens the side panel 'Nueva categoría' and closes it with 'Cancelar'", async () => {
     render(<CategoryFormsDemo instant />);
     fireEvent.click(screen.getByRole("button", { name: "Abrir el panel «Nueva categoría»" }));
     const created = await screen.findByRole("dialog", { name: "Nueva categoría" });
@@ -133,7 +135,10 @@ describe("CategoryFormsDemo", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Nueva categoría" })).toBeNull(),
     );
+  });
 
+  it("opens the side panel 'Nueva categoría' from 'Agregar subcategoría' with the principal chosen", async () => {
+    render(<CategoryFormsDemo instant />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Abrir el panel «Nueva categoría» desde «Agregar subcategoría»",
@@ -146,7 +151,10 @@ describe("CategoryFormsDemo", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Nueva categoría" })).toBeNull(),
     );
+  });
 
+  it("opens the side panel 'Editar categoría' with the category that is being edited", async () => {
+    render(<CategoryFormsDemo instant />);
     fireEvent.click(screen.getByRole("button", { name: "Abrir el panel «Editar categoría»" }));
     const edit = await screen.findByRole("dialog", { name: "Editar categoría" });
     expect(((await within(edit).findByLabelText("Nombre")) as HTMLInputElement).value).toBe(
