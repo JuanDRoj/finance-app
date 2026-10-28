@@ -78,8 +78,9 @@ type PhosphorIcon = typeof Tag;
  * (`backend/app/modules/categories/icons.py`, published as an `enum` in `openapi.json`), and the
  * component is that name in PascalCase. It is typed with the generated union of keys, so the
  * compiler fails here if the backend adds an icon (the map is missing it) or drops one (the map has
- * an extra key). The order is the backend's. The Spanish names of the icons, which only the icon
- * picker needs, are added by FE-21 (Categorías).
+ * an extra key). The order is the backend's. The Spanish names of the icons (what the icon picker
+ * reads out) are not here but in the one map of translations, `CATEGORY_ICON_NAMES` of
+ * `lib/core/i18n.ts` (KAN-96), typed the same way; this file only maps keys to components.
  */
 export const CATEGORY_ICONS: Readonly<Record<CategoryIconKey, PhosphorIcon>> = {
   // Food and shopping

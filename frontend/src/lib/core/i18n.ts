@@ -1,4 +1,5 @@
 import type { components } from "@/lib/api/schema";
+import type { CategoryIconKey, CategoryKind } from "./data/categories";
 import { ApiError } from "./data/errors";
 
 /**
@@ -71,6 +72,24 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
   account_archived: {
     title: "Esa cuenta está archivada",
     message: "Desarchívala desde Cuentas para poder cuadrar su saldo.",
+  },
+  // `/spaces/{id}/categories/{category_id}` (BE-14): a category that does not exist in the space.
+  category_not_found: {
+    title: "No encontramos esa categoría",
+    message: "Puede que ya no exista. Vuelve a Categorías e inténtalo de nuevo.",
+  },
+  // `POST` and `PATCH` of a category (BE-14): the name is taken among its siblings, archived ones
+  // included. The form says it on the field (and offers to unarchive the archived one); this is the
+  // text for anywhere that shows the error as it is.
+  category_name_taken: {
+    title: "Ese nombre ya está en uso",
+    message: "Ya tienes una categoría con ese nombre en este lugar. Elige otro.",
+  },
+  // `POST .../unarchive` of a subcategory (BE-14): its principal is archived. The screen does not
+  // offer the button in that case, so this only comes from a race (archived from another device).
+  category_parent_archived: {
+    title: "Su categoría principal está archivada",
+    message: "Desarchiva primero la categoría principal e inténtalo de nuevo.",
   },
   // `POST .../transactions` (BE-24): the same `Idempotency-Key` as a movement that already worked,
   // but with another body. It only happens when an earlier attempt was saved (usually a response
@@ -148,6 +167,12 @@ const FIELD_ERROR_BY_TYPE: Record<string, string> = {
   category_archived: "Esa categoría está archivada. Elige otra.",
   transaction_category_kind_mismatch: "Esa categoría no es de este tipo de movimiento. Elige otra.",
   transfer_same_account: "Elige dos cuentas distintas.",
+  // `POST /spaces/{id}/categories` (BE-14): the principal a subcategory goes in ("Dentro de").
+  // `category_parent_archived` is also a 409 code of `ERROR_BY_CODE`: a 422 `type` and a 409 `code`.
+  category_parent_not_found: "Esa categoría principal ya no existe. Elige otra.",
+  category_parent_not_main: "Una subcategoría no puede tener subcategorías. Elige una principal.",
+  category_kind_mismatch: "Esa categoría principal es de otro tipo. Elige otra.",
+  category_parent_archived: "Esa categoría principal está archivada. Elige otra.",
   date_invalid: "Escribe una fecha válida.",
   union_tag_invalid: "Elige un tipo de movimiento.",
   // `POST /spaces/{id}/accounts` (BE-16): the closing and due days belong to credit cards only.
@@ -347,4 +372,113 @@ export function orderCurrencies<T extends { code: string }>(currencies: readonly
     .map((currency, position) => ({ currency, position }))
     .sort((a, b) => rank(a.currency.code) - rank(b.currency.code) || a.position - b.position)
     .map(({ currency }) => currency);
+}
+
+/** The name of each kind of category: "Gasto" / "Ingreso", singular as in the form's "Tipo". */
+export const CATEGORY_KIND_NAMES: Readonly<Record<CategoryKind, string>> = {
+  expense: "Gasto",
+  income: "Ingreso",
+};
+
+/** The same in plural, as the segmented control of the list and the cards write it. */
+export const CATEGORY_KIND_PLURAL_NAMES: Readonly<Record<CategoryKind, string>> = {
+  expense: "Gastos",
+  income: "Ingresos",
+};
+
+/** "Gasto" or "Ingreso" for a kind; a value the frontend does not know comes back as it is. */
+export function describeCategoryKind(kind: string): string {
+  return Object.hasOwn(CATEGORY_KIND_NAMES, kind)
+    ? CATEGORY_KIND_NAMES[kind as CategoryKind]
+    : kind;
+}
+
+/**
+ * The name of each category icon in Spanish: what the icon picker reads out (the `aria-label` of
+ * each radio) and shows as a hint (docs/diseno.md D19). The names are the canvas'
+ * (`K-H1-Categorias`), in the Rioplatense Spanish of the rest of the app. It is typed with the
+ * generated union of keys, so the compiler fails here when the backend adds an icon (the name is
+ * missing) or drops one. The order is the backend's (`icons.py`), the one of the picker.
+ */
+export const CATEGORY_ICON_NAMES: Readonly<Record<CategoryIconKey, string>> = {
+  // Food and shopping
+  "fork-knife": "Cubiertos",
+  "bowl-food": "Plato de comida",
+  pizza: "Pizza",
+  hamburger: "Hamburguesa",
+  coffee: "Café",
+  "beer-stein": "Cerveza",
+  wine: "Vino",
+  cake: "Torta",
+  "shopping-cart": "Carrito",
+  basket: "Canasta",
+  "shopping-bag": "Bolsa de compras",
+  storefront: "Tienda",
+  // Transport
+  car: "Auto",
+  "gas-pump": "Surtidor",
+  bus: "Ómnibus",
+  taxi: "Taxi",
+  train: "Tren",
+  motorcycle: "Moto",
+  bicycle: "Bicicleta",
+  "airplane-tilt": "Avión",
+  // Home and services
+  house: "Casa",
+  key: "Llave",
+  bed: "Cama",
+  lightbulb: "Lamparita",
+  lightning: "Rayo",
+  drop: "Gota",
+  "device-mobile": "Celular",
+  "wifi-high": "Wifi",
+  wrench: "Llave inglesa",
+  hammer: "Martillo",
+  plant: "Planta",
+  // Health and personal care
+  heartbeat: "Pulso",
+  stethoscope: "Estetoscopio",
+  pill: "Pastilla",
+  "first-aid-kit": "Botiquín",
+  tooth: "Diente",
+  barbell: "Pesas",
+  scissors: "Tijera",
+  heart: "Corazón",
+  // Leisure
+  "game-controller": "Control de juego",
+  popcorn: "Pochoclo",
+  "music-notes": "Música",
+  "monitor-play": "Pantalla",
+  martini: "Copa",
+  suitcase: "Valija",
+  tent: "Carpa",
+  // Education, family and gifts
+  "graduation-cap": "Birrete",
+  "book-open": "Libro",
+  baby: "Bebé",
+  "paw-print": "Huella",
+  dog: "Perro",
+  gift: "Regalo",
+  "t-shirt": "Remera",
+  // Money and work
+  briefcase: "Maletín",
+  laptop: "Computadora",
+  money: "Billete",
+  coins: "Monedas",
+  wallet: "Billetera",
+  bank: "Banco",
+  "piggy-bank": "Alcancía",
+  receipt: "Recibo",
+  "chart-line-up": "Gráfico en alza",
+  percent: "Porcentaje",
+  star: "Estrella",
+  tag: "Etiqueta",
+  "dots-three-circle": "Otros",
+};
+
+/** The Spanish name of an icon; a key the frontend does not know is the generic tag, like `CategoryIcon`. */
+export function describeCategoryIcon(icon: string): string {
+  return Object.hasOwn(CATEGORY_ICON_NAMES, icon)
+    ? CATEGORY_ICON_NAMES[icon as CategoryIconKey]
+    : CATEGORY_ICON_NAMES.tag;
 }

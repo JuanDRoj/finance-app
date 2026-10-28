@@ -1,9 +1,13 @@
+import { describeCategoryKind } from "./i18n";
+import { formatInstantDayMonth } from "./dates";
 import type { CategoryKind, CategoryRead } from "./data/categories";
 
 /**
  * Pure helpers over the flat list `GET /spaces/{id}/categories` returns, for the screens that pick
  * a category (docs/diseno.md D19): the grid of principals with a second step for their
- * subcategories on a phone, and the `select` grouped by principal on desktop. No DOM, no React.
+ * subcategories on a phone, and the `select` grouped by principal on desktop; and for the ones that
+ * manage them (Categorías and its forms): the archived ones with their rules, the sibling a name
+ * clashes with, and the counts and the help in Spanish. No DOM, no React.
  */
 
 /** A principal category with its subcategories, as the screens pick them. */
@@ -101,4 +105,215 @@ export function groupCategoriesForSelect(tree: readonly CategoryBranch[]): Categ
   }
   if (alone.length > 0) groups.push({ label: OTHER_CATEGORIES_LABEL, categories: alone });
   return groups;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Managing the categories (Categorías and its forms, docs/diseno.md D19)
+// ---------------------------------------------------------------------------------------------
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** "9 principales · 13 subcategorías" (and "1 principal · 1 subcategoría") for the tree of one kind. */
+export function describeCategoryCounts(tree: readonly CategoryBranch[]): string {
+  if (tree.length === 0) return "Sin categorías";
+  const subs = tree.reduce((total, branch) => total + branch.subs.length, 0);
+  return `${plural(tree.length, "principal", "principales")} · ${plural(subs, "subcategoría", "subcategorías")}`;
+}
+
+/** The secondary line of a principal's row: "3 subcategorías", "1 subcategoría" or "Sin subcategorías". */
+export function describeSubcategoryCount(count: number): string {
+  return count === 0 ? "Sin subcategorías" : plural(count, "subcategoría", "subcategorías");
+}
+
+/** The category with this id in the flat list, or `undefined`. */
+export function findCategory(
+  categories: readonly CategoryRead[],
+  categoryId: string,
+): CategoryRead | undefined {
+  return categories.find((category) => category.id === categoryId);
+}
+
+/** The active subcategories of a principal, in the order of the API. */
+export function activeSubcategoriesOf(
+  categories: readonly CategoryRead[],
+  principalId: string,
+): CategoryRead[] {
+  return categories.filter(
+    (category) => category.parent_id === principalId && category.archived_at === null,
+  );
+}
+
+/**
+ * The line under the button "Archivar categoría" (docs/diseno.md D19): a principal also archives its
+ * **active** subcategories, and says how many ("También se archivan sus 3 subcategorías.", "También
+ * se archiva su subcategoría."); a subcategory, or a principal with none, only says that the old
+ * movements keep it. The count is of the real subcategories, not a fixed number.
+ */
+export function describeArchiveHelp(
+  category: CategoryRead,
+  categories: readonly CategoryRead[],
+): string {
+  const kept = "Los movimientos que ya la usan la conservan.";
+  if (category.parent_id !== null) return kept;
+  const count = activeSubcategoriesOf(categories, category.id).length;
+  if (count === 0) return kept;
+  const also =
+    count === 1
+      ? "También se archiva su subcategoría."
+      : `También se archivan sus ${count} subcategorías.`;
+  return `${also} ${kept}`;
+}
+
+/** The note at the top of the edit form: "Categoría de gasto · principal" / "Subcategoría de {principal}". */
+export function describeCategoryPlace(
+  category: CategoryRead,
+  categories: readonly CategoryRead[],
+): string {
+  if (category.parent_id === null) {
+    return `Categoría de ${describeCategoryKind(category.kind).toLowerCase()} · principal`;
+  }
+  const parent = findCategory(categories, category.parent_id);
+  return parent ? `Subcategoría de ${parent.name}` : "Subcategoría";
+}
+
+/** An archived category as the list "Archivadas" shows it (docs/diseno.md D19). */
+export type ArchivedCategoryItem = {
+  category: CategoryRead;
+  /** Its principal, for a subcategory (`null` for a principal, or if the list has not got it). */
+  parent: CategoryRead | null;
+  /** Under an archived principal: drawn indented below it. */
+  nested: boolean;
+  /**
+   * For a nested subcategory: whether it was archived together with its principal (the same
+   * `archived_at`, which is what the backend gives them in one archive), so unarchiving the
+   * principal brings it back. `false` if it had been archived on its own before.
+   */
+  archivedWithParent: boolean;
+  /**
+   * Whether it has a "Desarchivar" button. A subcategory under an archived principal has none:
+   * unarchiving it alone is a 409 `category_parent_archived`.
+   */
+  canUnarchive: boolean;
+};
+
+function sameInstant(first: string | null, second: string | null): boolean {
+  if (first === null || second === null) return false;
+  return new Date(first).getTime() === new Date(second).getTime();
+}
+
+/**
+ * The archived categories in the order of the "Archivadas (n)" list: walking the API's order, an
+ * archived principal is followed by its archived subcategories (nested, without a button), and an
+ * archived subcategory whose principal is active stands on its own (with a button). `kind` keeps
+ * one kind only (the phone shows the kind chosen in its segmented control; desktop shows both).
+ */
+export function buildArchivedList(
+  categories: readonly CategoryRead[],
+  options: { kind?: CategoryKind } = {},
+): ArchivedCategoryItem[] {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const items: ArchivedCategoryItem[] = [];
+  for (const category of categories) {
+    if (category.archived_at === null) continue;
+    if (options.kind !== undefined && category.kind !== options.kind) continue;
+    if (category.parent_id === null) {
+      items.push({
+        category,
+        parent: null,
+        nested: false,
+        archivedWithParent: false,
+        canUnarchive: true,
+      });
+      for (const sub of categories) {
+        if (sub.parent_id !== category.id || sub.archived_at === null) continue;
+        items.push({
+          category: sub,
+          parent: category,
+          nested: true,
+          archivedWithParent: sameInstant(sub.archived_at, category.archived_at),
+          canUnarchive: false,
+        });
+      }
+      continue;
+    }
+    const parent = byId.get(category.parent_id) ?? null;
+    // Under an archived principal it was listed with it above.
+    if (parent !== null && parent.archived_at !== null) continue;
+    items.push({
+      category,
+      parent,
+      nested: false,
+      archivedWithParent: false,
+      canUnarchive: true,
+    });
+  }
+  return items;
+}
+
+/** The "n" of "Archivadas (n)": only the ones with a "Desarchivar" button count. */
+export function countUnarchivable(items: readonly ArchivedCategoryItem[]): number {
+  return items.filter((item) => item.canUnarchive).length;
+}
+
+/**
+ * The secondary line of an archived row, as the canvas writes it (K-H1-Categorias, K-V2-Escritorio):
+ * "Principal · archivada el 18 de octubre", "En Ocio · archivada el 2 de octubre", and for a
+ * subcategory under an archived principal "Se desarchiva junto con Mascotas" or, if it had been
+ * archived before on its own, "Desarchiva primero Mascotas" (docs/diseno.md D19). The date is the
+ * day of `archived_at` in the space's zone. With `showKind` (desktop, whose list mixes both kinds)
+ * the kind goes first: "Gasto · principal · archivada el 18 de octubre".
+ */
+export function describeArchivedCategory(
+  item: ArchivedCategoryItem,
+  options: { timeZone: string; now?: Date; showKind?: boolean },
+): string {
+  const { category, parent } = item;
+  if (item.nested && parent) {
+    return item.archivedWithParent
+      ? `Se desarchiva junto con ${parent.name}`
+      : `Desarchiva primero ${parent.name}`;
+  }
+  const parts: string[] = [];
+  if (options.showKind) parts.push(describeCategoryKind(category.kind));
+  parts.push(parent ? `en ${parent.name}` : "principal");
+  if (category.archived_at !== null) {
+    parts.push(
+      `archivada el ${formatInstantDayMonth(category.archived_at, options.timeZone, options.now)}`,
+    );
+  }
+  const text = parts.join(" · ");
+  return text.charAt(0).toLocaleUpperCase("es") + text.slice(1);
+}
+
+/** The name as the database compares it among siblings: without the ends' spaces, ignoring case. */
+export function normalizeCategoryName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * The sibling a name clashes with, or `null` (docs/diseno.md D19, "Nombre repetido"). The backend
+ * only answers 409 `category_name_taken`, so the form looks for it in the list with the archived
+ * ones: among the principals of the same kind (`parentId` `null`) or among the subcategories of the
+ * same principal, without the spaces at the ends and ignoring case, like the unique index.
+ * `excludeId` leaves out the category being renamed.
+ */
+export function findNameClash(
+  categories: readonly CategoryRead[],
+  query: { name: string; kind: CategoryKind; parentId: string | null; excludeId?: string },
+): CategoryRead | null {
+  const wanted = normalizeCategoryName(query.name);
+  if (wanted === "") return null;
+  const siblings = categories.filter((category) =>
+    query.parentId === null
+      ? category.parent_id === null && category.kind === query.kind
+      : category.parent_id === query.parentId,
+  );
+  return (
+    siblings.find(
+      (category) =>
+        category.id !== query.excludeId && normalizeCategoryName(category.name) === wanted,
+    ) ?? null
+  );
 }
