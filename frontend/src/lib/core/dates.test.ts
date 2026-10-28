@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatInstant,
+  formatInstantDayMonth,
   formatLocalDate,
   formatWeekdayDate,
   isLocalDate,
@@ -252,5 +253,51 @@ describe("formatWeekdayDate", () => {
       RangeError,
     );
     expect(() => formatWeekdayDate(new Date("nope"), "America/Montevideo")).toThrow(RangeError);
+  });
+});
+
+describe("formatInstantDayMonth", () => {
+  const NOW = new Date("2026-10-28T15:00:00Z");
+
+  it("writes the day and the month in words, with no year in the current one", () => {
+    expect(formatInstantDayMonth("2026-10-18T15:00:00Z", "America/Montevideo", NOW)).toBe(
+      "18 de octubre",
+    );
+    expect(formatInstantDayMonth("2026-01-02T15:00:00Z", "America/Montevideo", NOW)).toBe(
+      "2 de enero",
+    );
+  });
+
+  it("adds the year when it is not the current one", () => {
+    expect(formatInstantDayMonth("2025-10-18T15:00:00Z", "America/Montevideo", NOW)).toBe(
+      "18 de octubre de 2025",
+    );
+  });
+
+  it("uses the day and the year of the space's zone, not of UTC nor of the device", () => {
+    // 02:00 UTC of 1 January 2027 is still 31 December 2026 at 23:00 in Montevideo (UTC-3)...
+    const instant = "2027-01-01T02:00:00Z";
+    expect(formatInstantDayMonth(instant, "America/Montevideo", NOW)).toBe("31 de diciembre");
+    // ...and already 2027 in Madrid, which is not the current year there.
+    expect(formatInstantDayMonth(instant, "Europe/Madrid", NOW)).toBe("1 de enero de 2027");
+  });
+
+  it("takes 'today' from now, in the same zone: new year's eve is not last year's date", () => {
+    const newYear = new Date("2027-01-01T01:00:00Z"); // still 2026 in Montevideo
+    expect(formatInstantDayMonth("2026-10-18T15:00:00Z", "America/Montevideo", newYear)).toBe(
+      "18 de octubre",
+    );
+  });
+
+  it("accepts a Date and rejects an instant with no offset or an invalid one", () => {
+    expect(formatInstantDayMonth(new Date("2026-10-18T15:00:00Z"), "America/Montevideo", NOW)).toBe(
+      "18 de octubre",
+    );
+    expect(() => formatInstantDayMonth("2026-10-18T15:00:00", "America/Montevideo", NOW)).toThrow(
+      RangeError,
+    );
+    expect(() => formatInstantDayMonth(new Date("nope"), "America/Montevideo", NOW)).toThrow(
+      RangeError,
+    );
   });
 });

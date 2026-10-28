@@ -27,6 +27,7 @@ import { AuditPanel } from "./_components/audit-panel";
 import { AccountsSummary } from "../_components/accounts-summary";
 import { FirstUse } from "../_components/first-use";
 import { AccountEditDemo } from "./_components/account-demos";
+import { CategoryFormsDemo } from "./_components/category-demos";
 import { AccountFormDemo, CurrencyDemo } from "./_components/first-use-demos";
 import {
   BottomSheetDemo,
@@ -505,6 +506,10 @@ export default async function CatalogPage({
 
         <Section title="Editar, cuadrar y archivar una cuenta">
           <AccountEditDemo />
+        </Section>
+
+        <Section title="Formularios de categoría (nueva y editar)">
+          <CategoryFormsDemo />
         </Section>
 
         <Section title="Monto grande (Registrar movimiento)">

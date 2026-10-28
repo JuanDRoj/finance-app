@@ -1,5 +1,6 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { CATEGORY_ICON_NAMES } from "@/lib/core/i18n";
 import { CATEGORY_ICONS, CategoryIcon } from "./category-icon";
 
 // No vitest globals, so Testing Library does not clean up by itself.
@@ -32,6 +33,10 @@ describe("CATEGORY_ICONS", () => {
     const keys = Object.keys(CATEGORY_ICONS);
     expect(keys.slice(0, 3)).toEqual(["fork-knife", "bowl-food", "pizza"]);
     expect(keys.slice(-3)).toEqual(["star", "tag", "dots-three-circle"]);
+  });
+
+  it("has a Spanish name for each icon, in the same order (the names live in i18n.ts)", () => {
+    expect(Object.keys(CATEGORY_ICON_NAMES)).toEqual(Object.keys(CATEGORY_ICONS));
   });
 
   it.each(Object.keys(CATEGORY_ICONS))("draws %s as an svg", (key) => {

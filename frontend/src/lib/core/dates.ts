@@ -161,3 +161,32 @@ export function formatWeekdayDate(
     .trim();
   return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
 }
+
+/**
+ * The day and the month of an instant in words, as the list of archived categories dates them
+ * ("18 de octubre"; docs/diseno.md D19). The year is added only when it is not the current one in
+ * the same zone ("18 de octubre de 2025"), so an old date is never taken for this year's. Both the
+ * day and the year are those of the space's time zone (`spaces.timezone`), never the device's.
+ * `now` is the moment taken as "today" (a parameter, so a test can fix it).
+ */
+export function formatInstantDayMonth(
+  instant: string | Date,
+  timeZone: string,
+  now: Date = new Date(),
+  locale: string = DEFAULT_LOCALE,
+): string {
+  if (typeof instant === "string" && !ISO_INSTANT.test(instant)) {
+    throw new RangeError(`Instant must be ISO 8601 with "Z" or a ±hh:mm offset: "${instant}"`);
+  }
+  const date = typeof instant === "string" ? new Date(instant) : instant;
+  if (Number.isNaN(date.getTime())) throw new RangeError(`Invalid instant: "${String(instant)}"`);
+  const yearOf = (moment: Date) =>
+    new Intl.DateTimeFormat("en-CA", { year: "numeric", timeZone }).format(moment);
+  const sameYear = yearOf(date) === yearOf(now);
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone,
+  }).format(date);
+}

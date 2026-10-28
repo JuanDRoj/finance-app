@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./data/errors";
 import {
   ACCOUNT_TYPE_NAMES,
+  CATEGORY_ICON_NAMES,
+  CATEGORY_KIND_NAMES,
+  CATEGORY_KIND_PLURAL_NAMES,
   CURRENCY_NAMES,
   MOVEMENT_SAVE_LABEL,
   TRANSACTION_TYPE_NAMES,
   describeAccountType,
   describeApiError,
+  describeCategoryIcon,
+  describeCategoryKind,
   describeCurrency,
   describeTransactionType,
   fieldErrorMessage,
@@ -470,5 +475,107 @@ describe("orderCurrencies", () => {
       "UYU",
       "constructor",
     ]);
+  });
+});
+
+describe("codes of the categories (KAN-96)", () => {
+  it.each(["category_not_found", "category_name_taken", "category_parent_archived"])(
+    "translates the code %s of a 404 or 409, never showing the raw code or the English detail",
+    (code) => {
+      const status = code === "category_not_found" ? 404 : 409;
+      const { title, message } = describeApiError(
+        apiError(status, { detail: "Category not found", code }),
+      );
+      expect(title).not.toBe("");
+      expect(`${title} ${message}`).not.toContain(code);
+      expect(`${title} ${message}`).not.toContain("Category not found");
+      // Its own text, not the generic one of the status.
+      expect({ title, message }).not.toEqual(describeApiError(apiError(status, undefined)));
+    },
+  );
+
+  it("says a 409 name_taken as a name already in use, and a parent_archived as 'desarchiva primero'", () => {
+    expect(
+      describeApiError(apiError(409, { code: "category_name_taken", detail: "x" })).title,
+    ).toBe("Ese nombre ya está en uso");
+    expect(
+      describeApiError(apiError(409, { code: "category_parent_archived", detail: "x" })).message,
+    ).toContain("Desarchiva primero");
+  });
+
+  // The 422 `type`s of `POST /spaces/{id}/categories`; `category_parent_archived` is also a 409
+  // `code`, so it has an entry in both tables.
+  const TYPES: readonly (readonly [string, string])[] = [
+    ["category_parent_not_found", "Esa categoría principal ya no existe. Elige otra."],
+    [
+      "category_parent_not_main",
+      "Una subcategoría no puede tener subcategorías. Elige una principal.",
+    ],
+    ["category_kind_mismatch", "Esa categoría principal es de otro tipo. Elige otra."],
+    ["category_parent_archived", "Esa categoría principal está archivada. Elige otra."],
+  ];
+
+  it.each(TYPES)("marks a field with the 422 type %s in Spanish", (type, text) => {
+    expect(fieldErrorMessage(type)).toBe(text);
+    expect(fieldErrorMessage(type)).not.toBe(fieldErrorMessage("some_future_type"));
+    expect(fieldErrorMessage(type)).not.toContain(type);
+  });
+
+  it("reads the field of a 422 of 'Dentro de' through validationIssuesOf", () => {
+    const error = apiError(422, {
+      detail: [
+        {
+          type: "category_parent_archived",
+          loc: ["body", "parent_id"],
+          msg: "The parent is archived",
+        },
+      ],
+    });
+    expect(validationIssuesOf(error)).toEqual([
+      { path: "parent_id", message: "Esa categoría principal está archivada. Elige otra." },
+    ]);
+  });
+});
+
+describe("the kind of a category", () => {
+  it("names each kind in the singular and the plural", () => {
+    expect(CATEGORY_KIND_NAMES).toEqual({ expense: "Gasto", income: "Ingreso" });
+    expect(CATEGORY_KIND_PLURAL_NAMES).toEqual({ expense: "Gastos", income: "Ingresos" });
+  });
+
+  it("describes a kind, and returns one it does not know as it is", () => {
+    expect(describeCategoryKind("expense")).toBe("Gasto");
+    expect(describeCategoryKind("income")).toBe("Ingreso");
+    expect(describeCategoryKind("transfer")).toBe("transfer");
+    expect(describeCategoryKind("constructor")).toBe("constructor");
+  });
+});
+
+describe("CATEGORY_ICON_NAMES", () => {
+  it("names the 66 icons of the list, each in Spanish and different from the others", () => {
+    const names = Object.values(CATEGORY_ICON_NAMES);
+    expect(names).toHaveLength(66);
+    expect(new Set(names).size).toBe(66);
+    for (const name of names) expect(name.trim()).not.toBe("");
+  });
+
+  it("never shows the raw key as the name", () => {
+    for (const [key, name] of Object.entries(CATEGORY_ICON_NAMES)) {
+      expect(name).not.toBe(key);
+      expect(name).not.toMatch(/[-]/);
+    }
+  });
+
+  it("uses the names of the canvas", () => {
+    expect(CATEGORY_ICON_NAMES["fork-knife"]).toBe("Cubiertos");
+    expect(CATEGORY_ICON_NAMES.barbell).toBe("Pesas");
+    expect(CATEGORY_ICON_NAMES["dots-three-circle"]).toBe("Otros");
+    expect(CATEGORY_ICON_NAMES.tag).toBe("Etiqueta");
+  });
+
+  it("describes an icon, and an unknown one is the generic tag like the glyph", () => {
+    expect(describeCategoryIcon("paw-print")).toBe("Huella");
+    expect(describeCategoryIcon("a-future-icon")).toBe("Etiqueta");
+    expect(describeCategoryIcon("constructor")).toBe("Etiqueta");
   });
 });
