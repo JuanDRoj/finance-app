@@ -14,7 +14,7 @@ const SPACE_ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0001";
 const ACCOUNT_ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0002";
 const OTHER_ACCOUNT_ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0003";
 const CATEGORY_ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0010";
-const KEY = "5f1c0a52-8d0e-4f0b-9a55-3c1d7a0e9b01";
+const ATTEMPT_UUID = "5f1c0a52-8d0e-4f0b-9a55-3c1d7a0e9b01";
 
 const TRANSACTION = {
   id: "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020",
@@ -43,7 +43,9 @@ describe("createTransaction", () => {
       date: "2026-10-26",
       description: "Tienda Inglesa",
     };
-    await expect(createTransaction(api, SPACE_ID, body, KEY)).resolves.toEqual(TRANSACTION);
+    await expect(createTransaction(api, SPACE_ID, body, ATTEMPT_UUID)).resolves.toEqual(
+      TRANSACTION,
+    );
     const request = fetch.mock.calls[0]![0];
     expect(request.method).toBe("POST");
     expect(new URL(request.url).pathname).toBe(`/spaces/${SPACE_ID}/transactions`);
@@ -59,7 +61,7 @@ describe("createTransaction", () => {
       amount_minor: 5000000,
       date: "2026-10-25",
     };
-    await createTransaction(api, SPACE_ID, body, KEY);
+    await createTransaction(api, SPACE_ID, body, ATTEMPT_UUID);
     expect(await fetch.mock.calls[0]![0].json()).toEqual(body);
   });
 
@@ -72,7 +74,7 @@ describe("createTransaction", () => {
       amount_minor: 1200000,
       date: "2026-10-26",
     };
-    await createTransaction(api, SPACE_ID, body, KEY);
+    await createTransaction(api, SPACE_ID, body, ATTEMPT_UUID);
     const sent = await fetch.mock.calls[0]![0].json();
     expect(sent).toEqual(body);
     expect(sent).not.toHaveProperty("category_id");
@@ -104,8 +106,8 @@ describe("createTransaction", () => {
     ];
     for (const body of bodies) {
       const { api, fetch } = clientAnswering(Response.json(TRANSACTION, { status: 201 }));
-      await createTransaction(api, SPACE_ID, body, KEY);
-      expect(fetch.mock.calls[0]![0].headers.get("Idempotency-Key")).toBe(KEY);
+      await createTransaction(api, SPACE_ID, body, ATTEMPT_UUID);
+      expect(fetch.mock.calls[0]![0].headers.get("Idempotency-Key")).toBe(ATTEMPT_UUID);
     }
   });
 
@@ -123,11 +125,11 @@ describe("createTransaction", () => {
       date: "2026-10-26",
     };
     const other = "5f1c0a52-8d0e-4f0b-9a55-3c1d7a0e9b02";
-    await createTransaction(api, SPACE_ID, body, KEY);
-    await createTransaction(api, SPACE_ID, body, KEY);
+    await createTransaction(api, SPACE_ID, body, ATTEMPT_UUID);
+    await createTransaction(api, SPACE_ID, body, ATTEMPT_UUID);
     await createTransaction(api, SPACE_ID, body, other);
     const sent = fetch.mock.calls.map(([request]) => request.headers.get("Idempotency-Key"));
-    expect(sent).toEqual([KEY, KEY, other]);
+    expect(sent).toEqual([ATTEMPT_UUID, ATTEMPT_UUID, other]);
   });
 
   it("keeps the key out of the body", async () => {
@@ -142,10 +144,10 @@ describe("createTransaction", () => {
         amount_minor: 100,
         date: "2026-10-26",
       },
-      KEY,
+      ATTEMPT_UUID,
     );
     const sent = await fetch.mock.calls[0]![0].json();
-    expect(JSON.stringify(sent)).not.toContain(KEY);
+    expect(JSON.stringify(sent)).not.toContain(ATTEMPT_UUID);
   });
 
   it("throws an ApiError with the code of a 409 when the key was used with another body", async () => {
@@ -161,7 +163,7 @@ describe("createTransaction", () => {
         amount_minor: 200,
         date: "2026-10-26",
       },
-      KEY,
+      ATTEMPT_UUID,
     ).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 409, body });
@@ -188,7 +190,7 @@ describe("createTransaction", () => {
         amount_minor: 100,
         date: "2026-10-26",
       },
-      KEY,
+      ATTEMPT_UUID,
     ).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 422, body });
@@ -206,7 +208,7 @@ describe("createTransaction", () => {
         amount_minor: 100,
         date: "2026-10-26",
       },
-      KEY,
+      ATTEMPT_UUID,
     ).catch((caught: unknown) => caught);
     expect(error).toMatchObject({ status: 404 });
   });
