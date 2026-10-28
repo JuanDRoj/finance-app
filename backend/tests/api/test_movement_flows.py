@@ -44,6 +44,7 @@ Criterion of the story or of the ticket -> where it is tested
   the route, see `docs/arquitectura-backend.md` section 6):
   `test_a_foreign_category_or_account_answers_exactly_like_a_missing_one` (here) and
   `test_a_movement_cannot_use_an_account_of_another_space`,
+  `test_a_foreign_account_answers_exactly_like_a_missing_one`,
   `test_a_movement_cannot_use_a_category_of_another_space` (test_transactions.py).
 - Without a session it is a 401: `test_creating_a_movement_without_a_session_is_a_401`
   (test_transactions.py) and `tests/api/test_routing.py` for every route of a space.
@@ -521,13 +522,23 @@ async def test_a_clp_space_stores_whole_pesos_for_each_type(
     )
 
 
-@pytest.mark.parametrize("amount", [1500.5, 1500.0, "1500,50"], ids=["half", "float", "text"])
+@pytest.mark.parametrize(
+    ("amount", "issue_type"),
+    [(1500.5, "int_type"), (1500.0, "int_type"), ("1500,50", "int_type")],
+    ids=["half", "float", "text"],
+)
 async def test_in_a_clp_space_an_amount_with_decimals_is_a_422(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, amount: object
+    api_client: AsyncClient,
+    fake_firebase: FakeFirebaseAuth,
+    session: AsyncSession,
+    amount: object,
+    issue_type: str,
 ) -> None:
     _, space_id = await make_user_and_space(session, "uid-qa-a")
     _sign_in_as(fake_firebase, "uid-qa-a")
-    await api_client.patch(f"/spaces/{space_id}", json={"currency": "CLP"}, headers=COOKIE)
+    chosen = await api_client.patch(f"/spaces/{space_id}", json={"currency": "CLP"}, headers=COOKIE)
+    assert chosen.status_code == 200, chosen.text
+    assert chosen.json()["currency"] == {"code": "CLP", "exponent": 0}
     bank = await _create_account(api_client, space_id, type="bank", name="Banco")
     food = await make_category(session, space_id, kind="expense", name="Comida")
     body = _expense(bank["id"], str(food.id), 1_500)
@@ -535,8 +546,7 @@ async def test_in_a_clp_space_an_amount_with_decimals_is_a_422(
     # Only the amount is wrong: the same movement with 1.500 whole pesos is accepted.
     refused = await _post(api_client, space_id, {**body, "amount_minor": amount})
 
-    [(_, loc)] = _issues(refused)
-    assert loc == ["body", "expense", "amount_minor"]
+    assert _issues(refused) == [(issue_type, ["body", "expense", "amount_minor"])]
     assert await _written(session) == (0, 0, 0)
     assert await _balances(api_client, space_id) == {bank["id"]: 0}
     accepted = await _post(api_client, space_id, body)
