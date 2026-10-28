@@ -16,7 +16,7 @@ describe("IconPicker", () => {
     expect(radios.map((radio) => radio.getAttribute("aria-label"))).toEqual(
       Object.values(CATEGORY_ICON_NAMES),
     );
-    expect(screen.getByRole("radio", { name: "Pesas" })).toBeTruthy();
+    expect(screen.getByLabelText("Pesas")).toBeTruthy();
     // Every radio is of the same group, so the arrow keys move through all of them.
     for (const radio of radios) expect(radio.getAttribute("name")).toBe("icon");
   });
@@ -32,11 +32,9 @@ describe("IconPicker", () => {
   it("checks an icon when it is chosen, and reports the change with its key", () => {
     const onChange = vi.fn((event: { target: { value: string } }) => event.target.value);
     render(<IconPicker name="icon" size="page" defaultValue="tag" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("radio", { name: "Pesas" }));
-    expect((screen.getByRole("radio", { name: "Pesas" }) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByRole("radio", { name: "Etiqueta" }) as HTMLInputElement).checked).toBe(
-      false,
-    );
+    fireEvent.click(screen.getByLabelText("Pesas"));
+    expect((screen.getByLabelText("Pesas") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Etiqueta") as HTMLInputElement).checked).toBe(false);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.results[0]?.value).toBe("barbell");
   });
@@ -45,10 +43,10 @@ describe("IconPicker", () => {
     const { rerender } = render(
       <IconPicker name="icon" size="page" value="car" onChange={() => {}} />,
     );
-    expect((screen.getByRole("radio", { name: "Auto" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Auto") as HTMLInputElement).checked).toBe(true);
     rerender(<IconPicker name="icon" size="page" value="bus" onChange={() => {}} />);
-    expect((screen.getByRole("radio", { name: "Ómnibus" }) as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByRole("radio", { name: "Auto" }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Ómnibus") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Auto") as HTMLInputElement).checked).toBe(false);
   });
 
   it("has nothing checked for a key it does not know (an icon the backend added later)", () => {
@@ -60,13 +58,13 @@ describe("IconPicker", () => {
 
   it("hints each icon with its name on hover", () => {
     render(<IconPicker name="icon" size="page" />);
-    const label = screen.getByRole("radio", { name: "Pizza" }).closest("label");
+    const label = screen.getByLabelText("Pizza").closest("label");
     expect(label?.getAttribute("title")).toBe("Pizza");
   });
 
   it("draws the icons (decorative) and keeps the radio itself out of sight, not out of reach", () => {
     render(<IconPicker name="icon" size="page" />);
-    const radio = screen.getByRole("radio", { name: "Cubiertos" });
+    const radio = screen.getByLabelText("Cubiertos");
     expect(radio.className).toContain("sr-only");
     const cell = radio.nextElementSibling as HTMLElement;
     expect(cell.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");

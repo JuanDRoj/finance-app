@@ -56,8 +56,15 @@ describe("NAV_SECTIONS", () => {
 });
 
 describe("what the navigation shows today", () => {
-  it("has nothing in Más until Categorías exists", () => {
-    expect(MORE_SECTIONS).toEqual([]);
+  it("has Categorías in Más, with the line of the canvas", () => {
+    expect(
+      MORE_SECTIONS.map((section) => [
+        section.id,
+        section.href,
+        section.label,
+        section.description,
+      ]),
+    ).toEqual([["categories", "/categorias", "Categorías", "Crea, renombra y archiva las tuyas"]]);
     expect(NAV).toEqual({ sections: NAV_SECTIONS, more: MORE_SECTIONS, action: PRIMARY_ACTION });
   });
 

@@ -3,6 +3,8 @@ import {
   OTHER_CATEGORIES_LABEL,
   activeSubcategoriesOf,
   buildArchivedList,
+  categoryKindFromParam,
+  categoryKindParam,
   buildCategoryTree,
   categoryNameOf,
   countUnarchivable,
@@ -439,6 +441,19 @@ describe("describeArchivedCategory", () => {
     );
   });
 
+  it("goes without the date when archived_at cannot be read, instead of throwing", () => {
+    const principal = category("Vieja", { archived_at: "2026-10-18 15:00" });
+    const sub = category("Sub", { parent_id: "x", archived_at: "not a date" });
+    const [first] = buildArchivedList([principal]);
+    expect(describeArchivedCategory(first!, options)).toBe("Principal");
+    const [second] = buildArchivedList([sub]);
+    expect(describeArchivedCategory(second!, { ...options, showKind: true })).toBe("Gasto");
+    const parent = category("Ocio");
+    const withParent = category("Viajes", { parent_id: parent.id, archived_at: "nope" });
+    const [third] = buildArchivedList([parent, withParent]);
+    expect(describeArchivedCategory(third!, options)).toBe("En Ocio");
+  });
+
   it("adds the year to a date of another year, in the space's zone", () => {
     const old = category("Viejas", { archived_at: "2025-12-31T23:00:00Z" });
     expect(describeArchivedCategory(buildArchivedList([old])[0]!, options)).toBe(
@@ -493,5 +508,23 @@ describe("findNameClash", () => {
 
   it("normalizes a name like the index: trimmed and lower case", () => {
     expect(normalizeCategoryName("  Cafés Y ÓMNIBUS ")).toBe("cafés y ómnibus");
+  });
+});
+
+describe("the ?tipo= of Categorías", () => {
+  it("reads 'gastos' and 'ingresos' and nothing else", () => {
+    expect(categoryKindFromParam("gastos")).toBe("expense");
+    expect(categoryKindFromParam("ingresos")).toBe("income");
+    for (const bad of ["expense", "Gastos", "", "constructor", null, undefined]) {
+      expect(categoryKindFromParam(bad)).toBeUndefined();
+    }
+  });
+
+  it("writes a kind as the param that reads back to it", () => {
+    expect(categoryKindParam("expense")).toBe("gastos");
+    expect(categoryKindParam("income")).toBe("ingresos");
+    for (const kind of ["expense", "income"] as const) {
+      expect(categoryKindFromParam(categoryKindParam(kind))).toBe(kind);
+    }
   });
 });

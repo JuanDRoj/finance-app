@@ -70,8 +70,34 @@ describe("SidebarNav (the app's own list)", () => {
     expect(link.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("draws nothing for the bottom group while nothing hangs from Más", () => {
-    const { container } = render(<SidebarNav group="more" />);
+  it("draws Categorías in the bottom group: it hangs from Más (KAN-77)", () => {
+    render(<SidebarNav group="more" />);
+    const nav = screen.getByRole("navigation", { name: "Organiza" });
+    expect(nav.querySelectorAll("a")).toHaveLength(1);
+    const link = screen.getByRole("link", { name: "Categorías" });
+    expect(link.getAttribute("href")).toBe("/categorias");
+    expect(link.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks Categorías as the current one on its own screen and on its forms", () => {
+    const { rerender } = render(<SidebarNav group="more" pathname="/categorias" />);
+    expect(screen.getByRole("link", { name: "Categorías" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    rerender(<SidebarNav group="more" pathname="/categorias/nueva" />);
+    expect(screen.getByRole("link", { name: "Categorías" }).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    rerender(<SidebarNav group="more" pathname="/cuentas" />);
+    expect(
+      screen.getByRole("link", { name: "Categorías" }).getAttribute("aria-current"),
+    ).toBeNull();
+  });
+
+  it("draws nothing for a bottom group with nothing in it", () => {
+    const { container } = render(
+      <SidebarNav group="more" nav={{ sections: [], more: [], action: null }} />,
+    );
     expect(container.innerHTML).toBe("");
   });
 

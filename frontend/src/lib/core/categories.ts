@@ -258,6 +258,23 @@ export function countUnarchivable(items: readonly ArchivedCategoryItem[]): numbe
 }
 
 /**
+ * The day an archived category was archived, in words, or `null` if there is none or it cannot be
+ * read (`formatInstantDayMonth` throws on a text with no offset): a date that cannot be read must
+ * not take the whole screen down, the line just goes without it.
+ */
+function archivedDateOf(
+  archivedAt: string | null,
+  options: { timeZone: string; now?: Date },
+): string | null {
+  if (archivedAt === null) return null;
+  try {
+    return formatInstantDayMonth(archivedAt, options.timeZone, options.now);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The secondary line of an archived row, as the canvas writes it (K-H1-Categorias, K-V2-Escritorio):
  * "Principal · archivada el 18 de octubre", "En Ocio · archivada el 2 de octubre", and for a
  * subcategory under an archived principal "Se desarchiva junto con Mascotas" or, if it had been
@@ -283,11 +300,8 @@ export function describeArchivedCategory(
   // place to name, so that part is left out.
   if (category.parent_id === null) parts.push("principal");
   else if (parent) parts.push(`en ${parent.name}`);
-  if (category.archived_at !== null) {
-    parts.push(
-      `archivada el ${formatInstantDayMonth(category.archived_at, options.timeZone, options.now)}`,
-    );
-  }
+  const date = archivedDateOf(category.archived_at, options);
+  if (date !== null) parts.push(`archivada el ${date}`);
   const text = parts.join(" · ");
   return text.charAt(0).toLocaleUpperCase("es") + text.slice(1);
 }
@@ -321,4 +335,19 @@ export function findNameClash(
         category.id !== query.excludeId && normalizeCategoryName(category.name) === wanted,
     ) ?? null
   );
+}
+
+/** `?tipo=` of Categorías and of its forms: "gastos" and "ingresos" (the kind of the segmented control). */
+export const CATEGORY_KIND_PARAMS = { expense: "gastos", income: "ingresos" } as const;
+
+/** The kind a `?tipo=` names, or `undefined` for anything else (a missing or a made-up value). */
+export function categoryKindFromParam(param: string | null | undefined): CategoryKind | undefined {
+  if (param === CATEGORY_KIND_PARAMS.expense) return "expense";
+  if (param === CATEGORY_KIND_PARAMS.income) return "income";
+  return undefined;
+}
+
+/** The `?tipo=` value of a kind. */
+export function categoryKindParam(kind: CategoryKind): "gastos" | "ingresos" {
+  return CATEGORY_KIND_PARAMS[kind];
 }

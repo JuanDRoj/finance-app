@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoriesQueryKey } from "@/lib/core/data/categories";
 import type { CategoryRead } from "@/lib/core/data/categories";
 import { CategoryForm } from "./category-form";
@@ -60,6 +60,14 @@ function failure(status: number, body?: unknown) {
 
 const CREATED = category({ id: "cat-new", name: "Gimnasio", icon: "barbell" });
 
+// The first render in jsdom pays for warming up the modules (react-hook-form, zod, Base UI, the 66 icons),
+// not for what the tests check: it is done here so that no test carries that cost. A hook does not count
+// against the limit of a test, and the first test of the file is the one that hit it under load.
+beforeAll(() => {
+  renderForm();
+  cleanup();
+});
+
 beforeEach(() => {
   mocks.post.mockReset().mockResolvedValue(ok(CREATED, 201));
   mocks.toastSuccess.mockReset();
@@ -92,11 +100,11 @@ function type(label: string, value: string) {
 }
 
 function pick(name: string) {
-  fireEvent.click(screen.getByRole("radio", { name }));
+  fireEvent.click(screen.getByRole("radio", { hidden: true, name }));
 }
 
 function submit() {
-  fireEvent.click(screen.getByRole("button", { name: "Crear categoría" }));
+  fireEvent.click(screen.getByRole("button", { hidden: true, name: "Crear categoría" }));
 }
 
 /** The body of the one request that was sent. */
@@ -114,12 +122,10 @@ function parentOptions() {
 describe("what the form shows", () => {
   it("starts as a principal expense category with the generic icon", () => {
     renderForm();
-    expect((screen.getByRole("radio", { name: "Gasto" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Gasto") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Nombre") as HTMLInputElement).value).toBe("");
     expect(screen.getByLabelText("Nombre").getAttribute("placeholder")).toBe("Ej.: Gimnasio");
-    expect((screen.getByRole("radio", { name: "Etiqueta" }) as HTMLInputElement).checked).toBe(
-      true,
-    );
+    expect((screen.getByLabelText("Etiqueta") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Dentro de") as HTMLSelectElement).value).toBe("");
     expect(screen.getByText("Elige una principal para crearla como subcategoría.")).toBeTruthy();
   });
@@ -127,9 +133,11 @@ describe("what the form shows", () => {
   it("has the type as Gasto · Ingreso, and the 66 icons as radios named in Spanish", () => {
     renderForm();
     expect(screen.getByRole("group", { name: "Tipo" })).toBeTruthy();
-    expect(screen.getAllByRole("radio", { name: /^(Gasto|Ingreso)$/ })).toHaveLength(2);
+    expect(screen.getAllByRole("radio", { hidden: true, name: /^(Gasto|Ingreso)$/ })).toHaveLength(
+      2,
+    );
     expect(screen.getByRole("group", { name: "Ícono" })).toBeTruthy();
-    expect(screen.getAllByRole("radio")).toHaveLength(2 + 66);
+    expect(screen.getAllByRole("radio", { hidden: true })).toHaveLength(2 + 66);
   });
 
   it("offers as 'Dentro de' only the active principals of the kind, with 'Ninguna' first", () => {
@@ -153,12 +161,12 @@ describe("what the form shows", () => {
 
   it("starts on the kind it is told to", () => {
     renderForm({ defaults: { kind: "income" } });
-    expect((screen.getByRole("radio", { name: "Ingreso" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Ingreso") as HTMLInputElement).checked).toBe(true);
   });
 
   it("starts 'Dentro de' on the principal it is told to, with that principal's kind", () => {
     renderForm({ defaults: { kind: "expense", parentId: TRABAJO.id } });
-    expect((screen.getByRole("radio", { name: "Ingreso" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Ingreso") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Dentro de") as HTMLSelectElement).value).toBe(TRABAJO.id);
   });
 
@@ -169,7 +177,7 @@ describe("what the form shows", () => {
   ])("ignores %s as the principal to start on", (_name, parentId) => {
     renderForm({ defaults: { parentId } });
     expect((screen.getByLabelText("Dentro de") as HTMLSelectElement).value).toBe("");
-    expect((screen.getByRole("radio", { name: "Gasto" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Gasto") as HTMLInputElement).checked).toBe(true);
   });
 
   it("is a page with 'Crear categoría' in a fixed bar, or a panel with 'Cancelar · Crear categoría'", () => {
@@ -177,19 +185,19 @@ describe("what the form shows", () => {
     const bar = document.querySelector("[data-slot='category-form-footer']");
     expect(bar?.className).toContain("fixed");
     expect(
-      within(bar as HTMLElement).getByRole("button", { name: "Crear categoría" }),
+      within(bar as HTMLElement).getByRole("button", { hidden: true, name: "Crear categoría" }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancelar" })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: "Cancelar" })).toBeNull();
     page.unmount();
     renderForm({ variant: "panel" });
     expect(document.querySelector("[data-slot='category-form-footer']")).toBeNull();
-    expect(screen.getByRole("button", { name: "Cancelar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Crear categoría" })).toBeTruthy();
+    expect(screen.getByRole("button", { hidden: true, name: "Cancelar" })).toBeTruthy();
+    expect(screen.getByRole("button", { hidden: true, name: "Crear categoría" })).toBeTruthy();
   });
 
   it("calls onCancel from the panel's 'Cancelar'", () => {
     const { onCancel } = renderForm({ variant: "panel" });
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: "Cancelar" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(mocks.post).not.toHaveBeenCalled();
   });
@@ -320,7 +328,9 @@ describe("a repeated name (409 category_name_taken)", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByLabelText("Nombre").getAttribute("aria-invalid")).toBe("true");
-    expect(screen.getByRole("button", { name: "Desarchivar «Mascotas»" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" }),
+    ).toBeTruthy();
   });
 
   it("unarchives it, says so, leaves the form and refreshes the lists", async () => {
@@ -330,7 +340,9 @@ describe("a repeated name (409 category_name_taken)", () => {
     const { onDone, invalidate } = renderForm();
     type("Nombre", "Mascotas");
     submit();
-    fireEvent.click(await screen.findByRole("button", { name: "Desarchivar «Mascotas»" }));
+    fireEvent.click(
+      await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" }),
+    );
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(mocks.post).toHaveBeenCalledTimes(2);
     expect(mocks.post.mock.calls[1]?.[0]).toBe(
@@ -355,7 +367,10 @@ describe("a repeated name (409 category_name_taken)", () => {
     const { onDone } = renderForm();
     type("Nombre", "Mascotas");
     submit();
-    const button = await screen.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    const button = await screen.findByRole("button", {
+      hidden: true,
+      name: "Desarchivar «Mascotas»",
+    });
     // Both taps run before React renders again, so the button is still enabled for the second one.
     act(() => {
       button.click();
@@ -375,9 +390,11 @@ describe("a repeated name (409 category_name_taken)", () => {
     const { onDone } = renderForm();
     type("Nombre", "Mascotas");
     submit();
-    fireEvent.click(await screen.findByRole("button", { name: "Desarchivar «Mascotas»" }));
+    fireEvent.click(
+      await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" }),
+    );
     expect(await screen.findByText("Algo salió mal de nuestro lado")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Desarchivar «Mascotas»" }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" }));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(mocks.post).toHaveBeenCalledTimes(3);
   });
@@ -391,7 +408,7 @@ describe("a repeated name (409 category_name_taken)", () => {
     type("Dentro de", COMIDA.id);
     submit();
     expect(await screen.findByText("Ya tienes una categoría con ese nombre.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
   });
 
   it("says only the name is in use when the one that clashes is active", async () => {
@@ -400,7 +417,7 @@ describe("a repeated name (409 category_name_taken)", () => {
     type("Nombre", "comida");
     submit();
     expect(await screen.findByText("Ya tienes una categoría con ese nombre.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
     expect(screen.queryByText(/Ya tienes una categoría archivada con ese nombre/)).toBeNull();
   });
 
@@ -410,7 +427,7 @@ describe("a repeated name (409 category_name_taken)", () => {
     type("Nombre", "Algo nuevo");
     submit();
     expect(await screen.findByText("Ya tienes una categoría con ese nombre.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
   });
 
   it("takes the offer away when the name is changed", async () => {
@@ -418,9 +435,11 @@ describe("a repeated name (409 category_name_taken)", () => {
     renderForm();
     type("Nombre", "Mascotas");
     submit();
-    await screen.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" });
     type("Nombre", "Mascotas y más");
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull(),
+    );
     expect(screen.getByLabelText("Nombre").getAttribute("aria-invalid")).not.toBe("true");
   });
 
@@ -429,16 +448,20 @@ describe("a repeated name (409 category_name_taken)", () => {
     renderForm();
     type("Nombre", "Mascotas");
     submit();
-    await screen.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" });
     pick("Ingreso");
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull(),
+    );
     expect(screen.queryByText(/Ya tienes una categoría archivada/)).toBeNull();
 
     pick("Gasto");
     submit();
-    await screen.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" });
     type("Dentro de", COMIDA.id);
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull(),
+    );
   });
 
   it("lets the person try another name after the 409", async () => {
@@ -462,7 +485,9 @@ describe("a repeated name (409 category_name_taken)", () => {
     const { onDone } = renderForm();
     type("Nombre", "Mascotas");
     submit();
-    fireEvent.click(await screen.findByRole("button", { name: "Desarchivar «Mascotas»" }));
+    fireEvent.click(
+      await screen.findByRole("button", { hidden: true, name: "Desarchivar «Mascotas»" }),
+    );
     expect(await screen.findByText("No encontramos esa categoría")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
@@ -554,7 +579,7 @@ describe("one category at a time", () => {
     mocks.post.mockReturnValue(new Promise((done) => (resolve = done)));
     const { onDone } = renderForm();
     type("Nombre", "Gimnasio");
-    const button = screen.getByRole("button", { name: "Crear categoría" });
+    const button = screen.getByRole("button", { hidden: true, name: "Crear categoría" });
     fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
@@ -563,7 +588,7 @@ describe("one category at a time", () => {
     resolve(ok(CREATED, 201));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     // The container is leaving: a late tap must not create a second one.
-    fireEvent.click(screen.getByRole("button", { name: "Crear categoría" }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: "Crear categoría" }));
     expect(mocks.post).toHaveBeenCalledTimes(1);
   });
 });

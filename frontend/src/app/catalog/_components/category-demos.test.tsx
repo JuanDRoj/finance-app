@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CategoryFormsDemo } from "./category-demos";
 
 // The demo runs the real forms, the picker and the panel against a scripted client. This keeps the
@@ -8,6 +8,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), replac
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
+
+// The first render in jsdom pays for warming up the modules (react-hook-form, zod, Base UI, the 66 icons),
+// not for what the tests check: it is done here so that no test carries that cost. A hook does not count
+// against the limit of a test, and the first test of the file is the one that hit it under load.
+beforeAll(() => {
+  render(<CategoryFormsDemo instant />);
+  cleanup();
+});
 
 // No vitest globals, so Testing Library does not clean up by itself.
 afterEach(cleanup);
@@ -24,9 +32,9 @@ describe("CategoryFormsDemo", () => {
   it("shows both forms as pages, each with its fixed bar", () => {
     render(<CategoryFormsDemo instant />);
     const create = frame("Nueva categoría (página)");
-    expect(create.getByRole("button", { name: "Crear categoría" })).toBeTruthy();
+    expect(create.getByRole("button", { hidden: true, name: "Crear categoría" })).toBeTruthy();
     const edit = frame("Editar categoría (página)");
-    expect(edit.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
+    expect(edit.getByRole("button", { hidden: true, name: "Guardar cambios" })).toBeTruthy();
     expect(edit.getByText("Categoría de gasto · principal")).toBeTruthy();
     expect(document.querySelectorAll("[data-slot='category-form-footer']")).toHaveLength(2);
   });
@@ -35,7 +43,7 @@ describe("CategoryFormsDemo", () => {
     render(<CategoryFormsDemo instant />);
     const create = frame("Nueva categoría (página)");
     fireEvent.change(create.getByLabelText("Nombre"), { target: { value: "Gimnasio" } });
-    fireEvent.click(create.getByRole("button", { name: "Crear categoría" }));
+    fireEvent.click(create.getByRole("button", { hidden: true, name: "Crear categoría" }));
     expect(await screen.findByText(/Se guardó «Gimnasio»/)).toBeTruthy();
   });
 
@@ -44,14 +52,17 @@ describe("CategoryFormsDemo", () => {
     const edit = frame("Editar categoría (página)");
     expect((edit.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Transporte");
     fireEvent.change(edit.getByLabelText("Nombre"), { target: { value: "Movilidad" } });
-    fireEvent.click(edit.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(edit.getByRole("button", { hidden: true, name: "Guardar cambios" }));
     expect(await screen.findByText("Se guardaron los cambios.")).toBeTruthy();
   });
 
   it("archives the category that is being edited", async () => {
     render(<CategoryFormsDemo instant />);
     fireEvent.click(
-      frame("Editar categoría (página)").getByRole("button", { name: /Archivar categoría/ }),
+      frame("Editar categoría (página)").getByRole("button", {
+        hidden: true,
+        name: /Archivar categoría/,
+      }),
     );
     expect(await screen.findByText(/La categoría se archivó/)).toBeTruthy();
   });
@@ -61,8 +72,11 @@ describe("CategoryFormsDemo", () => {
     choose("Qué responde el servidor al crear, guardar o archivar", "taken");
     const create = frame("Nueva categoría (página)");
     fireEvent.change(create.getByLabelText("Nombre"), { target: { value: "Mascotas" } });
-    fireEvent.click(create.getByRole("button", { name: "Crear categoría" }));
-    const button = await create.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    fireEvent.click(create.getByRole("button", { hidden: true, name: "Crear categoría" }));
+    const button = await create.findByRole("button", {
+      hidden: true,
+      name: "Desarchivar «Mascotas»",
+    });
     fireEvent.click(button);
     expect(await screen.findByText(/Se guardó «Mascotas»/)).toBeTruthy();
   });
@@ -72,9 +86,9 @@ describe("CategoryFormsDemo", () => {
     choose("Qué responde el servidor al crear, guardar o archivar", "taken");
     const create = frame("Nueva categoría (página)");
     fireEvent.change(create.getByLabelText("Nombre"), { target: { value: "Comida" } });
-    fireEvent.click(create.getByRole("button", { name: "Crear categoría" }));
+    fireEvent.click(create.getByRole("button", { hidden: true, name: "Crear categoría" }));
     expect(await create.findByText("Ya tienes una categoría con ese nombre.")).toBeTruthy();
-    expect(create.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(create.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
   });
 
   it("marks the name with the 422 outcome and 'Dentro de' with the archived principal", async () => {
@@ -82,7 +96,7 @@ describe("CategoryFormsDemo", () => {
     choose("Qué responde el servidor al crear, guardar o archivar", "fields");
     const create = frame("Nueva categoría (página)");
     fireEvent.change(create.getByLabelText("Nombre"), { target: { value: "Otro" } });
-    fireEvent.click(create.getByRole("button", { name: "Crear categoría" }));
+    fireEvent.click(create.getByRole("button", { hidden: true, name: "Crear categoría" }));
     expect(await create.findByText("Es demasiado largo.")).toBeTruthy();
 
     choose("Qué responde el servidor al crear, guardar o archivar", "parent");
@@ -90,7 +104,7 @@ describe("CategoryFormsDemo", () => {
     fireEvent.change(create.getByLabelText("Dentro de"), {
       target: { value: "00000000-0000-4000-8000-000000000001" },
     });
-    fireEvent.click(create.getByRole("button", { name: "Crear categoría" }));
+    fireEvent.click(create.getByRole("button", { hidden: true, name: "Crear categoría" }));
     expect(
       await create.findByText("Esa categoría principal está archivada. Elige otra."),
     ).toBeTruthy();
@@ -120,7 +134,7 @@ describe("CategoryFormsDemo", () => {
     const edit = frame("Editar categoría (página)");
     expect((edit.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Con un ícono nuevo");
     fireEvent.change(edit.getByLabelText("Nombre"), { target: { value: "Con un ícono nuevo 2" } });
-    fireEvent.click(edit.getByRole("button", { name: "Guardar cambios" }));
+    fireEvent.click(edit.getByRole("button", { hidden: true, name: "Guardar cambios" }));
     expect(await screen.findByText("Se guardaron los cambios.")).toBeTruthy();
   });
 

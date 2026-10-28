@@ -4,7 +4,7 @@ import { ArrowLeft } from "@phosphor-icons/react/ssr";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { MovementForm } from "@/components/movements/movement-form";
-import { useKeyboardInset } from "@/components/movements/use-keyboard-inset";
+import { useKeyboardInset } from "@/components/use-keyboard-inset";
 import { useIsDesktop } from "@/components/use-is-desktop";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

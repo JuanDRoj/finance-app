@@ -19,9 +19,9 @@ import type { CategoryRead } from "@/lib/core/data/categories";
 
 const SPACE = { id: "00000000-0000-4000-8000-000000000000" };
 
-const ARCHIVED_AT = "2026-10-18T15:00:00Z";
+export const ARCHIVED_AT = "2026-10-18T15:00:00Z";
 
-function category(
+export function category(
   id: string,
   name: string,
   icon: CategoryRead["icon"],
@@ -38,10 +38,10 @@ function category(
   };
 }
 
-const idOf = (id: string) => `00000000-0000-4000-8000-${id.padStart(12, "0")}`;
+export const idOf = (id: string) => `00000000-0000-4000-8000-${id.padStart(12, "0")}`;
 
 /** The default categories, a few archived ones (Mascotas with Veterinaria, Viajes) and an income. */
-const NORMAL: CategoryRead[] = [
+export const NORMAL: CategoryRead[] = [
   category("1", "Comida", "fork-knife"),
   category("2", "Transporte", "car"),
   category("3", "Hogar", "house"),
@@ -72,7 +72,7 @@ const UNBREAKABLE_NAME =
   );
 
 /** The same list as the worst case: the longest names, other alphabets, emoji and a lot of everything. */
-const WORST: CategoryRead[] = [
+export const WORST: CategoryRead[] = [
   category("1", LONG_NAME, "fork-knife"),
   category("2", UNBREAKABLE_NAME, "car"),
   category("3", "🛒 Compras del súper 🍎", "house"),
@@ -150,7 +150,11 @@ const answer = (status: number, data?: unknown) =>
     : { error: data, response: new Response(null, { status }) };
 
 /** An API client that answers as `now` says; the list of the space is `list` (archived ones on request). */
-function scriptedApi(now: CategoryOutcome, list: CategoryRead[], instant: boolean): ApiClient {
+export function scriptedApi(
+  now: CategoryOutcome,
+  list: CategoryRead[],
+  instant: boolean,
+): ApiClient {
   async function mutate(path: string, init?: { body?: Record<string, unknown> }) {
     if (now === "never") return never();
     if (now === "offline") throw new TypeError("Failed to fetch");
@@ -202,7 +206,7 @@ function scriptedApi(now: CategoryOutcome, list: CategoryRead[], instant: boolea
   } as unknown as ApiClient;
 }
 
-function Isolated({ children }: Readonly<{ children: ReactNode }>) {
+export function Isolated({ children }: Readonly<{ children: ReactNode }>) {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } }),
   );

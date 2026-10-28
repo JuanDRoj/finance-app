@@ -20,8 +20,8 @@ export const metadata: Metadata = { title: "Más" };
  * Hito 1). From 1024 px those options are already in the sidebar, so `DesktopRedirect` sends the
  * visitor to `/` (and `phoneOnly` hides the whole content column, the `h1` included, meanwhile).
  *
- * - Nothing hangs from "Más" yet (no Categorías screen): there is nothing to show, so `/`. The tab
- *   itself is not drawn in that case.
+ * - Nothing hangs from "Más" (`MORE_SECTIONS` empty; it has Categorías since KAN-77): there is
+ *   nothing to show, so `/`. The tab itself is not drawn in that case.
  * - No session or an expired one (401): `/login`, as on the home.
  * - Any other failure of `/me` or `/spaces`: an `Alert` in Spanish with a way to try again.
  */
