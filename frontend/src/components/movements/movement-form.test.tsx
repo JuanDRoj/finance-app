@@ -26,6 +26,10 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  // Puts back the spies of `vi.spyOn` (`randomUUID`, `invalidateQueries`) even when an assertion
+  // failed before the end of the test. The `vi.fn()` of `mocks` are not touched (`beforeEach`
+  // resets them), nor are the `vi.mock` of the modules.
+  vi.restoreAllMocks();
   onlineManager.setOnline(true);
   window.localStorage.clear();
   mocks.more.length = 0;
@@ -156,6 +160,13 @@ function sentBody() {
   expect(mocks.post).toHaveBeenCalledTimes(1);
   return mocks.post.mock.calls[0]?.[1]?.body;
 }
+
+/** The `Idempotency-Key` header of the nth request that was sent. */
+function sentKey(call: number): unknown {
+  return mocks.post.mock.calls[call]?.[1]?.params?.header?.["Idempotency-Key"];
+}
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 /** The query keys the form asked to invalidate, in order. */
 function keysInvalidated(invalidate: { mock: { calls: unknown[][] } }) {
@@ -396,7 +407,10 @@ describe("registering a movement", () => {
 
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     expect(mocks.post.mock.calls[0]?.[0]).toBe("/spaces/{space_id}/transactions");
-    expect(mocks.post.mock.calls[0]?.[1]?.params).toEqual({ path: { space_id: "space-1" } });
+    expect(mocks.post.mock.calls[0]?.[1]?.params).toEqual({
+      path: { space_id: "space-1" },
+      header: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
+    });
     expect(sentBody()).toEqual({
       type: "expense",
       account_id: "acc-itau",
@@ -832,6 +846,158 @@ describe("when the backend refuses", () => {
     save();
     expect(await screen.findByText("No pudimos conectar")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Idempotency-Key (BE-24)", () => {
+  function fill() {
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    save();
+  }
+
+  it("sends a UUID in the Idempotency-Key header, typed by the generated client", async () => {
+    const { onDone } = renderForm();
+    fill();
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(sentKey(0)).toMatch(UUID_V4);
+    expect(mocks.post.mock.calls[0]?.[1]?.params?.path).toEqual({ space_id: "space-1" });
+  });
+
+  it("sends the same key again after a network failure", async () => {
+    mocks.post.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { onDone } = renderForm();
+    fill();
+    expect((await screen.findByRole("alert")).textContent).toContain("No pudimos conectar");
+    save();
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(sentKey(0)).toMatch(UUID_V4);
+    expect(sentKey(1)).toBe(sentKey(0));
+  });
+
+  it("sends the same key again after a server error (5xx), and keeps the body", async () => {
+    mocks.post.mockResolvedValueOnce(failure(503, { code: "internal_error", detail: "boom" }));
+    const { onDone } = renderForm();
+    fill();
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    save();
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(sentKey(1)).toBe(sentKey(0));
+    expect(mocks.post.mock.calls[1]?.[1]?.body).toEqual(mocks.post.mock.calls[0]?.[1]?.body);
+  });
+
+  it("keeps the key through a 422 the person corrects, and the corrected body is saved with it", async () => {
+    mocks.post.mockResolvedValueOnce(
+      failure(422, {
+        detail: [
+          { type: "less_than_equal", loc: ["body", "expense", "amount_minor"], msg: "English" },
+        ],
+      }),
+    );
+    const { onDone } = renderForm();
+    fill();
+    expect(await screen.findByText("El valor es demasiado alto.")).toBeTruthy();
+    type("Monto", "50");
+    save();
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    // Another body, the same key: the backend did not use it for the request it refused (no 409).
+    expect(mocks.post.mock.calls[0]?.[1]?.body.amount_minor).toBe(10000);
+    expect(mocks.post.mock.calls[1]?.[1]?.body.amount_minor).toBe(5000);
+    expect(sentKey(1)).toBe(sentKey(0));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("uses a new key in the next opening once a movement was saved", async () => {
+    const first = renderForm();
+    fill();
+    await waitFor(() => expect(first.onDone).toHaveBeenCalledTimes(1));
+    first.unmount();
+
+    // The sheet opens again: the form mounts afresh.
+    const second = renderForm();
+    fill();
+    await waitFor(() => expect(second.onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(sentKey(0)).toMatch(UUID_V4);
+    expect(sentKey(1)).toMatch(UUID_V4);
+    expect(sentKey(1)).not.toBe(sentKey(0));
+  });
+
+  it("makes the key at the first attempt to save, not when the form opens", async () => {
+    const spy = vi.spyOn(globalThis.crypto, "randomUUID");
+    const first = renderForm();
+    // Opening the form does not make a key: only an attempt to save does.
+    expect(spy).not.toHaveBeenCalled();
+    fill();
+    await waitFor(() => expect(first.onDone).toHaveBeenCalled());
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not make a new key for a submit that the guard stops (a held Enter)", async () => {
+    const spy = vi.spyOn(globalThis.crypto, "randomUUID");
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    renderForm();
+    type("Monto", "100");
+    fireEvent.click(cell("Ropa"));
+    const form = document.querySelector("form") as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(mocks.post).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  describe("when the key was already used with another body (409 idempotency_key_reused)", () => {
+    const reused = () =>
+      failure(409, {
+        code: "idempotency_key_reused",
+        detail: "This Idempotency-Key was already used with a different request body",
+      });
+
+    it("says so in an Alert in Spanish, keeps the sheet open and asks the balances again", async () => {
+      mocks.post.mockResolvedValueOnce(reused());
+      const { onDone, invalidate } = renderForm();
+      fill();
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("Ya se guardó un movimiento con otros datos");
+      expect(alert.textContent).toContain(
+        "Parece que se guardó cuando se cortó la conexión. Revisa el saldo de tus cuentas antes de guardar de nuevo.",
+      );
+      // Neither the generic advice of a 409 nor the backend's English or its code.
+      expect(alert.textContent).not.toContain("Recarga la página");
+      expect(alert.textContent).not.toContain("idempotency_key_reused");
+      expect(alert.textContent).not.toContain("different request body");
+      expect(onDone).not.toHaveBeenCalled();
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+      expect(keysInvalidated(invalidate)).toEqual(
+        expect.arrayContaining([
+          ["spaces", "space-1", "accounts"],
+          ["spaces", "space-1", "transactions"],
+        ]),
+      );
+      // The form keeps what was typed and the button can be pressed again.
+      expect((screen.getByLabelText("Monto") as HTMLInputElement).value).toBe("100");
+      expect(
+        screen.getByRole("button", { name: "Guardar gasto" }).getAttribute("aria-busy"),
+      ).not.toBe("true");
+    });
+
+    it("uses a new key if the person saves again on purpose", async () => {
+      mocks.post.mockResolvedValueOnce(reused());
+      const { onDone } = renderForm();
+      fill();
+      expect(await screen.findByRole("alert")).toBeTruthy();
+      save();
+      await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+      expect(mocks.post).toHaveBeenCalledTimes(2);
+      expect(sentKey(1)).toMatch(UUID_V4);
+      expect(sentKey(1)).not.toBe(sentKey(0));
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
   });
 });
 

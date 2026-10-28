@@ -146,6 +146,23 @@ describe("codes of the accounts and the currency (KAN-91)", () => {
     expect(result).not.toEqual(generic);
   });
 
+  it("translates the 409 of an Idempotency-Key used with another body (BE-24)", () => {
+    const result = describeApiError(
+      apiError(409, {
+        detail: "This Idempotency-Key was already used with a different request body",
+        code: "idempotency_key_reused",
+      }),
+    );
+    expect(result.title).toBe("Ya se guardó un movimiento con otros datos");
+    expect(result.message).toBe(
+      "Parece que se guardó cuando se cortó la conexión. Revisa el saldo de tus cuentas antes de guardar de nuevo.",
+    );
+    // Not the generic 409, whose advice ("Recarga la página") does not fit here.
+    expect(result).not.toEqual(describeApiError(apiError(409, undefined)));
+    expect(`${result.title} ${result.message}`).not.toContain("idempotency");
+    expect(`${result.title} ${result.message}`).not.toContain("Idempotency");
+  });
+
   it("translates the 404 of an account that does not exist", () => {
     const result = describeApiError(
       apiError(404, { detail: "Account not found", code: "account_not_found" }),
