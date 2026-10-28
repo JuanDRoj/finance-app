@@ -132,11 +132,11 @@ describe("what the form shows", () => {
 
   it("has the type as Gasto · Ingreso, and the 66 icons as radios named in Spanish", () => {
     renderForm();
-    expect(screen.getByRole("group", { hidden: true, name: "Tipo" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Tipo" })).toBeTruthy();
     expect(screen.getAllByRole("radio", { hidden: true, name: /^(Gasto|Ingreso)$/ })).toHaveLength(
       2,
     );
-    expect(screen.getByRole("group", { hidden: true, name: "Ícono" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Ícono" })).toBeTruthy();
     expect(screen.getAllByRole("radio", { hidden: true })).toHaveLength(2 + 66);
   });
 

@@ -74,11 +74,12 @@ describe("the panel in the URL", () => {
 
 describe("the panel of a category (KAN-77)", () => {
   it("names the panel ?categoria=nueva, and the edit panel ?categoria=editar with the id", () => {
-    expect(CATEGORY_PANEL).toEqual({ param: "categoria", value: "nueva" });
+    expect(CATEGORY_PANEL).toEqual({ param: "categoria", value: "nueva", clear: ["id", "padre"] });
     expect(categoryEditPanel("abc")).toEqual({
       param: "categoria",
       value: "editar",
       extra: { id: "abc" },
+      clear: ["padre"],
     });
   });
 
@@ -96,6 +97,42 @@ describe("the panel of a category (KAN-77)", () => {
     window.history.replaceState(null, "", "/categorias");
     openPanelInUrl(categoryEditPanel("abc"));
     expect(window.location.search).toBe("?categoria=editar&id=abc");
+  });
+
+  it("opening 'editar' takes out the 'padre' an earlier 'nueva' left, and keeps the tab", () => {
+    window.history.replaceState(null, "", "/categorias?tipo=ingresos&categoria=nueva&padre=p1");
+    openPanelInUrl(categoryEditPanel("abc"));
+    expect(window.location.search).toBe("?tipo=ingresos&categoria=editar&id=abc");
+  });
+
+  it("opening 'nueva' with a 'padre' takes out the 'id' an earlier 'editar' left", () => {
+    window.history.replaceState(null, "", "/categorias?categoria=editar&id=abc");
+    openPanelInUrl({ ...CATEGORY_PANEL, extra: { padre: "p1" } });
+    expect(window.location.search).toBe("?categoria=nueva&padre=p1");
+  });
+
+  it("opening 'nueva' with only a kind takes out both the 'id' and the 'padre' that were left", () => {
+    window.history.replaceState(null, "", "/categorias?categoria=editar&id=abc&padre=p1&mes=1");
+    openPanelInUrl({ ...CATEGORY_PANEL, extra: { tipo: "ingresos" } });
+    expect(window.location.search).toBe("?categoria=nueva&mes=1&tipo=ingresos");
+  });
+
+  it("opening the panel of a category twice with the same extra writes the same URL", () => {
+    window.history.replaceState(null, "", "/categorias");
+    openPanelInUrl({ ...CATEGORY_PANEL, extra: { padre: "p1" } });
+    openPanelInUrl({ ...CATEGORY_PANEL, extra: { padre: "p1" } });
+    expect(window.location.search).toBe("?categoria=nueva&padre=p1");
+  });
+
+  it("clears nothing for the panels of an account and of a movement: their URLs stay as they were", () => {
+    expect(NEW_ACCOUNT_PANEL).toEqual({ param: "cuenta", value: "nueva" });
+    expect(MOVEMENT_PANEL).toEqual({ param: "movimiento", value: "nuevo" });
+    window.history.replaceState(null, "", "/cuentas?id=7&padre=x&sel=a1");
+    openPanelInUrl(NEW_ACCOUNT_PANEL);
+    expect(window.location.search).toBe("?id=7&padre=x&sel=a1&cuenta=nueva");
+    window.history.replaceState(null, "", "/?id=7&padre=x");
+    openPanelInUrl(MOVEMENT_PANEL);
+    expect(window.location.search).toBe("?id=7&padre=x&movimiento=nuevo");
   });
 
   it("opens without extra params as it always did", () => {

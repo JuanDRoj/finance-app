@@ -16,6 +16,13 @@ export type PanelRef = {
    * and the principal a new category starts on): written by `openPanelInUrl` in the same write.
    */
   extra?: Readonly<Record<string, string>>;
+  /**
+   * Params of an earlier opening of the same panel that must not survive this one: `openPanelInUrl`
+   * takes them out before writing `param` and `extra`, in the same write. An `id` left by "editar"
+   * must not follow "nueva", nor a `padre` left by "nueva" follow "editar". The panels of an account
+   * and of a movement have none.
+   */
+  clear?: readonly string[];
 };
 
 /** The panel the form of a new account opens in (`NEW_ACCOUNT_ACTION.panel`). */
@@ -34,10 +41,12 @@ function writeUrl(url: URL): void {
 
 /**
  * Adds `?{param}={value}` (and its `extra` params) to the current URL, leaving the path and the
- * other params as they are.
+ * other params as they are, except the ones the panel says to `clear` (they go first, so an `extra`
+ * of the same name stays).
  */
-export function openPanelInUrl({ param, value, extra }: PanelRef): void {
+export function openPanelInUrl({ param, value, extra, clear }: PanelRef): void {
   const url = new URL(window.location.href);
+  for (const name of clear ?? []) url.searchParams.delete(name);
   url.searchParams.set(param, value);
   for (const [key, text] of Object.entries(extra ?? {})) url.searchParams.set(key, text);
   writeUrl(url);
@@ -67,14 +76,21 @@ export function replacePanelInUrl(from: string, { param, value }: PanelRef): voi
  * and `&padre=<id>` for the kind and the principal it starts on) or `?categoria=editar&id=<id>`.
  * `value` is the one of "nueva"; the edit panel is `categoryEditPanel`.
  */
-export const CATEGORY_PANEL: PanelRef = { param: "categoria", value: "nueva" };
+export const CATEGORY_PANEL: PanelRef = {
+  param: "categoria",
+  value: "nueva",
+  clear: ["id", "padre"],
+};
 
-/** The params of the category panel besides `?categoria`: closing it takes them out (`tipo` stays: it is the tab of the list). */
+/**
+ * The params of the category panel besides `?categoria`: closing it takes them out (`tipo` stays: it
+ * is the tab of the list), and opening it takes out the ones of an earlier opening (`clear`).
+ */
 export const CATEGORY_PANEL_COMPANIONS = ["id", "padre"] as const;
 
 /** The edit panel of the category with this id (`?categoria=editar&id=<id>`). */
 export function categoryEditPanel(categoryId: string): PanelRef {
-  return { param: "categoria", value: "editar", extra: { id: categoryId } };
+  return { param: "categoria", value: "editar", extra: { id: categoryId }, clear: ["padre"] };
 }
 
 /** The query param that names the account shown in the detail of Cuentas (`/cuentas?sel=<id>`). */

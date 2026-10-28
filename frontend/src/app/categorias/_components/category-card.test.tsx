@@ -274,6 +274,19 @@ describe("the actions of a row (desktop)", () => {
     expect(window.location.search).toBe("?categoria=editar&id=ropa");
   });
 
+  it("opens the panel clean of what an earlier opening left in the URL", () => {
+    atWidth(true);
+    renderCard();
+    window.history.replaceState(null, "", "/categorias?tipo=ingresos&categoria=nueva&padre=comida");
+    fireEvent.click(screen.getByRole("link", { name: "Editar Ropa", hidden: true }));
+    expect(window.location.search).toBe("?tipo=ingresos&categoria=editar&id=ropa");
+    window.history.replaceState(null, "", "/categorias?categoria=editar&id=ropa");
+    fireEvent.click(
+      screen.getAllByRole("link", { name: "Agregar subcategoría a Comida", hidden: true })[0]!,
+    );
+    expect(window.location.search).toBe("?categoria=nueva&padre=comida");
+  });
+
   it("a tap on a row on a phone follows the link to its page", () => {
     atWidth(false);
     renderCard();
