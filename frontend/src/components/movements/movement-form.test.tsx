@@ -26,6 +26,10 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  // Puts back the spies of `vi.spyOn` (`randomUUID`, `invalidateQueries`) even when an assertion
+  // failed before the end of the test. The `vi.fn()` of `mocks` are not touched (`beforeEach`
+  // resets them), nor are the `vi.mock` of the modules.
+  vi.restoreAllMocks();
   onlineManager.setOnline(true);
   window.localStorage.clear();
   mocks.more.length = 0;
@@ -929,7 +933,6 @@ describe("the Idempotency-Key (BE-24)", () => {
     fill();
     await waitFor(() => expect(first.onDone).toHaveBeenCalled());
     expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
   });
 
   it("does not make a new key for a submit that the guard stops (a held Enter)", async () => {
@@ -946,7 +949,6 @@ describe("the Idempotency-Key (BE-24)", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
   });
 
   describe("when the key was already used with another body (409 idempotency_key_reused)", () => {
