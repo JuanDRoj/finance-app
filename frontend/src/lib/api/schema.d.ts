@@ -384,7 +384,24 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Transactions
+         * @description The movements of the space, newest first, one page at a time (cursor).
+         *
+         *     Order: `date` descending, then `id` descending. `next_cursor` is opaque: send it back as
+         *     `cursor` (with the same filters) for the next page; it is null on the last one. `limit` is 1
+         *     to 100 (50 by default). Filters, all optional and combined: `month` (`YYYY-MM`, on the local
+         *     date), `type`, `account_id`, `category_id` (a main category includes its subcategories) and
+         *     `q` (the description, ignoring case and accents). An account or category that does not exist
+         *     or is of another space matches nothing. Deleted movements are never listed; pending and
+         *     skipped ones are, with their `status`.
+         *
+         *     Amounts are in the minor unit of the currency of the space. `amount_minor` is negative for an
+         *     expense, positive for an income, signed for an adjustment and unsigned for a transfer. With
+         *     `account_id`, each item also has `balance_after_minor`, the balance of that account right
+         *     after it (negative = debt on a credit card).
+         */
+        get: operations["list_transactions_spaces__space_id__transactions_get"];
         put?: never;
         /**
          * Create Transaction
@@ -406,6 +423,52 @@ export interface paths {
          *     (422 on the header otherwise).
          */
         post: operations["create_transaction_spaces__space_id__transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/transactions/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Transactions Summary
+         * @description Income, expense, what is left and the number of movements of the filtered period.
+         *
+         *     The same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed
+         *     incomes and expenses add up; adjustments and transfers do not. `count` is the number of
+         *     movements the list shows for those filters, for "showing n of m".
+         */
+        get: operations["read_transactions_summary_spaces__space_id__transactions_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/transactions/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Transaction
+         * @description One movement of the space, with the same shape as an item of the list.
+         *
+         *     A deleted one, one of another space and one that does not exist are the same 404.
+         */
+        get: operations["read_transaction_spaces__space_id__transactions__transaction_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -442,6 +505,24 @@ export interface components {
         AccountReconcile: {
             /** Balance Minor */
             balance_minor: number;
+        };
+        /**
+         * AccountRef
+         * @description An account as a movement shows it (archived ones too).
+         */
+        AccountRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "bank" | "cash" | "credit_card";
         };
         /**
          * AccountUpdate
@@ -524,6 +605,21 @@ export interface components {
             /** Parent Id */
             parent_id?: string | null;
         };
+        /** CategoryParentRef */
+        CategoryParentRef: {
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** CategoryRead */
         CategoryRead: {
             /** Archived At */
@@ -547,6 +643,25 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id: string | null;
+        };
+        /**
+         * CategoryRef
+         * @description A category as a movement shows it; `parent` is the main category of a subcategory.
+         */
+        CategoryRef: {
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            parent: components["schemas"]["CategoryParentRef"] | null;
         };
         /**
          * CategoryUpdate
@@ -666,6 +781,95 @@ export interface components {
             type: "income";
         };
         /**
+         * MovementListItem
+         * @description An item of the list. `balance_after_minor` appears only when the list is filtered by account.
+         *
+         *     It is the balance of that account right after this movement, with the sign of `balance_minor`
+         *     (on a credit card, negative = you owe), whatever the other filters are: a movement that the
+         *     filters hide still counts. It is null for a movement that does not count for a balance
+         *     (pending or skipped) and always when there is no `account_id` filter.
+         */
+        MovementListItem: {
+            account: components["schemas"]["AccountRef"] | null;
+            /** Amount Minor */
+            amount_minor: number;
+            /** Balance After Minor */
+            balance_after_minor: number | null;
+            category: components["schemas"]["CategoryRef"] | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description: string | null;
+            from_account: components["schemas"]["AccountRef"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "confirmed" | "skipped";
+            to_account: components["schemas"]["AccountRef"] | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "expense" | "income" | "transfer" | "adjustment";
+        };
+        /** MovementPage */
+        MovementPage: {
+            /** Items */
+            items: components["schemas"]["MovementListItem"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * MovementRead
+         * @description A movement as the list and the detail show it, in the minor unit of the space's currency.
+         *
+         *     `amount_minor` has a sign by type: an expense is negative, an income positive, an adjustment
+         *     carries its own sign (the change of the balance) and a transfer is the unsigned amount that
+         *     moved (to know whether it came in or went out of an account, compare `from_account` and
+         *     `to_account` with it). The accounts depend on the type: an expense, an income and an
+         *     adjustment have `account`; a transfer has `from_account` and `to_account`. Only an expense
+         *     and an income have `category`.
+         */
+        MovementRead: {
+            account: components["schemas"]["AccountRef"] | null;
+            /** Amount Minor */
+            amount_minor: number;
+            category: components["schemas"]["CategoryRef"] | null;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Description */
+            description: string | null;
+            from_account: components["schemas"]["AccountRef"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "confirmed" | "skipped";
+            to_account: components["schemas"]["AccountRef"] | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "expense" | "income" | "transfer" | "adjustment";
+        };
+        /**
          * SessionCreate
          * @description Body of `POST /auth/session`.
          */
@@ -736,6 +940,26 @@ export interface components {
              * @enum {string}
              */
             type: "expense" | "income" | "transfer" | "adjustment";
+        };
+        /**
+         * TransactionSummaryRead
+         * @description What the filtered period adds up to, in the minor unit of the space's currency.
+         *
+         *     `income_minor` and `expense_minor` add up only the confirmed incomes and expenses (never
+         *     adjustments, transfers, pending, skipped or deleted ones), both as positive amounts, and
+         *     `remaining_minor` is their difference ("te quedan"). The filters apply as they do to the list,
+         *     `type` included. `count` is every movement the list would show for those filters (any type and
+         *     status, deleted ones excluded): the `m` of "showing n of m".
+         */
+        TransactionSummaryRead: {
+            /** Count */
+            count: number;
+            /** Expense Minor */
+            expense_minor: number;
+            /** Income Minor */
+            income_minor: number;
+            /** Remaining Minor */
+            remaining_minor: number;
         };
         /**
          * TransferCreate
@@ -1809,6 +2033,63 @@ export interface operations {
             };
         };
     };
+    list_transactions_spaces__space_id__transactions_get: {
+        parameters: {
+            query?: {
+                month?: string | null;
+                type?: ("expense" | "income" | "transfer" | "adjustment") | null;
+                account_id?: string | null;
+                category_id?: string | null;
+                q?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovementPage"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_transaction_spaces__space_id__transactions_post: {
         parameters: {
             query?: never;
@@ -1856,6 +2137,111 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_transactions_summary_spaces__space_id__transactions_summary_get: {
+        parameters: {
+            query?: {
+                month?: string | null;
+                type?: ("expense" | "income" | "transfer" | "adjustment") | null;
+                account_id?: string | null;
+                category_id?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionSummaryRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_transaction_spaces__space_id__transactions__transaction_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovementRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

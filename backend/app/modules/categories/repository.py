@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, exists, select, update
+from sqlalchemy import Select, exists, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,6 +77,22 @@ async def list_for_space(
     stmt = _in_space(space_id).order_by(Category.created_at, Category.id)
     if not include_archived:
         stmt = stmt.where(Category.archived_at.is_(None))
+    return list(await session.scalars(stmt))
+
+
+async def ids_with_subcategories(
+    session: AsyncSession, *, space_id: uuid.UUID, category_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """The id of the category and of its subcategories, archived ones included.
+
+    A subcategory has none below it, so it gives only itself. A category that does not exist, or
+    is in another space, gives an empty list (the subcategories are looked up inside the space).
+    """
+    stmt = (
+        select(Category.id)
+        .where(Category.space_id == space_id)
+        .where(or_(Category.id == category_id, Category.parent_id == category_id))
+    )
     return list(await session.scalars(stmt))
 
 

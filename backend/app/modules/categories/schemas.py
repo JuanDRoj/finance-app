@@ -5,7 +5,10 @@ from typing import Annotated, Literal
 from pydantic import StringConstraints
 
 from app.core.schemas import InputModel, PatchModel, ReadModel, unset
-from app.modules.categories.icons import CategoryIcon
+
+# Re-exported (`as CategoryIcon`): other modules take it from here, not from `icons` (a module only
+# imports the `schemas` and `service` of another one).
+from app.modules.categories.icons import CategoryIcon as CategoryIcon
 
 CategoryKind = Literal["expense", "income"]
 

@@ -74,6 +74,20 @@ async def list_categories(
     )
 
 
+async def category_ids_with_subcategories(
+    session: AsyncSession, space_id: uuid.UUID, category_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """The ids that "this category" stands for in a filter: itself and, if it is a main category,
+    its subcategories (archived ones too: old movements keep their category).
+
+    Empty if the category does not exist or is in another space, so a filter on it matches
+    nothing instead of failing.
+    """
+    return await repository.ids_with_subcategories(
+        session, space_id=space_id, category_id=category_id
+    )
+
+
 async def create_category(
     session: AsyncSession, space_id: uuid.UUID, data: CategoryCreate
 ) -> Category:
