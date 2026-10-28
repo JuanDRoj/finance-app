@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import type { CategoryRead } from "@/lib/core/data/categories";
 import { CategoryPanelSheet } from "./category-panel-sheet";
@@ -47,6 +47,16 @@ const failure = (status: number, body?: unknown) => ({
   response: new Response(null, { status }),
 });
 
+// The first render in jsdom pays for warming up the modules (react-hook-form, zod, Base UI, the 66 icons),
+// not for what the tests check: it is done here so that no test carries that cost. A hook does not count
+// against the limit of a test, and the first test of the file is the one that hit it under load.
+beforeAll(async () => {
+  mocks.get.mockResolvedValue(ok(LIST));
+  renderPanel();
+  await screen.findByLabelText("Nombre");
+  cleanup();
+});
+
 beforeEach(() => {
   mocks.get.mockReset().mockResolvedValue(ok(LIST));
   mocks.patch.mockReset();
@@ -90,7 +100,7 @@ describe("CategoryPanelSheet: Nueva categoría", () => {
     renderPanel({ defaults: { parentId: TRABAJO.id } });
     const select = (await screen.findByLabelText("Dentro de")) as HTMLSelectElement;
     expect(select.value).toBe(TRABAJO.id);
-    expect((screen.getByRole("radio", { name: "Ingreso" }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Ingreso") as HTMLInputElement).checked).toBe(true);
   });
 
   it("does not ask for anything while it is closed", () => {

@@ -28,6 +28,7 @@ import { AccountsSummary } from "../_components/accounts-summary";
 import { FirstUse } from "../_components/first-use";
 import { AccountEditDemo } from "./_components/account-demos";
 import { CategoryFormsDemo } from "./_components/category-demos";
+import { CategoryScreenDemo } from "./_components/category-screen-demos";
 import { AccountFormDemo, CurrencyDemo } from "./_components/first-use-demos";
 import {
   BottomSheetDemo,
@@ -87,7 +88,8 @@ const DEMO_USER = {
     "ana.maria.de.los.angeles.fernandez.rodriguez.perez.montenegro@un-dominio-muy-largo.example.com",
 };
 
-// What hangs from "Más" at the end of Hito 1 (the app lists it once Categorías exists, FE-21).
+// What hangs from "Más" at the end of Hito 1 (the app has it since Categorías, FE-21 / KAN-77); the
+// catalog adds a second entry with a very long name to see how a row wraps.
 const DEMO_MORE: readonly MoreSection[] = [
   {
     id: "categories",
@@ -510,6 +512,10 @@ export default async function CatalogPage({
 
         <Section title="Formularios de categoría (nueva y editar)">
           <CategoryFormsDemo />
+        </Section>
+
+        <Section title="Pantalla Categorías">
+          <CategoryScreenDemo />
         </Section>
 
         <Section title="Monto grande (Registrar movimiento)">

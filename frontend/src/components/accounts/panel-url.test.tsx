@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  CATEGORY_PANEL,
+  CATEGORY_PANEL_COMPANIONS,
   MOVEMENT_PANEL,
   NEW_ACCOUNT_PANEL,
+  categoryEditPanel,
   closePanelInUrl,
   openPanelInUrl,
   replacePanelInUrl,
@@ -66,5 +69,54 @@ describe("the panel in the URL", () => {
     replacePanelInUrl("movimiento", NEW_ACCOUNT_PANEL);
     expect(window.location.search).toBe("?cuenta=nueva");
     expect(window.history.length).toBe(before);
+  });
+});
+
+describe("the panel of a category (KAN-77)", () => {
+  it("names the panel ?categoria=nueva, and the edit panel ?categoria=editar with the id", () => {
+    expect(CATEGORY_PANEL).toEqual({ param: "categoria", value: "nueva" });
+    expect(categoryEditPanel("abc")).toEqual({
+      param: "categoria",
+      value: "editar",
+      extra: { id: "abc" },
+    });
+  });
+
+  it("writes the params that go with the panel in the same write, keeping the rest", () => {
+    window.history.replaceState(null, "", "/categorias?tipo=ingresos#lista");
+    const before = window.history.length;
+    openPanelInUrl({ ...CATEGORY_PANEL, extra: { padre: "p1", tipo: "ingresos" } });
+    expect(window.location.pathname).toBe("/categorias");
+    expect(window.location.search).toBe("?tipo=ingresos&categoria=nueva&padre=p1");
+    expect(window.location.hash).toBe("#lista");
+    expect(window.history.length).toBe(before);
+  });
+
+  it("opens the edit panel with its id", () => {
+    window.history.replaceState(null, "", "/categorias");
+    openPanelInUrl(categoryEditPanel("abc"));
+    expect(window.location.search).toBe("?categoria=editar&id=abc");
+  });
+
+  it("opens without extra params as it always did", () => {
+    openPanelInUrl(NEW_ACCOUNT_PANEL);
+    expect(window.location.search).toBe("?cuenta=nueva");
+  });
+
+  it("closes the panel and its companions at once, and leaves the tab of the list", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/categorias?tipo=ingresos&categoria=nueva&padre=p1&id=x#lista",
+    );
+    closePanelInUrl("categoria", ...CATEGORY_PANEL_COMPANIONS);
+    expect(window.location.search).toBe("?tipo=ingresos");
+    expect(window.location.hash).toBe("#lista");
+  });
+
+  it("closes cleanly when the companions are not there", () => {
+    window.history.replaceState(null, "", "/categorias?categoria=editar&id=abc");
+    closePanelInUrl("categoria", ...CATEGORY_PANEL_COMPANIONS);
+    expect(window.location.pathname + window.location.search).toBe("/categorias");
   });
 });

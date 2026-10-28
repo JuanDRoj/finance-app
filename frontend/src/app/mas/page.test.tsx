@@ -8,8 +8,8 @@ import MorePage from "./page";
 
 // The edges are mocked, as in app/page.test.tsx: the typed API client, the router and the client
 // pieces of the shell. What is under test is the page's own logic: what it lists, the redirects
-// and the error state. `MORE_SECTIONS` is empty in the app until Categorías exists, so the tests
-// fill it.
+// and the error state. `MORE_SECTIONS` has Categorías since KAN-77; the tests replace it with their
+// own list.
 const mocks = vi.hoisted(() => ({
   getServerApi: vi.fn(),
   get: vi.fn(),

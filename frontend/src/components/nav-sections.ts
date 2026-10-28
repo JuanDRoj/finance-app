@@ -1,4 +1,4 @@
-import { DotsThree, House, Wallet } from "@phosphor-icons/react/ssr";
+import { DotsThree, House, Tag, Wallet } from "@phosphor-icons/react/ssr";
 import { MOVEMENT_PANEL, NEW_ACCOUNT_PANEL, type PanelRef } from "@/components/accounts/panel-url";
 
 /** Any Phosphor icon (the library does not export its `Icon` type from the `/ssr` entry). */
@@ -66,11 +66,19 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 ];
 
 /**
- * What hangs from "Más" on a phone and sits at the bottom of the sidebar on desktop. Empty until
- * Categorías exists (FE-21, KAN-77); with entries, the bottom bar shows "Más" and `/mas` lists
- * them. Hito 3 adds Ayuda and Ajustes.
+ * What hangs from "Más" on a phone and sits at the bottom of the sidebar on desktop: Categorías
+ * (FE-21, KAN-77; the row of "H1 · Más" in the canvas). With entries, the bottom bar shows "Más" and
+ * `/mas` lists them. Hito 3 adds Ayuda and Ajustes.
  */
-export const MORE_SECTIONS: readonly MoreSection[] = [];
+export const MORE_SECTIONS: readonly MoreSection[] = [
+  {
+    id: "categories",
+    href: "/categorias",
+    label: "Categorías",
+    icon: Tag,
+    description: "Crea, renombra y archiva las tuyas",
+  },
+];
 
 /** The "Más" tab of the bottom bar (only shown when `MORE_SECTIONS` has entries). */
 export const MORE_ITEM: NavSection = { id: "more", href: "/mas", label: "Más", icon: DotsThree };

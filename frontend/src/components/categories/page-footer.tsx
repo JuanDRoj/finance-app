@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useKeyboardInset } from "@/components/movements/use-keyboard-inset";
+import { useKeyboardInset } from "@/components/use-keyboard-inset";
 
 /**
  * The bar with the main button of a category form **as a page** (below 1024 px): fixed at the bottom

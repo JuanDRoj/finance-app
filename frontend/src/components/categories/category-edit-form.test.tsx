@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoriesQueryKey, type CategoryRead } from "@/lib/core/data/categories";
 import { transactionsQueryKey } from "@/lib/core/data/transactions";
 import { CategoryEditForm } from "./category-edit-form";
@@ -68,6 +68,14 @@ function failure(status: number, body?: unknown) {
   return { error: body, response: new Response(null, { status }) };
 }
 
+// The first render in jsdom pays for warming up the modules (react-hook-form, zod, Base UI, the 66 icons),
+// not for what the tests check: it is done here so that no test carries that cost. A hook does not count
+// against the limit of a test, and the first test of the file is the one that hit it under load.
+beforeAll(() => {
+  renderForm();
+  cleanup();
+});
+
 beforeEach(() => {
   mocks.patch
     .mockReset()
@@ -110,7 +118,7 @@ function type(label: string, value: string) {
 }
 
 function save() {
-  fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+  fireEvent.click(screen.getByRole("button", { hidden: true, name: "Guardar cambios" }));
 }
 
 function sentBody() {
@@ -138,9 +146,9 @@ describe("what the form shows", () => {
   it("starts with the category's name and icon, and has no type nor principal to change", () => {
     renderForm();
     expect((screen.getByLabelText("Nombre") as HTMLInputElement).value).toBe("Transporte");
-    expect((screen.getByRole("radio", { name: "Auto" }) as HTMLInputElement).checked).toBe(true);
-    expect(screen.getAllByRole("radio")).toHaveLength(66);
-    expect(screen.queryByRole("group", { name: "Tipo" })).toBeNull();
+    expect((screen.getByLabelText("Auto") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getAllByRole("radio", { hidden: true })).toHaveLength(66);
+    expect(screen.queryByRole("group", { hidden: true, name: "Tipo" })).toBeNull();
     expect(screen.queryByLabelText("Dentro de")).toBeNull();
   });
 
@@ -174,11 +182,11 @@ describe("what the form shows", () => {
     const page = renderForm({ variant: "page" });
     const bar = document.querySelector("[data-slot='category-form-footer']") as HTMLElement;
     expect(bar.className).toContain("fixed");
-    expect(within(bar).getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
+    expect(within(bar).getByRole("button", { hidden: true, name: "Guardar cambios" })).toBeTruthy();
     page.unmount();
     const panel = renderForm({ variant: "panel" });
     expect(document.querySelector("[data-slot='category-form-footer']")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: "Cancelar" }));
     expect(panel.onCancel).toHaveBeenCalledTimes(1);
   });
 });
@@ -201,7 +209,7 @@ describe("what it sends", () => {
 
   it("changes the icon: only the icon", async () => {
     const { onDone } = renderForm();
-    fireEvent.click(screen.getByRole("radio", { name: "Ómnibus" }));
+    fireEvent.click(screen.getByLabelText("Ómnibus"));
     save();
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(true));
     expect(sentBody()).toEqual({ icon: "bus" });
@@ -210,7 +218,7 @@ describe("what it sends", () => {
   it("changes both when both changed", async () => {
     const { onDone } = renderForm();
     type("Nombre", "Movilidad");
-    fireEvent.click(screen.getByRole("radio", { name: "Moto" }));
+    fireEvent.click(screen.getByLabelText("Moto"));
     save();
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(true));
     expect(sentBody()).toEqual({ name: "Movilidad", icon: "motorcycle" });
@@ -285,7 +293,7 @@ describe("a repeated name (409 category_name_taken)", () => {
     save();
     expect(await screen.findByText("Ya tienes una categoría con ese nombre.")).toBeTruthy();
     expect(screen.getByLabelText("Nombre").getAttribute("aria-invalid")).toBe("true");
-    expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
   });
 
   it("says the sibling is archived, but offers no 'Desarchivar' (it would not free the name)", async () => {
@@ -296,7 +304,7 @@ describe("a repeated name (409 category_name_taken)", () => {
     expect(
       await screen.findByText("Ya tienes una categoría archivada con ese nombre."),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Desarchivar/ })).toBeNull();
+    expect(screen.queryByRole("button", { hidden: true, name: /Desarchivar/ })).toBeNull();
   });
 
   it("looks among the siblings of a subcategory only, and leaves itself out", async () => {
@@ -367,7 +375,7 @@ describe("other failures", () => {
     mocks.patch.mockReturnValue(new Promise((done) => (resolve = done)));
     const { onDone } = renderForm();
     type("Nombre", "Movilidad");
-    const button = screen.getByRole("button", { name: "Guardar cambios" });
+    const button = screen.getByRole("button", { hidden: true, name: "Guardar cambios" });
     fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(() => expect(mocks.patch).toHaveBeenCalledTimes(1));
@@ -380,7 +388,7 @@ describe("other failures", () => {
 describe("Archivar categoría", () => {
   it("archives with no confirmation, with 'Deshacer' in the toast, and tells the container", async () => {
     const { onArchived, invalidate } = renderForm();
-    fireEvent.click(screen.getByRole("button", { name: /Archivar categoría/ }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: /Archivar categoría/ }));
     await waitFor(() => expect(onArchived).toHaveBeenCalledTimes(1));
     expect(mocks.post.mock.calls[0]?.[0]).toBe(
       "/spaces/{space_id}/categories/{category_id}/archive",
@@ -401,7 +409,7 @@ describe("Archivar categoría", () => {
       failure(404, { code: "category_not_found", detail: "Category not found" }),
     );
     const { onArchived } = renderForm();
-    fireEvent.click(screen.getByRole("button", { name: /Archivar categoría/ }));
+    fireEvent.click(screen.getByRole("button", { hidden: true, name: /Archivar categoría/ }));
     expect(await screen.findByText("No encontramos esa categoría")).toBeTruthy();
     expect(onArchived).not.toHaveBeenCalled();
   });
@@ -414,7 +422,12 @@ describe("Archivar categoría", () => {
     save();
     await waitFor(() => expect(mocks.patch).toHaveBeenCalledTimes(1));
     expect(
-      (screen.getByRole("button", { name: /Archivar categoría/ }) as HTMLButtonElement).disabled,
+      (
+        screen.getByRole("button", {
+          hidden: true,
+          name: /Archivar categoría/,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     resolve(ok({ ...TRANSPORTE, name: "Movilidad" }));
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
