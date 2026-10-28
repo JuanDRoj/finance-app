@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { categoriesQueryKey } from "@/lib/core/data/categories";
 import type { CategoryRead } from "@/lib/core/data/categories";
@@ -345,6 +345,41 @@ describe("a repeated name (409 category_name_taken)", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["spaces", "space-1", "categories"] });
     // It did not create a second category.
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining("Creaste"));
+  });
+
+  it("unarchives once for a quick double tap on 'Desarchivar': one request, one toast, one onDone", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    mocks.post
+      .mockResolvedValueOnce(failure(409, TAKEN))
+      .mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    const { onDone } = renderForm();
+    type("Nombre", "Mascotas");
+    submit();
+    const button = await screen.findByRole("button", { name: "Desarchivar «Mascotas»" });
+    // Both taps run before React renders again, so the button is still enabled for the second one.
+    act(() => {
+      button.click();
+      button.click();
+    });
+    resolve(ok({ ...MASCOTAS, archived_at: null }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets 'Desarchivar' be tried again after it failed", async () => {
+    mocks.post
+      .mockResolvedValueOnce(failure(409, TAKEN))
+      .mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }))
+      .mockResolvedValueOnce(ok({ ...MASCOTAS, archived_at: null }));
+    const { onDone } = renderForm();
+    type("Nombre", "Mascotas");
+    submit();
+    fireEvent.click(await screen.findByRole("button", { name: "Desarchivar «Mascotas»" }));
+    expect(await screen.findByText("Algo salió mal de nuestro lado")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Desarchivar «Mascotas»" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+    expect(mocks.post).toHaveBeenCalledTimes(3);
   });
 
   it("finds the archived sibling among the subcategories of the same principal only", async () => {

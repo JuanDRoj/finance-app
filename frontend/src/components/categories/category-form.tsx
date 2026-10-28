@@ -136,6 +136,9 @@ export function CategoryForm({
   // The archived category the repeated name clashes with, while its message is on the field.
   const [archivedClash, setArchivedClash] = useState<CategoryRead | null>(null);
   const sending = useRef(false);
+  // The same for "Desarchivar": set before `mutate`, because the button's `loading` comes from the
+  // render before and a quick second tap would still find it enabled.
+  const unarchiving = useRef(false);
   const [initial] = useState(() => startingValues(categories, defaults));
 
   const {
@@ -225,6 +228,7 @@ export function CategoryForm({
       onDone(category);
     },
     onError: (error) => {
+      unarchiving.current = false;
       if (isUnauthorized(error)) {
         window.location.replace("/login");
         return;
@@ -290,6 +294,8 @@ export function CategoryForm({
             loading={unarchive.isPending}
             disabled={busy && !unarchive.isPending}
             onClick={() => {
+              if (unarchiving.current) return;
+              unarchiving.current = true;
               setFormError(null);
               unarchive.mutate(archivedClash);
             }}

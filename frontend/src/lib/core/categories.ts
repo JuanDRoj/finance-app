@@ -263,7 +263,8 @@ export function countUnarchivable(items: readonly ArchivedCategoryItem[]): numbe
  * subcategory under an archived principal "Se desarchiva junto con Mascotas" or, if it had been
  * archived before on its own, "Desarchiva primero Mascotas" (docs/diseno.md D19). The date is the
  * day of `archived_at` in the space's zone. With `showKind` (desktop, whose list mixes both kinds)
- * the kind goes first: "Gasto · principal · archivada el 18 de octubre".
+ * the kind goes first: "Gasto · principal · archivada el 18 de octubre". A subcategory whose
+ * principal is not in the list says no place ("Archivada el 2 de octubre"), never "Principal".
  */
 export function describeArchivedCategory(
   item: ArchivedCategoryItem,
@@ -277,7 +278,11 @@ export function describeArchivedCategory(
   }
   const parts: string[] = [];
   if (options.showKind) parts.push(describeCategoryKind(category.kind));
-  parts.push(parent ? `en ${parent.name}` : "principal");
+  // Principal or sub is `parent_id`'s to say, not the presence of `parent`: a subcategory whose
+  // principal is not in the list must not read "Principal". Without the principal's name there is no
+  // place to name, so that part is left out.
+  if (category.parent_id === null) parts.push("principal");
+  else if (parent) parts.push(`en ${parent.name}`);
   if (category.archived_at !== null) {
     parts.push(
       `archivada el ${formatInstantDayMonth(category.archived_at, options.timeZone, options.now)}`,

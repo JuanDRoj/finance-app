@@ -163,4 +163,73 @@ describe("useArchiveCategory", () => {
     await waitFor(() => expect(onArchived).toHaveBeenCalled());
     expect(result.current.busy).toBe(true);
   });
+
+  it("archives once for a quick double tap: one request, one toast, one onArchived", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    const post = vi.fn().mockReturnValue(new Promise((done) => (resolve = done)));
+    const { result, onArchived, invalidate } = setup(post);
+    // Both taps run before React renders again, so `busy` is still false for the second one.
+    act(() => {
+      result.current.archive(CATEGORY);
+      result.current.archive(CATEGORY);
+    });
+    resolve(ok(ARCHIVED));
+    await waitFor(() => expect(onArchived).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    // And a late tap, once it worked, does not archive again.
+    act(() => result.current.archive(CATEGORY));
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the person archive again after a failure", async () => {
+    const post = vi
+      .fn()
+      .mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }))
+      .mockResolvedValueOnce(ok(ARCHIVED));
+    const { result, onArchived } = setup(post);
+    act(() => result.current.archive(CATEGORY));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    act(() => result.current.archive(CATEGORY));
+    await waitFor(() => expect(onArchived).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("unarchives once for a quick double tap on 'Deshacer'", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    const post = vi
+      .fn()
+      .mockResolvedValueOnce(ok(ARCHIVED))
+      .mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    const { result, onArchived } = setup(post);
+    act(() => result.current.archive(CATEGORY));
+    await waitFor(() => expect(onArchived).toHaveBeenCalled());
+    const action = mocks.toastSuccess.mock.calls[0]?.[1].action;
+    act(() => {
+      action.onClick();
+      action.onClick();
+    });
+    resolve(ok(CATEGORY));
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("lets 'Deshacer' be tried again after it failed", async () => {
+    const post = vi
+      .fn()
+      .mockResolvedValueOnce(ok(ARCHIVED))
+      .mockResolvedValueOnce(failure(500, { code: "internal_error", detail: "Boom" }))
+      .mockResolvedValueOnce(ok(CATEGORY));
+    const { result, onArchived } = setup(post);
+    act(() => result.current.archive(CATEGORY));
+    await waitFor(() => expect(onArchived).toHaveBeenCalled());
+    const action = mocks.toastSuccess.mock.calls[0]?.[1].action;
+    act(() => action.onClick());
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
+    act(() => action.onClick());
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledTimes(3);
+  });
 });

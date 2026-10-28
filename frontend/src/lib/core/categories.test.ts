@@ -429,6 +429,16 @@ describe("describeArchivedCategory", () => {
     );
   });
 
+  it("says no place, and never 'Principal', for a subcategory whose principal is not in the list", () => {
+    const lone = category("Suelta", { parent_id: "not-in-the-list", archived_at: OCT_2 });
+    const [item] = buildArchivedList([lone]);
+    expect(item?.parent).toBeNull();
+    expect(describeArchivedCategory(item!, options)).toBe("Archivada el 2 de octubre");
+    expect(describeArchivedCategory(item!, { ...options, showKind: true })).toBe(
+      "Gasto · archivada el 2 de octubre",
+    );
+  });
+
   it("adds the year to a date of another year, in the space's zone", () => {
     const old = category("Viejas", { archived_at: "2025-12-31T23:00:00Z" });
     expect(describeArchivedCategory(buildArchivedList([old])[0]!, options)).toBe(
