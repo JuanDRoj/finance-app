@@ -380,10 +380,12 @@ async def _lookups(
     so two queries serve any page instead of a lookup per item.
     """
     accounts = await accounts_service.list_accounts(session, space_id, include_archived=True)
-    categories = await categories_service.list_categories(session, space_id, include_archived=True)
+    categories = await categories_service.list_category_reads(
+        session, space_id, include_archived=True
+    )
     return (
         {account.id: account for account in accounts},
-        {c.id: CategoryRead.model_validate(c) for c in categories},
+        {category.id: category for category in categories},
     )
 
 

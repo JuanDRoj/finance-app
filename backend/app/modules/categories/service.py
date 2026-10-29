@@ -74,6 +74,14 @@ async def list_categories(
     )
 
 
+async def list_category_reads(
+    session: AsyncSession, space_id: uuid.UUID, *, include_archived: bool = False
+) -> list[CategoryRead]:
+    """Like `list_categories`, as schemas: what other modules use (never ORM objects)."""
+    categories = await list_categories(session, space_id, include_archived=include_archived)
+    return [CategoryRead.model_validate(c) for c in categories]
+
+
 async def category_ids_with_subcategories(
     session: AsyncSession, space_id: uuid.UUID, category_id: uuid.UUID
 ) -> list[uuid.UUID]:

@@ -13,7 +13,8 @@ The extension lives in the schema it is created in (`public`, the default search
 function is STABLE, not IMMUTABLE, so it cannot be used in an index expression as it is: the search
 has no index of its own (it is bounded by the space and, normally, by the month). `IF [NOT] EXISTS`
 makes both directions safe to repeat, and the downgrade only drops it because nothing else in the
-schema depends on it.
+schema depends on it. Note that the downgrade drops the extension even if it already existed in the
+database before this revision (`CREATE ... IF NOT EXISTS` does not remember who created it).
 """
 
 from collections.abc import Sequence

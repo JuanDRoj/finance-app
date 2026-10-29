@@ -118,6 +118,37 @@ async def test_seed_lists_the_main_categories_in_the_order_of_the_table(
     assert mains[:5] == ["Comida", "Transporte", "Hogar", "Salud", "Ocio"]
 
 
+async def test_list_category_reads_returns_schemas_in_the_same_order_as_list_categories(
+    session: AsyncSession,
+) -> None:
+    space_id = await _make_space(session, "uid-a")
+    main = await _main(session, space_id)
+    sub = await _sub(session, space_id, main)
+    archived = await _main(session, space_id, name="Vieja")
+    await service.archive_category(session, space_id, archived.id)
+
+    reads = await service.list_category_reads(session, space_id, include_archived=True)
+    orm = await service.list_categories(session, space_id, include_archived=True)
+
+    assert all(type(read) is CategoryRead for read in reads)
+    assert [read.id for read in reads] == [category.id for category in orm]
+    assert {read.id for read in reads} == {main.id, sub.id, archived.id}
+    by_id = {read.id: read for read in reads}
+    assert by_id[sub.id].parent_id == main.id
+    assert by_id[archived.id].archived_at is not None
+    visible = await service.list_category_reads(session, space_id)
+    assert archived.id not in {read.id for read in visible}
+
+
+async def test_list_category_reads_stays_in_the_space(session: AsyncSession) -> None:
+    space_a = await _make_space(session, "uid-a")
+    space_b = await _make_space(session, "uid-b")
+    mine = await _main(session, space_a, name="Mia")
+    await _main(session, space_b, name="Ajena")
+
+    assert [read.id for read in await service.list_category_reads(session, space_a)] == [mine.id]
+
+
 async def test_seed_twice_does_not_duplicate_anything(session: AsyncSession) -> None:
     space_id = await _make_space(session, "uid-a")
 
