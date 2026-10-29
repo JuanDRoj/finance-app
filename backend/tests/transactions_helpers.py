@@ -8,6 +8,7 @@ them. The happy path of the real write goes through `transactions.service.create
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +86,7 @@ async def insert_transaction(
     status: str = "confirmed",
     deleted_at: datetime | None = None,
     day: date = date(2026, 10, 20),
+    description: str | None = None,
 ) -> Transaction:
     """A transaction with its entries, written as is (no validation, no locks)."""
     transaction = Transaction(
@@ -92,7 +94,7 @@ async def insert_transaction(
         type=type_,
         status=status,
         date=day,
-        description=None,
+        description=description,
         created_by=user_id,
         deleted_at=deleted_at,
     )
@@ -110,3 +112,82 @@ async def insert_transaction(
     )
     await session.flush()
     return transaction
+
+
+# Shortcuts over `insert_transaction` for the usual shapes. `fields` are its keyword arguments
+# (`status`, `deleted_at`, `day`, `description`). Amounts are positive, except the adjustment's.
+
+
+async def insert_expense(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    category_id: uuid.UUID,
+    amount: int,
+    **fields: Any,
+) -> Transaction:
+    return await insert_transaction(
+        session,
+        space_id,
+        user_id,
+        entries=[(account_id, -amount, category_id)],
+        type_="expense",
+        **fields,
+    )
+
+
+async def insert_income(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    category_id: uuid.UUID,
+    amount: int,
+    **fields: Any,
+) -> Transaction:
+    return await insert_transaction(
+        session,
+        space_id,
+        user_id,
+        entries=[(account_id, amount, category_id)],
+        type_="income",
+        **fields,
+    )
+
+
+async def insert_transfer(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    from_account_id: uuid.UUID,
+    to_account_id: uuid.UUID,
+    amount: int,
+    **fields: Any,
+) -> Transaction:
+    return await insert_transaction(
+        session,
+        space_id,
+        user_id,
+        entries=[(from_account_id, -amount, None), (to_account_id, amount, None)],
+        type_="transfer",
+        **fields,
+    )
+
+
+async def insert_adjustment(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    user_id: uuid.UUID,
+    account_id: uuid.UUID,
+    amount: int,
+    **fields: Any,
+) -> Transaction:
+    return await insert_transaction(
+        session,
+        space_id,
+        user_id,
+        entries=[(account_id, amount, None)],
+        type_="adjustment",
+        **fields,
+    )

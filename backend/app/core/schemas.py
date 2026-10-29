@@ -83,6 +83,18 @@ class ReadModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class Page[T](BaseModel):
+    """One page of a list paginated by cursor (docs/arquitectura-backend.md, section 7).
+
+    `next_cursor` is opaque: the client sends it back as `cursor` to get the next page, and it is
+    `None` on the last one. A module names its own page (`class MovementPage(Page[MovementItem])`)
+    so OpenAPI and the TypeScript types get a plain name instead of `Page_MovementItem_`.
+    """
+
+    items: list[T]
+    next_cursor: str | None
+
+
 def admits_none(annotation: object) -> bool:
     """True if a field annotation accepts None: `X | None`, `Optional[X]`, `Any`, `Literal[None]`.
 

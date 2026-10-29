@@ -7,12 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ConflictError, InvalidFieldError, NotFoundError
 from app.core.schemas import MAX_SAFE_INTEGER
 from app.modules.accounts import service as accounts_service
+from app.modules.accounts.schemas import AccountRead
 from app.modules.categories import service as categories_service
+from app.modules.categories.schemas import CategoryRead
 from app.modules.spaces import service as spaces_service
 from app.modules.transactions import repository
+from app.modules.transactions.cursor import decode_cursor, encode_cursor, month_bounds
 from app.modules.transactions.entries import build_entries, referenced_accounts
 from app.modules.transactions.idempotency import IDEMPOTENCY_KEY_TTL, request_fingerprint
 from app.modules.transactions.models import Entry, Transaction
+from app.modules.transactions.movement_view import as_list_item, build_movement
 from app.modules.transactions.schemas import (
     ACCOUNT_ARCHIVED,
     ACCOUNT_NOT_FOUND,
@@ -21,13 +25,19 @@ from app.modules.transactions.schemas import (
     CATEGORY_KIND_MISMATCH,
     CATEGORY_NOT_FOUND,
     IDEMPOTENCY_KEY_REUSED,
+    TRANSACTION_NOT_FOUND,
     AdjustmentCreate,
     BalanceSummaryRead,
     ExpenseCreate,
     IncomeCreate,
     MovementCreate,
+    MovementPage,
+    MovementRead,
     TransactionCreate,
+    TransactionFilters,
+    TransactionListFilters,
     TransactionRead,
+    TransactionSummaryRead,
 )
 
 # Callers (the router) are already known to belong to the space: `require_space_member` ran first.
@@ -271,6 +281,107 @@ async def get_balance_summary(session: AsyncSession, space_id: uuid.UUID) -> Bal
     cards = sum(balances.get(a.id, 0) for a in accounts if a.type == "credit_card")
     return BalanceSummaryRead(
         available_minor=available, card_debt_minor=-cards, net_minor=available + cards
+    )
+
+
+async def list_movements(
+    session: AsyncSession, space_id: uuid.UUID, filters: TransactionListFilters
+) -> MovementPage:
+    """One page of the movements of the space, newest first (`date desc, id desc`).
+
+    Deleted movements are left out; pending and skipped ones are listed with their `status`. Each
+    item carries its account(s) and category with name and icon. With an `account_id` filter every
+    item also carries `balance_after_minor`, the balance of that account right after it.
+    Statements per page do not depend on its size: the page, its entries, the accounts and the
+    categories of the space and, with an account filter, the running balance.
+    """
+    criteria = await _criteria(session, space_id, filters)
+    after = decode_cursor(filters.cursor) if filters.cursor is not None else None
+    rows = await repository.list_page(
+        session, space_id=space_id, criteria=criteria, after=after, limit=filters.limit + 1
+    )
+    shown = rows[: filters.limit]
+    next_cursor = encode_cursor(shown[-1].date, shown[-1].id) if len(rows) > filters.limit else None
+    accounts, categories = await _lookups(session, space_id)
+    balances: dict[uuid.UUID, int] = {}
+    if filters.account_id is not None:
+        balances = await repository.balances_after(
+            session,
+            space_id=space_id,
+            account_id=filters.account_id,
+            transaction_ids=[row.id for row in shown],
+        )
+    items = [
+        as_list_item(build_movement(row, accounts, categories), balances.get(row.id))
+        for row in shown
+    ]
+    return MovementPage(items=items, next_cursor=next_cursor)
+
+
+async def get_movement(
+    session: AsyncSession, space_id: uuid.UUID, transaction_id: uuid.UUID
+) -> MovementRead:
+    """One movement of the space, as the list shows it. Deleted ones are not found (404)."""
+    row = await repository.get_active_with_entries(
+        session, space_id=space_id, transaction_id=transaction_id
+    )
+    if row is None:
+        raise NotFoundError(TRANSACTION_NOT_FOUND, "Transaction not found")
+    accounts, categories = await _lookups(session, space_id)
+    return build_movement(row, accounts, categories)
+
+
+async def get_movements_summary(
+    session: AsyncSession, space_id: uuid.UUID, filters: TransactionFilters
+) -> TransactionSummaryRead:
+    """What the filtered period adds up to: income, expense, what is left and how many rows.
+
+    Same filters as the list, `type` included, so the figures match the table. Income and expense
+    count only confirmed incomes and expenses; `count` is every row the list would show.
+    """
+    criteria = await _criteria(session, space_id, filters)
+    total = await repository.count(session, space_id=space_id, criteria=criteria)
+    income, expense = await repository.income_and_expense(
+        session, space_id=space_id, criteria=criteria
+    )
+    return TransactionSummaryRead(
+        count=total, income_minor=income, expense_minor=expense, remaining_minor=income - expense
+    )
+
+
+async def _criteria(
+    session: AsyncSession, space_id: uuid.UUID, filters: TransactionFilters
+) -> repository.ListCriteria:
+    """The filters as the repository takes them: the month as a range, the category resolved."""
+    category_ids = None
+    if filters.category_id is not None:
+        category_ids = await categories_service.category_ids_with_subcategories(
+            session, space_id, filters.category_id
+        )
+    return repository.ListCriteria(
+        month=month_bounds(filters.month) if filters.month is not None else None,
+        type=filters.type,
+        account_id=filters.account_id,
+        category_ids=category_ids,
+        search=filters.q,
+    )
+
+
+async def _lookups(
+    session: AsyncSession, space_id: uuid.UUID
+) -> tuple[dict[uuid.UUID, AccountRead], dict[uuid.UUID, CategoryRead]]:
+    """Every account and category of the space by id, archived ones included.
+
+    A movement keeps its archived account and category, and the lists are small (dozens of rows),
+    so two queries serve any page instead of a lookup per item.
+    """
+    accounts = await accounts_service.list_accounts(session, space_id, include_archived=True)
+    categories = await categories_service.list_category_reads(
+        session, space_id, include_archived=True
+    )
+    return (
+        {account.id: account for account in accounts},
+        {category.id: category for category in categories},
     )
 
 

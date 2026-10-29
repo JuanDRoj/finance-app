@@ -83,6 +83,36 @@
         "title": "AccountReconcile",
         "type": "object"
       },
+      "AccountRef": {
+        "description": "An account as a movement shows it (archived ones too).",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "bank",
+              "cash",
+              "credit_card"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "title": "AccountRef",
+        "type": "object"
+      },
       "AccountUpdate": {
         "additionalProperties": false,
         "description": "Fields to change: only the ones sent are updated. The type of an account cannot change.",
@@ -316,6 +346,98 @@
         "title": "CategoryCreate",
         "type": "object"
       },
+      "CategoryParentRef": {
+        "properties": {
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon"
+        ],
+        "title": "CategoryParentRef",
+        "type": "object"
+      },
       "CategoryRead": {
         "properties": {
           "archived_at": {
@@ -441,6 +563,110 @@
           "archived_at"
         ],
         "title": "CategoryRead",
+        "type": "object"
+      },
+      "CategoryRef": {
+        "description": "A category as a movement shows it; `parent` is the main category of a subcategory.",
+        "properties": {
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryParentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "icon",
+          "parent"
+        ],
+        "title": "CategoryRef",
         "type": "object"
       },
       "CategoryUpdate": {
@@ -739,6 +965,252 @@
         "title": "IncomeCreate",
         "type": "object"
       },
+      "MovementListItem": {
+        "description": "An item of the list. `balance_after_minor` appears only when the list is filtered by account.\n\nIt is the balance of that account right after this movement, with the sign of `balance_minor`\n(on a credit card, negative = you owe), whatever the other filters are: a movement that the\nfilters hide still counts. It is null for a movement that does not count for a balance\n(pending or skipped) and always when there is no `account_id` filter.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "balance_after_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance After Minor"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "from_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "confirmed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "expense",
+              "income",
+              "transfer",
+              "adjustment"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "date",
+          "description",
+          "amount_minor",
+          "category",
+          "account",
+          "from_account",
+          "to_account",
+          "balance_after_minor"
+        ],
+        "title": "MovementListItem",
+        "type": "object"
+      },
+      "MovementPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MovementListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "MovementPage",
+        "type": "object"
+      },
+      "MovementRead": {
+        "description": "A movement as the list and the detail show it, in the minor unit of the space's currency.\n\n`amount_minor` has a sign by type: an expense is negative, an income positive, an adjustment\ncarries its own sign (the change of the balance) and a transfer is the unsigned amount that\nmoved (to know whether it came in or went out of an account, compare `from_account` and\n`to_account` with it). The accounts depend on the type: an expense, an income and an\nadjustment have `account`; a transfer has `from_account` and `to_account`. Only an expense\nand an income have `category`.",
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "from_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "confirmed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "to_account": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "expense",
+              "income",
+              "transfer",
+              "adjustment"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "date",
+          "description",
+          "amount_minor",
+          "category",
+          "account",
+          "from_account",
+          "to_account"
+        ],
+        "title": "MovementRead",
+        "type": "object"
+      },
       "SessionCreate": {
         "additionalProperties": false,
         "description": "Body of `POST /auth/session`.",
@@ -876,6 +1348,35 @@
           "entries"
         ],
         "title": "TransactionRead",
+        "type": "object"
+      },
+      "TransactionSummaryRead": {
+        "description": "What the filtered period adds up to, in the minor unit of the space's currency.\n\n`income_minor` and `expense_minor` add up only the confirmed incomes and expenses (never\nadjustments, transfers, pending, skipped or deleted ones), both as positive amounts, and\n`remaining_minor` is their difference (\"te quedan\"). The filters apply as they do to the list,\n`type` included. `count` is every movement the list would show for those filters (any type and\nstatus, deleted ones excluded): the `m` of \"showing n of m\".",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "expense_minor": {
+            "title": "Expense Minor",
+            "type": "integer"
+          },
+          "income_minor": {
+            "title": "Income Minor",
+            "type": "integer"
+          },
+          "remaining_minor": {
+            "title": "Remaining Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "income_minor",
+          "expense_minor",
+          "remaining_minor"
+        ],
+        "title": "TransactionSummaryRead",
         "type": "object"
       },
       "TransferCreate": {
@@ -2396,6 +2897,187 @@
       }
     },
     "/spaces/{space_id}/transactions": {
+      "get": {
+        "description": "The movements of the space, newest first, one page at a time (cursor).\n\nOrder: `date` descending, then `id` descending. `next_cursor` is opaque: send it back as\n`cursor` (with the same filters) for the next page; it is null on the last one. `limit` is 1\nto 100 (50 by default). Filters, all optional and combined: `month` (`YYYY-MM`, on the local\ndate), `type`, `account_id`, `category_id` (a main category includes its subcategories) and\n`q` (the description, ignoring case and accents). An account or category that does not exist\nor is of another space matches nothing. Deleted movements are never listed; pending and\nskipped ones are, with their `status`.\n\nAmounts are in the minor unit of the currency of the space. `amount_minor` is negative for an\nexpense, positive for an income, signed for an adjustment and unsigned for a transfer. With\n`account_id`, each item also has `balance_after_minor`, the balance of that account right\nafter it (negative = debt on a credit card).",
+        "operationId": "list_transactions_spaces__space_id__transactions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(19|20|21)[0-9]{2}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "expense",
+                    "income",
+                    "transfer",
+                    "adjustment"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Transactions",
+        "tags": [
+          "transactions"
+        ]
+      },
       "post": {
         "description": "Register an expense, an income or a transfer; the backend builds the entries.\n\nThe body depends on `type`. An expense and an income take an account, a category of their kind\nand a positive amount; a transfer takes two different accounts (paying a card is a transfer)\nand a positive amount. `amount_minor` is always positive, in the minor unit of the currency of\nthe space: the backend applies the sign (on a credit card an expense raises the debt and a\ntransfer from a bank lowers it). The movement is born `confirmed`.\n\nAccounts and categories must belong to the space and be active, or a 422 names the field\n(`loc` is `[\"body\", \"<type>\", \"<field>\"]`): an id of another space answers like one that does\nnot exist.\n\nWith the optional `Idempotency-Key` header the request can be repeated safely: the same key\n(same user and space) with the same body creates nothing and answers 201 with the same\nmovement; with another body it is a 409 `idempotency_key_reused`. The header must be a UUID\n(422 on the header otherwise).",
         "operationId": "create_transaction_spaces__space_id__transactions_post",
@@ -2512,6 +3194,235 @@
           }
         },
         "summary": "Create Transaction",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/spaces/{space_id}/transactions/summary": {
+      "get": {
+        "description": "Income, expense, what is left and the number of movements of the filtered period.\n\nThe same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed\nincomes and expenses add up; adjustments and transfers do not. `count` is the number of\nmovements the list shows for those filters, for \"showing n of m\".",
+        "operationId": "read_transactions_summary_spaces__space_id__transactions_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(19|20|21)[0-9]{2}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "expense",
+                    "income",
+                    "transfer",
+                    "adjustment"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionSummaryRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Transactions Summary",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/spaces/{space_id}/transactions/{transaction_id}": {
+      "get": {
+        "description": "One movement of the space, with the same shape as an item of the list.\n\nA deleted one, one of another space and one that does not exist are the same 404.",
+        "operationId": "read_transaction_spaces__space_id__transactions__transaction_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Transaction",
         "tags": [
           "transactions"
         ]
