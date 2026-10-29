@@ -73,6 +73,25 @@ describe("MovementDayGroups", () => {
     expect(root.className).toContain("lg:hidden");
   });
 
+  it("keeps the group of a day when a new movement of that day arrives (the date is its key)", () => {
+    const first = [
+      movementItem({ date: "2026-10-22", description: "Café" }),
+      movementItem({ date: "2026-10-21", description: "Tienda Inglesa" }),
+    ];
+    const { rerender } = render(
+      <MovementDayGroups groups={groupMovementsByDay(first, TODAY)} currency={UYU} />,
+    );
+    const today = screen.getByRole("region", { name: /^Hoy/ });
+    const yesterday = screen.getByRole("region", { name: /^Ayer/ });
+
+    const next = [movementItem({ date: "2026-10-22", description: "Almuerzo" }), ...first];
+    rerender(<MovementDayGroups groups={groupMovementsByDay(next, TODAY)} currency={UYU} />);
+
+    expect(screen.getByRole("region", { name: /^Hoy/ })).toBe(today);
+    expect(screen.getByRole("region", { name: /^Ayer/ })).toBe(yesterday);
+    expect(within(today).getAllByRole("listitem")).toHaveLength(2);
+  });
+
   it("draws nothing for no groups", () => {
     render(<MovementDayGroups groups={[]} currency={UYU} />);
     expect(screen.queryAllByRole("heading")).toHaveLength(0);

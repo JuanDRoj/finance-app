@@ -59,6 +59,9 @@ describe("the datasets", () => {
     expect(items.some((item) => item.date.startsWith("2025"))).toBe(true);
     const ids = items.map((item) => item.id);
     expect(new Set(ids).size).toBe(ids.length);
+    // Newest first, as the backend sends them: a day is one run of equal dates, never two groups.
+    const dates = items.map((item) => item.date);
+    expect(dates).toEqual([...dates].sort().reverse());
   });
 
   it("has 500 movements over many days, each with its own id", () => {

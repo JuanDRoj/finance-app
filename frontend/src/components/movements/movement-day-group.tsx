@@ -43,7 +43,9 @@ type MovementDayGroupsProps = {
  * The whole list of a phone: one `MovementDayGroup` per day, 4 px apart (plus the 10 px above each
  * title). Memoized: the screen re-renders for reasons that do not change the rows (a page being
  * fetched, a status flag), and with hundreds of rows loaded that is worth avoiding; it needs the
- * `groups` to be the same array until the data change (`useMemo` on `groupMovementsByDay`).
+ * `groups` to be the same array until the data change (`useMemo` on `groupMovementsByDay`). The
+ * list comes newest first (`date desc, id desc`), so a day is one group and its date is its key:
+ * a new movement of a day already on screen does not mount that group again.
  */
 export const MovementDayGroups = memo(function MovementDayGroups({
   groups,
@@ -53,11 +55,7 @@ export const MovementDayGroups = memo(function MovementDayGroups({
   return (
     <div data-slot="movement-day-groups" className={cn("flex flex-col gap-1", className)}>
       {groups.map((group) => (
-        <MovementDayGroup
-          key={`${group.date}:${group.items[0]?.id}`}
-          group={group}
-          currency={currency}
-        />
+        <MovementDayGroup key={group.date} group={group} currency={currency} />
       ))}
     </div>
   );

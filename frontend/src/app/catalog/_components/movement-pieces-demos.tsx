@@ -238,7 +238,7 @@ export function worstMovements(): MovementListItem[] {
       120000,
     ),
   ];
-  // A day with forty movements.
+  // A day with a hundred movements.
   const crowded = Array.from({ length: 100 }, (_, index) =>
     expense(
       "2026-10-17",
@@ -282,7 +282,7 @@ const DATA: Record<PiecesData, () => MovementListItem[]> = {
 
 export type PiecesSummary = "normal" | "loss" | "max";
 const SUMMARY_CHOICES: Record<PiecesSummary, string> = {
-  normal: "Normal (+ $ 68.150,00 · − $ 36.770,00 · + $ 31.380,00)",
+  normal: "Normal (los tres números del lienzo)",
   loss: "Un mes de pérdida, sin ingresos",
   max: "Los tres en el máximo del backend",
 };
