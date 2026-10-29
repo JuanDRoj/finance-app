@@ -8,7 +8,7 @@ import pytest
 from app.modules.accounts.schemas import AccountRead
 from app.modules.categories.schemas import CategoryRead
 from app.modules.transactions.models import Entry, Transaction
-from app.modules.transactions.movement_view import build_movement
+from app.modules.transactions.movement_view import as_list_item, build_movement
 
 BANK = uuid.uuid4()
 CARD = uuid.uuid4()
@@ -165,3 +165,33 @@ def test_the_status_is_kept() -> None:
 def test_an_unknown_type_is_an_error_not_a_guess() -> None:
     with pytest.raises(ValueError, match="refund"):
         build_movement(_transaction("refund", [(BANK, -1, None)]), ACCOUNTS, CATEGORIES)
+
+
+def test_a_list_item_is_the_movement_plus_the_balance_after_it() -> None:
+    movement = build_movement(
+        _transaction("expense", [(CARD, -900, SUB)], description="Zapatos"), ACCOUNTS, CATEGORIES
+    )
+
+    item = as_list_item(movement, -1_800)
+
+    assert item.balance_after_minor == -1_800
+    assert item.model_dump(exclude={"balance_after_minor"}) == movement.model_dump()
+    # The nested models are the same objects: nothing was dumped and validated again.
+    assert item.category is movement.category
+    assert item.account is movement.account
+
+
+@pytest.mark.parametrize("balance", [None, 0, 5_000])
+def test_a_list_item_keeps_the_balance_as_given(balance: int | None) -> None:
+    movement = build_movement(_transaction("adjustment", [(BANK, 10, None)]), ACCOUNTS, CATEGORIES)
+    assert as_list_item(movement, balance).balance_after_minor == balance
+
+
+def test_a_list_item_of_a_transfer_keeps_both_accounts() -> None:
+    movement = build_movement(
+        _transaction("transfer", [(BANK, -3000, None), (CARD, 3000, None)]), ACCOUNTS, CATEGORIES
+    )
+    item = as_list_item(movement, 100)
+    assert item.from_account is movement.from_account
+    assert item.to_account is movement.to_account
+    assert item.account is None

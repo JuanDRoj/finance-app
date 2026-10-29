@@ -16,7 +16,7 @@ from app.modules.transactions.cursor import decode_cursor, encode_cursor, month_
 from app.modules.transactions.entries import build_entries, referenced_accounts
 from app.modules.transactions.idempotency import IDEMPOTENCY_KEY_TTL, request_fingerprint
 from app.modules.transactions.models import Entry, Transaction
-from app.modules.transactions.movement_view import build_movement
+from app.modules.transactions.movement_view import as_list_item, build_movement
 from app.modules.transactions.schemas import (
     ACCOUNT_ARCHIVED,
     ACCOUNT_NOT_FOUND,
@@ -31,7 +31,6 @@ from app.modules.transactions.schemas import (
     ExpenseCreate,
     IncomeCreate,
     MovementCreate,
-    MovementListItem,
     MovementPage,
     MovementRead,
     TransactionCreate,
@@ -313,10 +312,7 @@ async def list_movements(
             transaction_ids=[row.id for row in shown],
         )
     items = [
-        MovementListItem(
-            **build_movement(row, accounts, categories).model_dump(),
-            balance_after_minor=balances.get(row.id),
-        )
+        as_list_item(build_movement(row, accounts, categories), balances.get(row.id))
         for row in shown
     ]
     return MovementPage(items=items, next_cursor=next_cursor)

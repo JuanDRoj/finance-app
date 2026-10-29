@@ -18,6 +18,7 @@ from app.modules.transactions.schemas import (
     AccountRef,
     CategoryParentRef,
     CategoryRef,
+    MovementListItem,
     MovementRead,
     TransactionStatus,
     TransactionType,
@@ -72,6 +73,28 @@ def build_movement(
         account=account,
         from_account=from_account,
         to_account=to_account,
+    )
+
+
+def as_list_item(movement: MovementRead, balance_after_minor: int | None) -> MovementListItem:
+    """The same movement as an item of the list, with the balance of the filtered account.
+
+    The nested accounts and category are passed as they are (Pydantic does not validate a model
+    instance again), so nothing is dumped to dicts and validated twice. Every field of
+    `MovementRead` is named here on purpose: if one is added, mypy fails until it is copied.
+    """
+    return MovementListItem(
+        id=movement.id,
+        type=movement.type,
+        status=movement.status,
+        date=movement.date,
+        description=movement.description,
+        amount_minor=movement.amount_minor,
+        category=movement.category,
+        account=movement.account,
+        from_account=movement.from_account,
+        to_account=movement.to_account,
+        balance_after_minor=balance_after_minor,
     )
 
 
