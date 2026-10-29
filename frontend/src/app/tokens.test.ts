@@ -147,6 +147,8 @@ const COMPONENT_PAIRS: [string, string, number][] = [
   ["primary", "card-solid", 4.5], // link buttons
   ["debt", "card-solid", 4.5], // the figures of a card's debt in the money field (tone="debt")
   ["secondary-foreground", "secondary", 4.5],
+  ["secondary-foreground", "primary-soft", 4.5], // the category chip in the table of Movimientos (KAN-97)
+  ["primary", "secondary", 3], // the icon of a category on its tile in the list of Movimientos (non-text)
 ];
 
 describe.each([
@@ -158,6 +160,23 @@ describe.each([
       minimum,
     );
   });
+});
+
+// The quiet chip and tile of Movimientos (KAN-97): a transfer and an adjustment are `foreground` at
+// 6 % over whatever is behind (a solid card of the table, a glass card or the page), with
+// `muted-foreground` text and icon. The tint is composited before measuring, over the surfaces that
+// can be under it.
+describe.each([
+  ["light", light],
+  ["dark", dark],
+] as const)("quiet chip of Movimientos, %s palette", (_name, palette) => {
+  it.each(["surface", "card-solid", "background"])(
+    "muted-foreground on foreground at 6%% over %s reaches 4.5:1",
+    (surface) => {
+      const tint = blend(hexOf(palette, "foreground"), hexOf(palette, surface), 0.06);
+      expect(contrast(hexOf(palette, "muted-foreground"), tint)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
 
 // Translucent tokens (rgba). They are painted over the page background, and a decorative blob

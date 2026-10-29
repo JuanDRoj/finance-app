@@ -134,6 +134,26 @@ export function shiftLocalDate(date: string, days: number): string {
 }
 
 /**
+ * The words of a weekday date from `Intl`, the way the app writes them: the weekday first and in
+ * capitals, no comma ("Miércoles 21 de octubre"). The comma that es-UY puts after the weekday is
+ * dropped and the first letter raised.
+ */
+function weekdayDateText(date: Date, timeZone: string, locale: string, withYear: boolean): string {
+  const text = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone,
+  })
+    .formatToParts(date)
+    .map((part) => (part.type === "literal" ? part.value.replace(/^,\s*/, " ") : part.value))
+    .join("")
+    .trim();
+  return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
+}
+
+/**
  * A date as the header of the Inicio writes it: the weekday first, in capitals, and no comma
  * ("Miércoles 21 de octubre"). It is "today" in the space's time zone (`spaces.timezone`), never
  * the device's: an instant near midnight must not name the neighbouring day. The words come from
@@ -149,17 +169,55 @@ export function formatWeekdayDate(
   }
   const date = typeof instant === "string" ? new Date(instant) : instant;
   if (Number.isNaN(date.getTime())) throw new RangeError(`Invalid instant: "${String(instant)}"`);
-  const text = new Intl.DateTimeFormat(locale, {
-    weekday: "long",
-    day: "numeric",
+  return weekdayDateText(date, timeZone, locale, false);
+}
+
+/**
+ * A movement's date (`YYYY-MM-DD`) with its weekday, as the day groups of Movimientos title it
+ * ("Lunes 19 de octubre"; docs/diseno.md D19): formatted as is, with no time zone, so it can never
+ * move to the neighbouring day. `year: true` adds the year ("Lunes 19 de octubre de 2025"), for a
+ * date that is not of the current year. Throws a `RangeError` for a text that is not a real day.
+ */
+export function formatLocalWeekdayDate(
+  date: string,
+  options: { year?: boolean } = {},
+  locale: string = DEFAULT_LOCALE,
+): string {
+  const utc = utcDateOf(date);
+  if (!utc) throw new RangeError(`Expected a real YYYY-MM-DD date: "${date}"`);
+  return weekdayDateText(utc, "UTC", locale, options.year === true);
+}
+
+/** `YYYY-MM`, the month filter of the list of movements: years 1900 to 2199, like the backend's pattern. */
+const MONTH = /^(?:19|20|21)\d{2}-(?:0[1-9]|1[0-2])$/;
+
+/** Whether `text` is a month the backend accepts in `?month=` (`YYYY-MM`, years 1900 to 2199). */
+export function isMonth(text: string): boolean {
+  return MONTH.test(text);
+}
+
+/**
+ * The current month (`YYYY-MM`) in the space's time zone: where Movimientos starts, and what its
+ * "Mes siguiente" is compared with. `now` is a parameter so a test can fix it.
+ */
+export function currentMonthIn(timeZone: string, now: Date = new Date()): string {
+  return todayInTimezone(timeZone, now).slice(0, 7);
+}
+
+/**
+ * A month as the title of Movimientos writes it: "Octubre 2026" (the month in capitals, no "de").
+ * Throws a `RangeError` for a text that is not a month the backend accepts.
+ */
+export function formatMonth(month: string, locale: string = DEFAULT_LOCALE): string {
+  if (!isMonth(month)) throw new RangeError(`Expected a YYYY-MM month: "${month}"`);
+  const [year, number] = [Number(month.slice(0, 4)), Number(month.slice(5, 7))];
+  const parts = new Intl.DateTimeFormat(locale, {
     month: "long",
-    timeZone,
-  })
-    .formatToParts(date)
-    .map((part) => (part.type === "literal" ? part.value.replace(/^,\s*/, " ") : part.value))
-    .join("")
-    .trim();
-  return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
+    year: "numeric",
+    timeZone: "UTC",
+  }).formatToParts(new Date(Date.UTC(year, number - 1, 1)));
+  const name = parts.find((part) => part.type === "month")?.value ?? "";
+  return `${name.charAt(0).toLocaleUpperCase(locale)}${name.slice(1)} ${year}`;
 }
 
 /**
