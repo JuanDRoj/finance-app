@@ -7,12 +7,14 @@ import {
   CATEGORY_KIND_PLURAL_NAMES,
   CURRENCY_NAMES,
   MOVEMENT_SAVE_LABEL,
+  TRANSACTION_STATUS_NAMES,
   TRANSACTION_TYPE_NAMES,
   describeAccountType,
   describeApiError,
   describeCategoryIcon,
   describeCategoryKind,
   describeCurrency,
+  describeTransactionStatus,
   describeTransactionType,
   fieldErrorMessage,
   isErrorResponse,
@@ -577,5 +579,38 @@ describe("CATEGORY_ICON_NAMES", () => {
     expect(describeCategoryIcon("paw-print")).toBe("Huella");
     expect(describeCategoryIcon("a-future-icon")).toBe("Etiqueta");
     expect(describeCategoryIcon("constructor")).toBe("Etiqueta");
+  });
+});
+
+describe("TRANSACTION_STATUS_NAMES and describeTransactionStatus", () => {
+  it("names the three states the backend lists, in Spanish", () => {
+    expect(TRANSACTION_STATUS_NAMES).toEqual({
+      pending: "Pendiente",
+      confirmed: "Confirmado",
+      skipped: "Omitido",
+    });
+    expect(describeTransactionStatus("pending")).toBe("Pendiente");
+    expect(describeTransactionStatus("skipped")).toBe("Omitido");
+  });
+
+  it("never shows a state it does not know, nor an inherited key, as the raw value", () => {
+    expect(describeTransactionStatus("cancelled")).toBe("Sin confirmar");
+    expect(describeTransactionStatus("toString")).toBe("Sin confirmar");
+    expect(describeTransactionStatus("")).toBe("Sin confirmar");
+  });
+});
+
+describe("describeApiError with cursor_invalid (GET /transactions)", () => {
+  const body = {
+    detail: [{ type: "cursor_invalid", loc: ["query", "cursor"], msg: "Invalid cursor" }],
+  };
+
+  it("says the list changed, with a way out, not a field to fix", () => {
+    const { title, message } = describeApiError(apiError(422, body));
+    expect(title).toBe("La lista cambió mientras la mirabas");
+    expect(message).toContain("desde el principio");
+    expect(message).not.toContain("Corrígelo");
+    expect(`${title} ${message}`).not.toContain("cursor");
+    expect(`${title} ${message}`).not.toContain("Invalid");
   });
 });

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentMonthIn,
   formatInstant,
   formatInstantDayMonth,
   formatLocalDate,
+  formatLocalWeekdayDate,
+  formatMonth,
   formatWeekdayDate,
   isLocalDate,
+  isMonth,
   shiftLocalDate,
   todayInTimezone,
 } from "./dates";
@@ -299,5 +303,88 @@ describe("formatInstantDayMonth", () => {
     expect(() => formatInstantDayMonth(new Date("nope"), "America/Montevideo", NOW)).toThrow(
       RangeError,
     );
+  });
+});
+
+describe("formatLocalWeekdayDate", () => {
+  it("writes the weekday in capitals, without a comma, and the day and month in words", () => {
+    // 19 October 2026 is a Monday and 20 October a Tuesday.
+    expect(formatLocalWeekdayDate("2026-10-19")).toBe("Lunes 19 de octubre");
+    expect(formatLocalWeekdayDate("2026-10-20")).toBe("Martes 20 de octubre");
+    expect(formatLocalWeekdayDate("2026-01-01")).toBe("Jueves 1 de enero");
+  });
+
+  it("adds the year only when asked", () => {
+    expect(formatLocalWeekdayDate("2025-12-31", { year: true })).toBe(
+      "Miércoles 31 de diciembre de 2025",
+    );
+    expect(formatLocalWeekdayDate("2025-12-31", { year: false })).toBe("Miércoles 31 de diciembre");
+  });
+
+  it("never moves to the neighbouring day, whatever the zone of the machine (Montevideo, UTC-3)", () => {
+    expect(formatLocalWeekdayDate("2026-10-19")).toBe("Lunes 19 de octubre");
+    expect(formatLocalWeekdayDate("2026-03-01")).toBe("Domingo 1 de marzo");
+    expect(formatLocalWeekdayDate("2024-02-29")).toBe("Jueves 29 de febrero");
+  });
+
+  it("rejects a text that is not a real day", () => {
+    for (const text of ["", "2026-02-30", "2026-10-19T00:00:00Z", "19/10/2026", "0000-01-01"]) {
+      expect(() => formatLocalWeekdayDate(text)).toThrow(RangeError);
+    }
+  });
+});
+
+describe("isMonth", () => {
+  it("accepts YYYY-MM from 1900 to 2199, the pattern of the backend", () => {
+    for (const text of ["1900-01", "2026-10", "2026-12", "2199-12"])
+      expect(isMonth(text)).toBe(true);
+  });
+
+  it("rejects anything else", () => {
+    for (const text of [
+      "",
+      "2026",
+      "2026-1",
+      "2026-13",
+      "2026-00",
+      "1899-12",
+      "2200-01",
+      "2026-10-01",
+      " 2026-10",
+      "2026-10\n",
+      "２０２６-10",
+    ]) {
+      expect(isMonth(text)).toBe(false);
+    }
+  });
+});
+
+describe("currentMonthIn", () => {
+  it("is the month of the space's time zone, not of UTC", () => {
+    // 02:30 UTC of 1 November is still 31 October in Montevideo (UTC-3)...
+    const instant = new Date("2026-11-01T02:30:00Z");
+    expect(currentMonthIn("America/Montevideo", instant)).toBe("2026-10");
+    // ...and already November in Madrid (UTC+1 in November).
+    expect(currentMonthIn("Europe/Madrid", instant)).toBe("2026-11");
+  });
+
+  it("crosses the year at the zone's midnight", () => {
+    expect(currentMonthIn("America/Montevideo", new Date("2027-01-01T02:59:00Z"))).toBe("2026-12");
+    expect(currentMonthIn("America/Montevideo", new Date("2027-01-01T03:00:00Z"))).toBe("2027-01");
+  });
+});
+
+describe("formatMonth", () => {
+  it("writes the month in capitals with the year and no 'de'", () => {
+    expect(formatMonth("2026-10")).toBe("Octubre 2026");
+    expect(formatMonth("2027-01")).toBe("Enero 2027");
+    expect(formatMonth("1900-01")).toBe("Enero 1900");
+    expect(formatMonth("2199-12")).toBe("Diciembre 2199");
+  });
+
+  it("rejects a text that is not a month", () => {
+    for (const text of ["", "2026-13", "2026-10-01", "octubre"]) {
+      expect(() => formatMonth(text)).toThrow(RangeError);
+    }
   });
 });

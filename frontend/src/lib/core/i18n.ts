@@ -201,6 +201,12 @@ const VALIDATION_ERROR_BY_TYPE: Record<string, ErrorDescription> = {
     title: "Esa moneda no está disponible",
     message: `Elige otra de la lista. ${SAFE}`,
   },
+  // `GET /spaces/{id}/transactions`: the `cursor` of the next page cannot be read. The person never
+  // types it, so there is no field to fix; loading the list again from the start is the way out.
+  cursor_invalid: {
+    title: "La lista cambió mientras la mirabas",
+    message: `Vuelve a cargar los movimientos desde el principio. ${SAFE}`,
+  },
 };
 
 /** Spanish message for the `type` of a 422 issue (to mark a form field). Never undefined. */
@@ -336,6 +342,26 @@ export const TRANSACTION_TYPE_NAMES: Readonly<
   transfer: "Transferencia",
   adjustment: "Ajuste",
 };
+
+/**
+ * The state of a movement (`status`), as a person reads it. Hito 1 only creates confirmed ones;
+ * "Pendiente" and "Omitido" come with the recurring templates (Hito 2), but the list already
+ * shows them, with their state, because the backend lists them.
+ */
+export const TRANSACTION_STATUS_NAMES: Readonly<
+  Record<components["schemas"]["TransactionRead"]["status"], string>
+> = {
+  pending: "Pendiente",
+  confirmed: "Confirmado",
+  skipped: "Omitido",
+};
+
+/** A state of a movement in Spanish. One this map does not know shows as "Sin confirmar". */
+export function describeTransactionStatus(status: string): string {
+  return Object.hasOwn(TRANSACTION_STATUS_NAMES, status)
+    ? TRANSACTION_STATUS_NAMES[status as keyof typeof TRANSACTION_STATUS_NAMES]
+    : "Sin confirmar";
+}
 
 /** A kind of movement as the person reads it. One this map does not know shows as "Movimiento". */
 export function describeTransactionType(type: string): string {
