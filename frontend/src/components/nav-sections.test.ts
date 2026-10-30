@@ -39,11 +39,12 @@ describe("isSectionActive", () => {
 });
 
 describe("NAV_SECTIONS", () => {
-  // Only the sections whose screen exists are listed (no link may lead to a 404). Whoever builds
-  // Movimientos adds its entry and changes this test.
-  it("has Inicio and Cuentas until Movimientos exists", () => {
+  // Only the sections whose screen exists are listed (no link may lead to a 404). Hito 1 ends with
+  // these three; Pendientes comes in Hito 2.
+  it("has Inicio, Movimientos and Cuentas, in the order of the canvas", () => {
     expect(NAV_SECTIONS.map((section) => [section.id, section.href, section.label])).toEqual([
       ["home", "/", "Inicio"],
+      ["transactions", "/movimientos", "Movimientos"],
       ["accounts", "/cuentas", "Cuentas"],
     ]);
   });

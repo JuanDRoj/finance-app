@@ -160,13 +160,14 @@ describe("BottomNav", () => {
     expect(nav.getAttribute("data-slot")).toBe("bottom-nav");
     expect(nav.className).toContain("fixed");
     expect(nav.className).toContain("lg:hidden");
-    // Today it has Inicio (the current screen) and Cuentas (KAN-71) before the "+" (since KAN-76 the
-    // main action registers a movement), and Más after it (since KAN-77: Categorías hangs from it).
+    // It has Inicio (the current screen) and Movimientos (FE-22) before the "+" (since KAN-76 the
+    // main action registers a movement), then Cuentas (KAN-71) and Más (since KAN-77: Categorías
+    // hangs from it): the bar of the canvas, two and two around the "+".
     expect(
       screen
         .getAllByRole("link")
         .map((link) => link.getAttribute("aria-label") ?? link.textContent),
-    ).toEqual(["Inicio", "Cuentas", "Registrar movimiento", "Más"]);
+    ).toEqual(["Inicio", "Movimientos", "Registrar movimiento", "Cuentas", "Más"]);
     expect(screen.getByRole("link", { name: "Inicio" }).getAttribute("aria-current")).toBe("page");
   });
 
@@ -245,6 +246,7 @@ describe("BottomNav", () => {
     expect(screen.queryByRole("link", { name: "Registrar movimiento" })).toBeNull();
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Inicio",
+      "Movimientos",
       "Cuentas",
       "Más",
     ]);

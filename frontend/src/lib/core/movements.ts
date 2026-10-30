@@ -4,7 +4,13 @@ import type {
   TransactionSummary,
   TransactionType,
 } from "./data/transactions";
-import { formatLocalDate, formatLocalWeekdayDate, isMonth, shiftLocalDate } from "./dates";
+import {
+  formatLocalDate,
+  formatLocalWeekdayDate,
+  formatMonth,
+  isMonth,
+  shiftLocalDate,
+} from "./dates";
 import { describeTransactionStatus, describeTransactionType } from "./i18n";
 import { formatMoney, type Currency } from "./money";
 
@@ -187,7 +193,64 @@ export function describeFilterButton(count: number): string {
   return `Filtrar, ${count} ${count === 1 ? "filtro activo" : "filtros activos"}`;
 }
 
+/** What a change of filters says: a key with a value sets it, a key with `undefined` takes it away. */
+export type MovementFiltersPatch = {
+  [Key in keyof MovementFilters]?: MovementFilters[Key] | undefined;
+};
+
+/**
+ * The filters after a change (a chip, a month, a search): the keys of `patch` replace those of
+ * `current`, and a key with `undefined` leaves the filter off. The month is never taken away (an
+ * invalid one is ignored) and a search is trimmed and cut like the ones a URL brings.
+ */
+export function mergeMovementFilters(
+  current: MovementFilters,
+  patch: MovementFiltersPatch,
+): MovementFilters {
+  const next: MovementFilters = { month: current.month };
+  if (Object.hasOwn(patch, "month")) {
+    if (patch.month !== undefined && isMonth(patch.month)) next.month = patch.month;
+  }
+  for (const key of ["type", "q", "accountId", "categoryId"] as const) {
+    const value = Object.hasOwn(patch, key) ? patch[key] : current[key];
+    if (value === undefined) continue;
+    if (key === "type") next.type = value as MovementTypeFilter;
+    else if (key === "q") {
+      const q = normalizeSearch(value);
+      if (q) next.q = q;
+    } else next[key] = value;
+  }
+  return next;
+}
+
 // --- The month -------------------------------------------------------------------------------------
+
+/** One month in a list of choices: `value` is `YYYY-MM`, `label` is "Octubre 2026". */
+export type MonthOption = { value: string; label: string };
+
+/** How far the list of months of the desktop select goes: three years back and six months ahead. */
+export const MONTHS_BACK = 36;
+export const MONTHS_AHEAD = 6;
+
+/**
+ * The months the select of the desktop offers, newest first: from six months ahead of `current`
+ * (a movement can be dated in the future) to 36 months back. The `selected` month is always in the
+ * list, in its place, even if it is out of that range (a link or the phone's arrows can leave it
+ * anywhere between 1900 and 2199), so the select never shows a month it cannot name.
+ */
+export function buildMonthOptions(selected: string, current: string): MonthOption[] {
+  const months: string[] = [];
+  for (let delta = MONTHS_AHEAD; delta >= -MONTHS_BACK; delta -= 1) {
+    const month = shiftMonth(current, delta);
+    if (month !== null) months.push(month);
+  }
+  if (isMonth(selected) && !months.includes(selected)) {
+    months.push(selected);
+    // `YYYY-MM` sorts as text: newest first.
+    months.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  }
+  return months.map((value) => ({ value, label: formatMonth(value) }));
+}
 
 /**
  * The month `delta` months after (or before, if negative) `month`, as `YYYY-MM`, or `null` when
@@ -417,7 +480,10 @@ export function summaryFigures(
     },
     remaining: {
       label: "Te quedan",
-      text: formatMoney(summary.remaining_minor, currency, { sign: "exceptZero" }),
+      // BigInt, not the number: `formatMoney` refuses a number that is not a safe integer, and a sum of
+      // very large movements could be one (it is a JSON number); a figure that is off by a few units
+      // is better than a screen that does not open.
+      text: formatMoney(BigInt(summary.remaining_minor), currency, { sign: "exceptZero" }),
       tone: "default",
     },
   };
@@ -426,6 +492,24 @@ export function summaryFigures(
 /** Whether the summary is shown: with "Transferencias" there is nothing to add up (they are not income nor expense). */
 export function showsSummary(filters: Pick<MovementFilters, "type">): boolean {
   return filters.type !== "transfer";
+}
+
+// --- Empty or no results ---------------------------------------------------------------------------
+
+/** What the list says when it has no rows: `loading` while it is found out, then `empty` or `no-results`. */
+export type EmptyKind = "loading" | "empty" | "no-results";
+
+/**
+ * Which empty state fits a list with no rows. The list alone cannot tell "this space has never had
+ * a movement" ("Aún no tienes movimientos") from "this month or these filters match none" ("No hay
+ * movimientos con estos filtros"), so the screen asks for the count of the space with **no filter at
+ * all** (the summary without a month) and this decides: a count of 0 is `empty`, anything else is
+ * `no-results`. While that count is being asked it is `loading`; if it fails, `no-results` (the
+ * person can still move to another month; "Aún no tienes movimientos" would be a lie).
+ */
+export function chooseEmptyState(total: { count?: number; failed?: boolean }): EmptyKind {
+  if (total.count !== undefined) return total.count === 0 ? "empty" : "no-results";
+  return total.failed ? "no-results" : "loading";
 }
 
 // --- Counts ----------------------------------------------------------------------------------------

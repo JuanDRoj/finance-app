@@ -48,7 +48,21 @@ export function formatLocalDate(
   ) {
     throw new RangeError(`Not a real calendar date: "${date}"`);
   }
-  return new Intl.DateTimeFormat(locale, { ...DATE_OPTIONS[style], timeZone: "UTC" }).format(utc);
+  return localDateFormatter(locale, style).format(utc);
+}
+
+// Building an `Intl.DateTimeFormat` costs about a tenth of a millisecond, and a table of Movimientos
+// formats one date per row (500 rows, 50 ms): the formatter of each locale and style is made once.
+const localDateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function localDateFormatter(locale: string, style: DateStyle): Intl.DateTimeFormat {
+  const key = `${locale}|${style}`;
+  let formatter = localDateFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { ...DATE_OPTIONS[style], timeZone: "UTC" });
+    localDateFormatters.set(key, formatter);
+  }
+  return formatter;
 }
 
 /**

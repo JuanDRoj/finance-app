@@ -1,4 +1,4 @@
-import { DotsThree, House, Tag, Wallet } from "@phosphor-icons/react/ssr";
+import { DotsThree, House, ListBullets, Tag, Wallet } from "@phosphor-icons/react/ssr";
 import { MOVEMENT_PANEL, NEW_ACCOUNT_PANEL, type PanelRef } from "@/components/accounts/panel-url";
 
 /** Any Phosphor icon (the library does not export its `Icon` type from the `/ssr` entry). */
@@ -56,12 +56,13 @@ export type NavConfig = {
 /**
  * The sections of the app (docs/diseno.md D17), in the order the navigation shows them. A
  * section is listed when its screen exists (no link may lead to a 404): the task that builds a
- * screen adds its entry here. Hito 1 ends with Inicio, Movimientos and Cuentas; today Inicio and
- * Cuentas (FE-17) exist. The sidebar and the bottom bar read this list. It holds icons, which are functions, so a
+ * screen adds its entry here. Hito 1 ends with Inicio, Movimientos and Cuentas, and all three exist
+ * (Cuentas with FE-17, Movimientos with FE-22). The sidebar and the bottom bar read this list. It holds icons, which are functions, so a
  * Server Component can read the data but must not pass it to a Client Component as a prop.
  */
 export const NAV_SECTIONS: readonly NavSection[] = [
   { id: "home", href: "/", label: "Inicio", icon: House },
+  { id: "transactions", href: "/movimientos", label: "Movimientos", icon: ListBullets },
   { id: "accounts", href: "/cuentas", label: "Cuentas", icon: Wallet },
 ];
 
