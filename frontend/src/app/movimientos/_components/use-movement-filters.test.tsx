@@ -132,4 +132,16 @@ describe("useMovementFilters", () => {
     expect(result.current.filters.q).toBe("café & té #1");
     expect(window.location.search).toContain("q=caf%C3%A9");
   });
+
+  it("writes '+' as %2B, a space as '+' and the quotes whole, and reads them back", () => {
+    const { result } = setup();
+    const q = `2+2 "dos" y d's`;
+    act(() => result.current.setFilters({ q }));
+    expect(window.location.search).toBe("?q=2%2B2+%22dos%22+y+d%27s");
+    expect(result.current.filters.q).toBe(q);
+    // Writing something else next keeps the search as it was written.
+    act(() => result.current.setFilters({ type: "expense" }));
+    expect(window.location.search).toBe("?tipo=gastos&q=2%2B2+%22dos%22+y+d%27s");
+    expect(result.current.filters.q).toBe(q);
+  });
 });

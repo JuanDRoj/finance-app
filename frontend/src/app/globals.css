@@ -338,6 +338,16 @@
     --toast-offset-bottom: calc(var(--bottom-nav-offset) + var(--bottom-nav-height) + 20px);
   }
 
+  /*
+   * Movimientos (FE-33): while the search box has the focus, the keyboard is up and the bottom bar
+   * would ride over it (Android shrinks the page for the keyboard, `interactive-widget`) or hide the
+   * results (iOS): the bar is hidden until the field loses the focus. The slot is the one of
+   * `SearchBox` (`search-box.tsx`); on desktop the bar is not there anyway.
+   */
+  body:has([data-slot="movement-search"] input:focus) [data-slot="bottom-nav"] {
+    display: none;
+  }
+
   /* KAN-27: after logout, a copy of the page that the browser restores from its back/forward cache
      shows nothing (`markSessionEnded()` in components/bfcache-guard.tsx sets this). */
   html[data-session-ended] body {

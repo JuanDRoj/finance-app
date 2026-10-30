@@ -6,7 +6,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MovementDayGroups } from "@/components/movements/movement-day-group";
 import { MovementsEmpty } from "@/components/movements/movements-empty";
 import { MovementsError } from "@/components/movements/movements-error";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { browserApi } from "@/lib/api/browser";
 import { accountsQueryOptions } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
+import { categoriesQueryOptions } from "@/lib/core/data/categories";
 import {
   transactionsListKey,
   transactionsListQueryOptions,
@@ -29,6 +31,7 @@ import {
 import { formatMonth } from "@/lib/core/dates";
 import type { Currency } from "@/lib/core/money";
 import {
+  activeFilterCount,
   chooseEmptyState,
   describeMovementCount,
   describeShown,
@@ -39,12 +42,20 @@ import {
   showsSummary,
 } from "@/lib/core/movements";
 import { cn } from "@/lib/utils";
+import { FilterButton } from "./filter-button";
 import { MoreFooter, MoreSentinel, NextPageError } from "./load-more";
 import { MonthNav } from "./month-nav";
 import { MovementFiltersCard } from "./movement-filters-card";
+import { SEARCH_TOGGLE_ID, SearchBox } from "./search-box";
+import { setSearchOpen, useSearchOpen } from "./search-open-store";
 import { SummaryError } from "./summary-error";
 import { TypeChips } from "./type-chips";
 import { useMovementFilters } from "./use-movement-filters";
+
+// The sheet of "Filtrar" is loaded when it is first asked for (or when the button is about to be
+// pressed), not with the screen: it is only for a phone, and only a few ever open it.
+const loadFilterSheet = () => import("./filter-sheet");
+const FilterSheet = dynamic(() => loadFilterSheet().then((module) => module.FilterSheet));
 
 type MovementsScreenProps = {
   space: { id: string; currency: Currency };
@@ -78,6 +89,13 @@ type MovementsScreenProps = {
  *   figures (the list stays right without it); a next page that fails says so once, under the list,
  *   and asks nothing until "Reintentar" (an unreadable cursor, the 422 `cursor_invalid`, starts the
  *   list again from the first page; any other failure asks for the same page again).
+ * - **Search and filters (FE-33).** The search box (`?q=`, 350 ms after the last key) is in the filters
+ *   card on desktop and, on a phone, under the header when the magnifier opens it (or a link brings
+ *   a `?q=`); the account and the category are selects in the card and, on a phone, the sheet "Filtrar
+ *   movimientos" that the button of the month's row opens (with the number of filters on). The
+ *   accounts and the categories come from two queries (archived ones included); a list that did not
+ *   load turns its select off instead of passing for "no accounts".
+ *   "Quitar filtros" (the empty state's and the sheet's) also empties a text typed and not yet searched.
  * - **A space with no movement** shows the invitation. On desktop it hides the filters and the
  *   figures (there is nothing to filter); on a phone the month and the chips stay, as the canvas draws.
  * - The rows are **read only** (FE-22); editing and deleting are FE-23's.
@@ -100,6 +118,8 @@ export function MovementsScreen({
     placeholderData: keepPreviousData,
   });
   const accounts = useQuery(accountsQueryOptions(api, space.id, { includeArchived: true }));
+  // Archived ones too: a movement can be on an archived account or category and be filtered by it.
+  const categories = useQuery(categoriesQueryOptions(api, space.id, { includeArchived: true }));
 
   const rows = useMemo(() => flattenMovementPages(list.data), [list.data]);
   const groups = useMemo(() => groupMovementsByDay(rows, today), [rows, today]);
@@ -138,10 +158,35 @@ export function MovementsScreen({
     }
   };
 
+  // The search field of a phone is open when the magnifier opened it or a link brought a search.
+  const searchOpenedByHand = useSearchOpen();
+  const searchOpen = searchOpenedByHand || filters.q !== undefined;
+  // Leaving the screen closes it: coming back, the field starts shut (unless the URL has a search).
+  useEffect(() => () => setSearchOpen(false), []);
+  const closeSearch = () => {
+    setFilters({ q: undefined });
+    setSearchOpen(false);
+    document.getElementById(SEARCH_TOGGLE_ID)?.focus();
+  };
+
+  // "Quitar filtros" also empties what was typed and not searched yet. The URL cannot say it: with no
+  // search in it, clearing changes nothing there, and a text still waiting for its 350 ms would come
+  // back as `?q=`. Each clear gives the boxes a new `key`, so they start again from the URL, with
+  // no text and no timer (the echo bookkeeping of a box lives and dies with it).
+  const [searchEpoch, setSearchEpoch] = useState(0);
+  const clearAll = () => {
+    clearFilters();
+    setSearchEpoch((epoch) => epoch + 1);
+  };
+
+  const [sheetLoaded, setSheetLoaded] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+
   const filtersCardRef = useRef<HTMLDivElement>(null);
   const phoneControlsRef = useRef<HTMLDivElement>(null);
   const clearAndFocus = () => {
-    clearFilters();
+    clearAll();
     // "Quitar filtros" goes away with the state it was in: the focus goes to the type, the first filter.
     const desktop = window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
     (desktop ? filtersCardRef : phoneControlsRef).current
@@ -252,10 +297,10 @@ export function MovementsScreen({
 
   return (
     <div className="flex flex-col gap-2.5 lg:gap-3.5">
-      {/* The count of the period, announced when the filters change; the line under the title is for sight. */}
+      {/* The month and the count, announced once when the filters change: the month's own label does not announce, and the line under the title is for sight. */}
       <p role="status" className="sr-only">
         {summary.data && !summary.isPlaceholderData
-          ? describeMovementCount(summary.data.count)
+          ? `${period}: ${describeMovementCount(summary.data.count)}`
           : ""}
       </p>
       {spaceIsEmpty ? null : (
@@ -263,18 +308,54 @@ export function MovementsScreen({
           <MovementFiltersCard
             filters={filters}
             currentMonth={currentMonth}
+            accounts={accounts.data}
+            accountsFailed={accounts.isError && accounts.data === undefined}
+            categories={categories.data}
+            categoriesFailed={categories.isError && categories.data === undefined}
             onChange={setFilters}
+            searchResetKey={searchEpoch}
           />
         </div>
       )}
       <div ref={phoneControlsRef} className="flex flex-col gap-2 lg:hidden">
-        {/* The right of this row is for "Filtrar" (FE-33). */}
+        {searchOpen ? (
+          <SearchBox
+            key={searchEpoch}
+            variant="phone"
+            value={filters.q}
+            onCommit={(q) => setFilters({ q })}
+            onClose={closeSearch}
+          />
+        ) : null}
         <div className="-ml-3 flex items-center justify-between">
           <MonthNav month={filters.month} onMonthChange={(month) => setFilters({ month })} />
+          <FilterButton
+            ref={filterButtonRef}
+            count={activeFilterCount(filters)}
+            onWarmUp={() => void loadFilterSheet()}
+            onClick={() => {
+              setSheetLoaded(true);
+              setSheetOpen(true);
+            }}
+          />
         </div>
         <TypeChips type={filters.type} onTypeChange={(type) => setFilters({ type })} />
       </div>
       {body}
+      {sheetLoaded ? (
+        <FilterSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          filters={filters}
+          accounts={accounts.data}
+          accountsFailed={accounts.isError && accounts.data === undefined}
+          categories={categories.data}
+          categoriesFailed={categories.isError && categories.data === undefined}
+          onApply={setFilters}
+          onClear={clearAll}
+          finalFocus={filterButtonRef}
+        />
+      ) : null}
     </div>
   );
 }

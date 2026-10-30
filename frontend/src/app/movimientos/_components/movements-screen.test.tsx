@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EFECTIVO,
   ITAU,
+  VISA,
   incomeItem,
   movementItem,
   transferItem,
@@ -16,8 +17,11 @@ import {
   type ScriptedMovementsApi,
 } from "@/components/movements/scripted-movements-api";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
+import type { CategoryRead } from "@/lib/core/data/categories";
 import type { MovementListItem } from "@/lib/core/data/transactions";
 import { MovementsScreen } from "./movements-screen";
+import { PHONE_SEARCH_INPUT_ID, SEARCH_DEBOUNCE_MS, SEARCH_TOGGLE_ID } from "./search-box";
+import { SearchToggle } from "./search-toggle";
 
 // The screen runs for real (the filters in the URL, the queries, the lists, the states) against a
 // scripted backend that filters, pages by cursor and adds up the summary like the real one. CSS is
@@ -106,6 +110,16 @@ function expenses(count: number): MovementListItem[] {
   );
 }
 
+const CATEGORY = (overrides: Partial<CategoryRead> = {}): CategoryRead => ({
+  id: "c1",
+  name: "Comida",
+  kind: "expense",
+  icon: "fork-knife",
+  parent_id: null,
+  archived_at: null,
+  ...overrides,
+});
+
 const THREE: MovementListItem[] = [
   movementItem({ id: "t1", date: "2026-10-29", description: "Café", amount_minor: -18000 }),
   incomeItem({ id: "t2", date: "2026-10-28", description: "Sueldo", amount_minor: 6800000 }),
@@ -115,6 +129,7 @@ const THREE: MovementListItem[] = [
 type Setup = {
   items?: MovementListItem[];
   accounts?: AccountWithBalance[];
+  categories?: CategoryRead[];
   fault?: (call: ScriptedCall) => Fault | undefined;
   delay?: (call: ScriptedCall) => number;
   url?: string;
@@ -123,6 +138,7 @@ type Setup = {
 function setup({
   items = THREE,
   accounts = [ACCOUNT()],
+  categories = [],
   fault,
   delay,
   url = "/movimientos",
@@ -132,12 +148,15 @@ function setup({
   const api: ScriptedMovementsApi = scriptedMovementsApi({
     items: () => state.items,
     accounts: () => accounts,
+    categories: () => categories,
     fault: (call) => state.fault?.(call),
     delay: (call) => state.delay?.(call) ?? 0,
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
+      {/* The magnifier lives in the header of the page, outside the screen: it is next to it here. */}
+      <SearchToggle currentMonth={CURRENT} />
       <MovementsScreen space={SPACE} currentMonth={CURRENT} today={TODAY} api={api} />
     </QueryClientProvider>,
   );
@@ -178,6 +197,7 @@ describe("the first load", () => {
     expect(callsOf(api, "list")[0]!.query).toEqual({ month: CURRENT, limit: 50 });
     expect(callsOf(api, "summary")[0]!.query).toEqual({ month: CURRENT });
     expect(callsOf(api, "accounts")[0]!.query).toEqual({ include_archived: true });
+    expect(callsOf(api, "categories")[0]!.query).toEqual({ include_archived: true });
     // It does not ask for the total of the space: the list has rows.
     expect(callsOf(api, "total")).toHaveLength(0);
   });
@@ -195,9 +215,9 @@ describe("the first load", () => {
     setup();
     await loaded();
     await waitFor(() =>
-      expect(screen.getAllByRole("status").some((s) => s.textContent === "3 movimientos")).toBe(
-        true,
-      ),
+      expect(
+        screen.getAllByRole("status").some((s) => s.textContent === "Octubre 2026: 3 movimientos"),
+      ).toBe(true),
     );
   });
 
@@ -290,7 +310,7 @@ describe("the filters", () => {
     ).toBe("false");
   });
 
-  it("filters by the search of a link, with no field to type it in yet", async () => {
+  it("filters by the search of a link", async () => {
     const { api } = setup({ url: "/movimientos?q=CAFE" });
     await loaded();
     expect(callsOf(api, "list")[0]!.query).toEqual({ month: CURRENT, q: "CAFE", limit: 50 });
@@ -308,7 +328,7 @@ describe("the filters", () => {
     expect(callsOf(api, "list")[0]!.query).toEqual({ month: CURRENT, limit: 50 });
   });
 
-  it("filters by an account of a link, without a control for it yet", async () => {
+  it("filters by an account of a link", async () => {
     const { api } = setup({
       url: `/movimientos?cuenta_id=${ID_A}`,
       items: [
@@ -345,6 +365,516 @@ describe("the filters", () => {
     fireEvent.click(desktopFilters().getByRole("button", { name: "Transferencias" }));
     await waitFor(() => expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull());
     expect(screen.getAllByText("Pago de Visa Itaú").length).toBeGreaterThan(0);
+  });
+});
+
+// Accounts and categories with real ids: the URL only takes a uuid for them.
+const ID_VISA = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0003";
+const ID_FOOD = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0010";
+const ID_SUPER = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0011";
+const ID_SALARY = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0012";
+const ID_PETS = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0013";
+const ID_UNKNOWN = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0099";
+
+const A_ITAU = { ...ITAU, id: ID_A };
+const A_VISA = { ...VISA, id: ID_VISA };
+const FOOD = { id: ID_FOOD, name: "Comida", icon: "fork-knife" } as const;
+
+const FILTER_ITEMS: MovementListItem[] = [
+  movementItem({
+    id: "f1",
+    date: "2026-10-29",
+    description: "Café",
+    account: A_VISA,
+    category: { ...FOOD, id: ID_SUPER, name: "Supermercado", parent: FOOD },
+  }),
+  movementItem({
+    id: "f2",
+    date: "2026-10-28",
+    description: "Almuerzo",
+    account: A_ITAU,
+    category: { ...FOOD, parent: null },
+  }),
+  incomeItem({
+    id: "f3",
+    date: "2026-10-27",
+    description: "Sueldo",
+    account: A_ITAU,
+    category: { id: ID_SALARY, name: "Sueldo", icon: "money", parent: null },
+  }),
+];
+const FILTER_ACCOUNTS = [
+  ACCOUNT({ id: ID_A, name: "Itaú" }),
+  ACCOUNT({ id: ID_VISA, name: "Visa Itaú", type: "credit_card" }),
+  ACCOUNT({
+    id: "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0004",
+    name: "BROU",
+    archived_at: "2026-09-01T12:00:00Z",
+  }),
+];
+const FILTER_CATEGORIES = [
+  CATEGORY({ id: ID_FOOD, name: "Comida" }),
+  CATEGORY({ id: ID_SUPER, name: "Supermercado", parent_id: ID_FOOD }),
+  CATEGORY({ id: ID_SALARY, name: "Sueldo", kind: "income" }),
+  CATEGORY({ id: ID_PETS, name: "Mascotas", archived_at: "2026-09-01T12:00:00Z" }),
+];
+
+const filterSetup = (extra: Setup = {}) =>
+  setup({
+    items: FILTER_ITEMS,
+    accounts: FILTER_ACCOUNTS,
+    categories: FILTER_CATEGORIES,
+    ...extra,
+  });
+
+const searchFieldIn = (scope: ReturnType<typeof within>) =>
+  scope.getByRole("searchbox", { name: "Buscar por descripción" }) as HTMLInputElement;
+const accountSelect = (scope = desktopFilters()) =>
+  scope.getByRole("combobox", { name: "Cuenta" }) as HTMLSelectElement;
+const categorySelect = (scope = desktopFilters()) =>
+  scope.getByRole("combobox", { name: "Categoría" }) as HTMLSelectElement;
+const optionLabels = (select: HTMLSelectElement) =>
+  Array.from(select.options).map((option) => option.textContent);
+const chosenLabel = (select: HTMLSelectElement) => select.selectedOptions[0]?.textContent;
+/** Whether the table has the row of a movement: by its description, never by a name that also is an option. */
+const hasRow = (description: string) =>
+  within(screen.getByRole("table")).queryByRole("rowheader", { name: description }) !== null;
+const NO_RESULTS = "No hay movimientos con estos filtros";
+/** Lets the real clock run, so a debounce that was not cancelled has the time to fire. */
+const wait = (ms: number) =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
+
+describe("the search", () => {
+  it("searches from the desktop field once the typing stops, and writes it to the URL", async () => {
+    const { api } = setup();
+    await loaded();
+    const field = searchFieldIn(desktopFilters());
+    fireEvent.change(field, { target: { value: "cafe" } });
+    // Not a request per key: the URL waits for the typing to stop.
+    expect(window.location.search).toBe("");
+    await waitFor(() => expect(window.location.search).toBe("?q=cafe"));
+    await waitFor(() => expect(callsOf(api, "list").at(-1)!.query.q).toBe("cafe"));
+    await waitFor(() => expect(hasRow("Sueldo")).toBe(false));
+    expect(hasRow("Café")).toBe(true);
+  });
+
+  it("searches at once with Enter", async () => {
+    setup();
+    await loaded();
+    const field = searchFieldIn(desktopFilters());
+    fireEvent.change(field, { target: { value: "sueldo" } });
+    fireEvent.submit(field.closest("form")!);
+    expect(window.location.search).toBe("?q=sueldo");
+  });
+
+  it("says there is nothing for the search, with a way to clear it, and empties the field with it", async () => {
+    setup();
+    await loaded();
+    const field = searchFieldIn(desktopFilters());
+    fireEvent.change(field, { target: { value: "zzz" } });
+    fireEvent.submit(field.closest("form")!);
+    await screen.findByText("No hay movimientos con estos filtros");
+    fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+    expect(window.location.search).toBe("");
+    expect(searchFieldIn(desktopFilters()).value).toBe("");
+    await loaded();
+    expect(hasRow("Sueldo")).toBe(true);
+  });
+
+  it("keeps the phone's field shut until the magnifier opens it, while desktop's is always there", async () => {
+    setup();
+    await loaded();
+    expect(phoneControls().queryByRole("searchbox")).toBeNull();
+    expect(searchFieldIn(desktopFilters())).toBeTruthy();
+    const magnifier = screen.getByRole("button", { name: "Buscar" });
+    expect(magnifier.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens the phone's field with the magnifier, focused, and shuts it clearing the search", async () => {
+    setup();
+    await loaded();
+    const magnifier = screen.getByRole("button", { name: "Buscar" });
+    fireEvent.click(magnifier);
+    const field = searchFieldIn(phoneControls());
+    expect(document.activeElement).toBe(field);
+    expect(magnifier.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.change(field, { target: { value: "cafe" } });
+    fireEvent.submit(field.closest("form")!);
+    expect(window.location.search).toBe("?q=cafe");
+    // Enter on a phone puts the keyboard away.
+    expect(document.activeElement).not.toBe(field);
+    fireEvent.click(phoneControls().getByRole("button", { name: "Cerrar la búsqueda" }));
+    expect(phoneControls().queryByRole("searchbox")).toBeNull();
+    expect(window.location.search).toBe("");
+    expect(document.activeElement?.id).toBe(SEARCH_TOGGLE_ID);
+    expect(searchFieldIn(desktopFilters()).value).toBe("");
+  });
+
+  it("opens the phone's field with the text of a link's search, and desktop's has it too", async () => {
+    const { api } = setup({ url: "/movimientos?q=cafe" });
+    await loaded();
+    expect(searchFieldIn(phoneControls()).value).toBe("cafe");
+    expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
+    expect(callsOf(api, "list")[0]!.query.q).toBe("cafe");
+  });
+
+  it("keeps both the month and the search when the month changes before the search is written", async () => {
+    setup();
+    await loaded();
+    fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "cafe" } });
+    // Inside the 350 ms of the pause: the month goes to the URL first, the search after it.
+    fireEvent.change(screen.getByRole("combobox", { name: "Mes" }), {
+      target: { value: "2026-09" },
+    });
+    expect(window.location.search).toBe("?mes=2026-09");
+    await waitFor(() => expect(window.location.search).toBe("?mes=2026-09&q=cafe"));
+    expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
+    expect((screen.getByRole("combobox", { name: "Mes" }) as HTMLSelectElement).value).toBe(
+      "2026-09",
+    );
+  });
+
+  it("keeps both the type and the search when the type changes before the search is written", async () => {
+    setup();
+    await loaded();
+    fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "cafe" } });
+    fireEvent.click(desktopFilters().getByRole("button", { name: "Gastos" }));
+    expect(window.location.search).toBe("?tipo=gastos");
+    await waitFor(() => expect(window.location.search).toBe("?tipo=gastos&q=cafe"));
+    expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
+  });
+
+  describe("'Quitar filtros' and a text that was typed and not searched yet", () => {
+    // A type with nothing in it: the empty state offers "Quitar filtros" while the URL has no search.
+    const onlyIncomeWithGastos = () =>
+      setup({
+        url: "/movimientos?tipo=gastos",
+        items: [incomeItem({ id: "only", date: "2026-10-27" })],
+      });
+
+    it("empties the desktop field and does not let the search come back", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(desktopFilters()).value).toBe("");
+      // The 350 ms of the text that was typed run out with nobody left to write it.
+      await wait(SEARCH_DEBOUNCE_MS + 150);
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(desktopFilters()).value).toBe("");
+    });
+
+    it("empties the phone's field too", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+      fireEvent.change(searchFieldIn(phoneControls()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      expect(searchFieldIn(phoneControls()).value).toBe("");
+      await wait(SEARCH_DEBOUNCE_MS + 150);
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(phoneControls()).value).toBe("");
+    });
+
+    it("still writes a search typed after it, and keeps what the person types next", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "sueldo" } });
+      await waitFor(() => expect(window.location.search).toBe("?q=sueldo"));
+      // Two writes in a row do not undo each other: the field keeps what was typed after the echo.
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "sueldo de" } });
+      await waitFor(() => expect(window.location.search).toBe("?q=sueldo+de"));
+      expect(searchFieldIn(desktopFilters()).value).toBe("sueldo de");
+    });
+  });
+
+  it("starts the phone's field shut again after leaving the screen", async () => {
+    const { view } = setup();
+    await loaded();
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(searchFieldIn(phoneControls())).toBeTruthy();
+    view.unmount();
+    setup();
+    await loaded();
+    expect(phoneControls().queryByRole("searchbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Buscar" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("cuts a link's search to 100 characters, in the field and in the request", async () => {
+    const { api } = setup({ url: `/movimientos?q=${"a".repeat(150)}` });
+    await screen.findByText(NO_RESULTS);
+    expect(callsOf(api, "list")[0]!.query.q).toBe("a".repeat(100));
+    expect(searchFieldIn(desktopFilters()).value).toBe("a".repeat(100));
+  });
+});
+
+describe("the account and the category", () => {
+  it("lists the active accounts first and the archived ones marked, in the card", async () => {
+    filterSetup();
+    await loaded();
+    await waitFor(() =>
+      expect(optionLabels(accountSelect())).toEqual([
+        "Todas las cuentas",
+        "Itaú",
+        "Visa Itaú",
+        "BROU (archivada)",
+      ]),
+    );
+  });
+
+  it("groups the categories in Gastos, Ingresos and Archivadas, the principal ones only", async () => {
+    filterSetup();
+    await loaded();
+    await waitFor(() =>
+      expect(optionLabels(categorySelect())).toEqual([
+        "Todas las categorías",
+        "Comida",
+        "Sueldo",
+        "Mascotas (archivada)",
+      ]),
+    );
+    const groups = Array.from(categorySelect().querySelectorAll("optgroup")).map(
+      (group) => group.label,
+    );
+    expect(groups).toEqual(["Gastos", "Ingresos", "Archivadas"]);
+  });
+
+  it("filters by an account chosen in the card: the URL, the request and the rows", async () => {
+    const { api } = filterSetup();
+    await loaded();
+    await waitFor(() => expect(optionLabels(accountSelect())).toContain("Itaú"));
+    fireEvent.change(accountSelect(), { target: { value: ID_A } });
+    expect(window.location.search).toBe(`?cuenta_id=${ID_A}`);
+    await waitFor(() => expect(callsOf(api, "list").at(-1)!.query.account_id).toBe(ID_A));
+    await waitFor(() => expect(callsOf(api, "summary").at(-1)!.query.account_id).toBe(ID_A));
+    await waitFor(() => expect(hasRow("Café")).toBe(false));
+    expect(hasRow("Almuerzo")).toBe(true);
+    expect(hasRow("Sueldo")).toBe(true);
+    // "Todas las cuentas" takes it off.
+    fireEvent.change(accountSelect(), { target: { value: "" } });
+    expect(window.location.search).toBe("");
+  });
+
+  it("filters by a main category and takes its subcategories in", async () => {
+    const { api } = filterSetup();
+    await loaded();
+    await waitFor(() => expect(optionLabels(categorySelect())).toContain("Comida"));
+    fireEvent.change(categorySelect(), { target: { value: ID_FOOD } });
+    expect(window.location.search).toBe(`?categoria_id=${ID_FOOD}`);
+    await waitFor(() => expect(callsOf(api, "list").at(-1)!.query.category_id).toBe(ID_FOOD));
+    await waitFor(() => expect(hasRow("Sueldo")).toBe(false));
+    // Café is on "Supermercado", a subcategory of Comida.
+    expect(hasRow("Café")).toBe(true);
+    expect(hasRow("Almuerzo")).toBe(true);
+  });
+
+  it("shows what the URL says once the lists load, and asks nothing else of the backend", async () => {
+    const { api } = filterSetup({
+      url: `/movimientos?cuenta_id=${ID_VISA}&categoria_id=${ID_SUPER}`,
+    });
+    await loaded();
+    await waitFor(() => expect(chosenLabel(accountSelect())).toBe("Visa Itaú"));
+    expect(chosenLabel(categorySelect())).toBe("Comida › Supermercado");
+    expect(callsOf(api, "list")[0]!.query).toMatchObject({
+      account_id: ID_VISA,
+      category_id: ID_SUPER,
+    });
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2);
+  });
+
+  it("marks an archived account and category of the URL as such", async () => {
+    filterSetup({ url: `/movimientos?categoria_id=${ID_PETS}` });
+    await screen.findByText(NO_RESULTS);
+    await waitFor(() => expect(chosenLabel(categorySelect())).toBe("Mascotas (archivada)"));
+  });
+
+  it("names an account or a category that the lists do not have 'Otra', and keeps filtering by it", async () => {
+    const { api } = filterSetup({
+      url: `/movimientos?cuenta_id=${ID_UNKNOWN}&categoria_id=${ID_UNKNOWN}`,
+    });
+    await screen.findByText(NO_RESULTS);
+    expect(chosenLabel(accountSelect())).toBe("Otra cuenta");
+    expect(chosenLabel(categorySelect())).toBe("Otra categoría");
+    expect(callsOf(api, "list")[0]!.query).toMatchObject({
+      account_id: ID_UNKNOWN,
+      category_id: ID_UNKNOWN,
+    });
+    // The way out is there: "Todas las cuentas".
+    fireEvent.change(accountSelect(), { target: { value: "" } });
+    expect(window.location.search).toBe(`?categoria_id=${ID_UNKNOWN}`);
+  });
+
+  it("lists an account and a category of 80 characters whole, and an emoji or Arabic one", async () => {
+    const long = "x".repeat(80);
+    filterSetup({
+      accounts: [
+        ACCOUNT({ id: ID_A, name: long }),
+        ACCOUNT({ id: ID_VISA, name: "Cuenta 🏦 العربية" }),
+      ],
+      categories: [CATEGORY({ id: ID_FOOD, name: long }), CATEGORY({ id: ID_SUPER, name: "🍕" })],
+    });
+    await loaded();
+    await waitFor(() => expect(optionLabels(accountSelect())).toContain(long));
+    expect(optionLabels(accountSelect())).toContain("Cuenta 🏦 العربية");
+    expect(optionLabels(categorySelect())).toEqual(["Todas las categorías", long, "🍕"]);
+  });
+
+  it("leaves the select off, never an empty one, when its list failed", async () => {
+    filterSetup({ fault: (call) => (call.kind === "categories" ? "server" : undefined) });
+    await loaded();
+    await waitFor(() => expect(categorySelect().disabled).toBe(true));
+    expect(accountSelect().disabled).toBe(false);
+    // It says why, in text, and the off select points to it (it cannot be tabbed to).
+    const note = desktopFilters().getByText("No se pudieron cargar tus categorías.");
+    expect(categorySelect().getAttribute("aria-describedby")).toBe(note.id);
+    expect(accountSelect().hasAttribute("aria-describedby")).toBe(false);
+    // The list of movements is right without it.
+    expect(hasRow("Café")).toBe(true);
+  });
+
+  it("keeps the select of a chosen category on when its list failed, so it can be taken off", async () => {
+    filterSetup({
+      url: `/movimientos?categoria_id=${ID_SUPER}`,
+      fault: (call) => (call.kind === "categories" ? "server" : undefined),
+    });
+    const note = await desktopFilters().findByText("No se pudieron cargar tus categorías.");
+    expect(categorySelect().getAttribute("aria-describedby")).toBe(note.id);
+    expect(categorySelect().disabled).toBe(false);
+    expect(chosenLabel(categorySelect())).toBe("Otra categoría");
+    fireEvent.change(categorySelect(), { target: { value: "" } });
+    expect(window.location.search).toBe("");
+  });
+});
+
+describe("the sheet 'Filtrar movimientos' of a phone", () => {
+  // The screen loads the sheet on the first tap; the first import of a test run is the slow one.
+  beforeAll(async () => {
+    await import("./filter-sheet");
+  });
+
+  const filterButton = (name = "Filtrar") => phoneControls().getByRole("button", { name });
+  const sheet = async () =>
+    within(await screen.findByRole("dialog", { name: "Filtrar movimientos" }));
+  const closed = () => waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+  it("counts the account and the category on the button, and nothing else", async () => {
+    filterSetup({ url: "/movimientos?mes=2026-09&tipo=gastos&q=cafe" });
+    await screen.findByText("No hay movimientos con estos filtros");
+    expect(filterButton("Filtrar")).toBeTruthy();
+  });
+
+  it("says how many filters are on, in words", async () => {
+    filterSetup({ url: `/movimientos?cuenta_id=${ID_A}` });
+    await loaded();
+    expect(filterButton("Filtrar, 1 filtro activo")).toBeTruthy();
+  });
+
+  it("opens with what the URL says, and 'Ver movimientos' applies the account and the category in one go", async () => {
+    filterSetup();
+    await loaded();
+    fireEvent.click(filterButton());
+    const dialog = await sheet();
+    await waitFor(() => expect(optionLabels(accountSelect(dialog))).toContain("Itaú"));
+    expect(accountSelect(dialog).value).toBe("");
+    fireEvent.change(accountSelect(dialog), { target: { value: ID_A } });
+    fireEvent.change(categorySelect(dialog), { target: { value: ID_FOOD } });
+    // Nothing is written until "Ver movimientos".
+    expect(window.location.search).toBe("");
+    fireEvent.click(dialog.getByRole("button", { name: "Ver movimientos" }));
+    expect(window.location.search).toBe(`?cuenta_id=${ID_A}&categoria_id=${ID_FOOD}`);
+    await closed();
+    expect(filterButton("Filtrar, 2 filtros activos")).toBeTruthy();
+    await waitFor(() => expect(hasRow("Café")).toBe(false));
+    expect(hasRow("Almuerzo")).toBe(true);
+  });
+
+  it("throws the draft away when it is closed any other way, and opens again from the URL", async () => {
+    filterSetup();
+    await loaded();
+    fireEvent.click(filterButton());
+    let dialog = await sheet();
+    await waitFor(() => expect(optionLabels(accountSelect(dialog))).toContain("Itaú"));
+    fireEvent.change(accountSelect(dialog), { target: { value: ID_A } });
+    fireEvent.keyDown(dialog.getByRole("button", { name: "Ver movimientos" }), { key: "Escape" });
+    await closed();
+    expect(window.location.search).toBe("");
+    fireEvent.click(filterButton());
+    dialog = await sheet();
+    expect(accountSelect(dialog).value).toBe("");
+  });
+
+  it("'Quitar filtros' takes off the type, the search, the account and the category, but not the month", async () => {
+    filterSetup({
+      url: `/movimientos?mes=2026-09&tipo=gastos&q=cafe&cuenta_id=${ID_A}&categoria_id=${ID_FOOD}`,
+    });
+    await screen.findByText("No hay movimientos con estos filtros");
+    fireEvent.click(filterButton("Filtrar, 2 filtros activos"));
+    const dialog = await sheet();
+    fireEvent.click(dialog.getByRole("button", { name: "Quitar filtros" }));
+    expect(window.location.search).toBe("?mes=2026-09");
+    await closed();
+    expect(filterButton("Filtrar")).toBeTruthy();
+  });
+
+  it("'Quitar filtros' also empties a text typed and not searched yet, in the phone's field and in desktop's", async () => {
+    filterSetup();
+    await loaded();
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    fireEvent.click(filterButton());
+    const dialog = await sheet();
+    // The boxes are behind the sheet. Typing and tapping "Quitar filtros" inside the 350 ms is what a
+    // quick finger does: here it happens in one tick, so the pause cannot hide the bug.
+    const phoneField = () => document.getElementById(PHONE_SEARCH_INPUT_ID) as HTMLInputElement;
+    const desktopField = () =>
+      document.querySelector<HTMLInputElement>("[data-variant='desktop'] input")!;
+    fireEvent.change(phoneField(), { target: { value: "x" } });
+    fireEvent.change(desktopField(), { target: { value: "y" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Quitar filtros" }));
+    await closed();
+    await wait(SEARCH_DEBOUNCE_MS + 150);
+    expect(window.location.search).toBe("");
+    expect(phoneField().value).toBe("");
+    expect(desktopField().value).toBe("");
+  });
+
+  it("says the categories did not load, and turns that select off", async () => {
+    filterSetup({ fault: (call) => (call.kind === "categories" ? "server" : undefined) });
+    await loaded();
+    await waitFor(() => expect(categorySelect().disabled).toBe(true));
+    fireEvent.click(filterButton());
+    const dialog = await sheet();
+    expect(dialog.getByText("No se pudieron cargar tus categorías.")).toBeTruthy();
+    expect(categorySelect(dialog).disabled).toBe(true);
+    expect(accountSelect(dialog).disabled).toBe(false);
+  });
+});
+
+describe("the announcement of the filters", () => {
+  it("says the month and the count once the list answers, from one place", async () => {
+    setup({ url: "/movimientos?mes=2026-09" });
+    await screen.findByText("No hay movimientos con estos filtros");
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("status")
+          .some((s) => s.textContent === "Setiembre 2026: 0 movimientos"),
+      ).toBe(true),
+    );
+  });
+
+  it("does not announce the month's label by itself: that would say it twice", async () => {
+    setup();
+    await loaded();
+    const live = Array.from(document.querySelectorAll("[aria-live]"));
+    expect(live.filter((node) => node.textContent?.includes("Octubre 2026"))).toHaveLength(0);
+    expect(document.querySelector("[data-slot='month-nav'] [aria-live]")).toBeNull();
   });
 });
 

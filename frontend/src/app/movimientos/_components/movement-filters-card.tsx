@@ -1,29 +1,79 @@
 "use client";
 
-import type { MovementFilters, MovementFiltersPatch } from "@/lib/core/movements";
+import { useId, useMemo } from "react";
+import type { AccountWithBalance } from "@/lib/core/data/accounts";
+import type { CategoryRead } from "@/lib/core/data/categories";
+import {
+  buildAccountOptions,
+  buildCategoryOptions,
+  type MovementFilters,
+  type MovementFiltersPatch,
+} from "@/lib/core/movements";
 import { cn } from "@/lib/utils";
+import { AccountOptionElements, CategoryOptionElements } from "./filter-options";
+import { FilterSelect } from "./filter-select";
 import { MonthSelect } from "./month-select";
+import { SearchBox } from "./search-box";
 import { TypeChips } from "./type-chips";
+
+/** What the card says, in its own line, when the accounts or the categories did not load. */
+function describeFailedLists(accounts?: boolean, categories?: boolean): string | undefined {
+  if (accounts && categories) return "No se pudieron cargar tus cuentas ni tus categorías.";
+  if (accounts) return "No se pudieron cargar tus cuentas.";
+  if (categories) return "No se pudieron cargar tus categorías.";
+  return undefined;
+}
 
 /**
  * The filters card of desktop (K-V2-Escritorio, "movimientos"; from 1024 px, the screen hides it
- * below): a solid `surface` card of radius 20 with one row of controls, 10 px apart, that wraps to a
- * second row when the window is short (at 1024 px). Today it holds the month and the type; the
- * search box (first, it takes the room that is left) and the account and category selects (between
- * the month and the type) are FE-33's, and join the same `flex-wrap` row without rebuilding it.
- * The controls wear `FILTER_PILL`.
+ * below): a solid `surface` card of radius 20 with one row of controls, 10 px apart, in the order of the
+ * canvas: the search by description (it takes the room that is left, at least 240 px), the month,
+ * the account, the category and the type. The row wraps when the window is short: at 1024 px (about
+ * 720 px of content) the chips go to a second row; from 1280 px it fits in one.
+ *
+ * The account and category selects are 42 px pills (44 and 16 px of text for a finger) with no visible
+ * label, named "Cuenta" and "Categoría". The category list is grouped in Gastos, Ingresos and
+ * Archivadas on desktop too (the canvas draws it flat there; the groups tell apart a "Regalos" of
+ * each kind). A list that did not load turns its select off (the one that is chosen stays on, so it
+ * can be taken off) and **says so in a line of its own** under the controls, which the select points
+ * to with `aria-describedby`: a disabled select leaves the tab order and a tooltip is not seen, so the
+ * reason has to be text on the page.
  */
 export function MovementFiltersCard({
   filters,
   currentMonth,
+  accounts,
+  accountsFailed,
+  categories,
+  categoriesFailed,
   onChange,
+  searchResetKey,
   className,
 }: Readonly<{
   filters: MovementFilters;
   currentMonth: string;
+  accounts: readonly AccountWithBalance[] | undefined;
+  accountsFailed?: boolean;
+  categories: readonly CategoryRead[] | undefined;
+  categoriesFailed?: boolean;
   onChange: (patch: MovementFiltersPatch) => void;
+  /**
+   * Changes when "Quitar filtros" runs: the search box starts again, with no text and no timer, even if
+   * the URL had no search to take off (a text typed and not yet searched would come back as `?q=`).
+   */
+  searchResetKey?: number;
   className?: string;
 }>) {
+  const accountOptions = useMemo(
+    () => buildAccountOptions(accounts, filters.accountId),
+    [accounts, filters.accountId],
+  );
+  const categoryOptions = useMemo(
+    () => buildCategoryOptions(categories, filters.categoryId),
+    [categories, filters.categoryId],
+  );
+  const failedNoteId = useId();
+  const failedNote = describeFailedLists(accountsFailed, categoriesFailed);
   return (
     <section
       aria-label="Filtros"
@@ -33,12 +83,41 @@ export function MovementFiltersCard({
         className,
       )}
     >
+      <SearchBox
+        key={searchResetKey}
+        variant="desktop"
+        value={filters.q}
+        onCommit={(q) => onChange({ q })}
+      />
       <MonthSelect
         month={filters.month}
         currentMonth={currentMonth}
         onMonthChange={(month) => onChange({ month })}
       />
+      <FilterSelect
+        label="Cuenta"
+        value={filters.accountId ?? ""}
+        onValueChange={(value) => onChange({ accountId: value || undefined })}
+        disabled={accountsFailed && !filters.accountId}
+        describedBy={accountsFailed ? failedNoteId : undefined}
+      >
+        <AccountOptionElements options={accountOptions} />
+      </FilterSelect>
+      <FilterSelect
+        label="Categoría"
+        value={filters.categoryId ?? ""}
+        onValueChange={(value) => onChange({ categoryId: value || undefined })}
+        disabled={categoriesFailed && !filters.categoryId}
+        describedBy={categoriesFailed ? failedNoteId : undefined}
+      >
+        <CategoryOptionElements options={categoryOptions} />
+      </FilterSelect>
       <TypeChips type={filters.type} onTypeChange={(type) => onChange({ type })} />
+      {failedNote ? (
+        <p id={failedNoteId} className="basis-full text-caption text-muted-foreground">
+          {failedNote}
+        </p>
+      ) : null}
     </section>
   );
 }

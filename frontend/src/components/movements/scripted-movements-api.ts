@@ -1,5 +1,6 @@
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
+import type { CategoryRead } from "@/lib/core/data/categories";
 import type {
   MovementListItem,
   MovementPage,
@@ -19,8 +20,8 @@ import type {
  */
 export type Fault = "server" | "offline" | "never" | "cursor" | "invalid";
 
-/** Which request it is: the first page, a later page, the summary, the total of the whole space, or the accounts. */
-export type CallKind = "list" | "next-page" | "summary" | "total" | "accounts";
+/** Which request it is: the first page, a later page, the summary, the total of the whole space, the accounts or the categories. */
+export type CallKind = "list" | "next-page" | "summary" | "total" | "accounts" | "categories";
 
 export type ScriptedCall = {
   kind: CallKind;
@@ -32,6 +33,7 @@ export type ScriptedMovementsOptions = {
   /** The movements of the space, newest first, as the backend sends them. Read at every request, so a test can change it. */
   items: () => readonly MovementListItem[];
   accounts?: () => readonly AccountWithBalance[];
+  categories?: () => readonly CategoryRead[];
   /** Fails a request, or not (`undefined`). */
   fault?: (call: ScriptedCall) => Fault | undefined;
   /** Milliseconds to wait before answering. */
@@ -106,6 +108,7 @@ const failure = (status: number, error: unknown) => ({
 export function scriptedMovementsApi({
   items,
   accounts = () => [],
+  categories = () => [],
   fault,
   delay,
 }: ScriptedMovementsOptions): ScriptedMovementsApi {
@@ -114,17 +117,19 @@ export function scriptedMovementsApi({
   async function answer(path: string, query: Query) {
     const kind: CallKind = path.endsWith("/accounts")
       ? "accounts"
-      : path.endsWith("/summary")
-        ? query.month === undefined &&
-          query.type === undefined &&
-          query.q === undefined &&
-          query.account_id === undefined &&
-          query.category_id === undefined
-          ? "total"
-          : "summary"
-        : query.cursor === undefined
-          ? "list"
-          : "next-page";
+      : path.endsWith("/categories")
+        ? "categories"
+        : path.endsWith("/summary")
+          ? query.month === undefined &&
+            query.type === undefined &&
+            query.q === undefined &&
+            query.account_id === undefined &&
+            query.category_id === undefined
+            ? "total"
+            : "summary"
+          : query.cursor === undefined
+            ? "list"
+            : "next-page";
     const call: ScriptedCall = { kind, path, query };
     calls.push(call);
 
@@ -150,6 +155,10 @@ export function scriptedMovementsApi({
     if (kind === "accounts") {
       const all = accounts();
       return ok(query.include_archived ? all : all.filter((account) => !account.archived_at));
+    }
+    if (kind === "categories") {
+      const all = categories();
+      return ok(query.include_archived ? all : all.filter((category) => !category.archived_at));
     }
     const filtered = items().filter((item) => matches(item, query));
     if (kind === "summary" || kind === "total") return ok(summarize(filtered));

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getServerApi } from "@/lib/api/server";
 import { splitArchived } from "@/lib/core/accounts-summary";
 import { accountsQueryOptions } from "@/lib/core/data/accounts";
+import { categoriesQueryOptions } from "@/lib/core/data/categories";
 import { ApiError, isUnauthorized } from "@/lib/core/data/errors";
 import { loadShellData } from "@/lib/core/data/shell";
 import {
@@ -34,13 +35,14 @@ function describeFailure(error: unknown) {
  * Movimientos (docs/diseno.md D17 › Escritorio v2, D19; KAN-82 / FE-22). A Server Component: it asks
  * `/me` and `/spaces` (`loadShellData`), reads the filters from the URL (`?mes`, `?tipo`, `?q`…) and
  * prefetches, in parallel, the first page of the list, the summary of the same filters and the
- * accounts (archived ones included) into a `QueryClient` of this request. The `HydrationBoundary`
+ * accounts and the categories (archived ones included: the filters offer them) into a `QueryClient`
+ * of this request. The `HydrationBoundary`
  * wraps the **whole shell**, not just the screen: the line under the title (a Client Component that
  * writes the month and the count) is part of the header and has to find its summary already there.
  *
  * - No session or an expired one (401, from any call): `/login`.
  * - A failure of `/me` or `/spaces`: an `Alert` with "Reintentar". A failure of the list, of the
- *   summary or of the accounts is left to the client: that query is not hydrated, the screen asks
+ *   summary, of the accounts or of the categories is left to the client: that query is not hydrated, the screen asks
  *   again by itself and shows its own error (never "no movements").
  * - `today` and `currentMonth` are the **space's** (its time zone, not the device's), computed here and
  *   handed down, so the server and the browser write the same "Hoy" and the same month.
@@ -101,15 +103,18 @@ export default async function MovementsPage({
   const listOptions = transactionsListQueryOptions(api, space.id, filters);
   const summaryOptions = transactionsSummaryQueryOptions(api, space.id, filters);
   const accountsOptions = accountsQueryOptions(api, space.id, { includeArchived: true });
+  const categoriesOptions = categoriesQueryOptions(api, space.id, { includeArchived: true });
   await Promise.all([
     queryClient.prefetchInfiniteQuery(listOptions),
     queryClient.prefetchQuery(summaryOptions),
     queryClient.prefetchQuery(accountsOptions),
+    queryClient.prefetchQuery(categoriesOptions),
   ]);
   const failures = [
     ["the movements", listOptions.queryKey],
     ["the summary", summaryOptions.queryKey],
     ["the accounts", accountsOptions.queryKey],
+    ["the categories", categoriesOptions.queryKey],
   ] as const;
   const errors = failures.map(([name, key]) => ({
     name,
@@ -133,7 +138,7 @@ export default async function MovementsPage({
         space={space}
         noAccounts={noAccounts}
         subtitle={<MovementsSubtitle spaceId={space.id} currentMonth={currentMonth} />}
-        actions={<MovementsHeaderActions noAccounts={noAccounts} />}
+        actions={<MovementsHeaderActions noAccounts={noAccounts} currentMonth={currentMonth} />}
       >
         <MovementsScreen
           space={{ id: space.id, currency: space.currency }}

@@ -14,9 +14,14 @@ describe("MonthNav", () => {
     expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeTruthy();
   });
 
-  it("announces the month when it changes, and keeps the arrows' icons out of speech", () => {
+  it("does not announce the month by itself: the screen's status region says month and count once", () => {
     const { container } = render(<MonthNav month="2026-10" onMonthChange={() => {}} />);
-    expect(screen.getByText("Octubre 2026").getAttribute("aria-live")).toBe("polite");
+    expect(container.querySelector("[aria-live]")).toBeNull();
+    expect(container.querySelector("[role='status'], [role='alert']")).toBeNull();
+  });
+
+  it("keeps the arrows' icons out of speech", () => {
+    const { container } = render(<MonthNav month="2026-10" onMonthChange={() => {}} />);
     for (const svg of container.querySelectorAll("svg")) {
       expect(svg.getAttribute("aria-hidden")).toBe("true");
     }
