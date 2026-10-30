@@ -488,14 +488,14 @@ describe("the search", () => {
     await loaded();
     expect(phoneControls().queryByRole("searchbox")).toBeNull();
     expect(searchFieldIn(desktopFilters())).toBeTruthy();
-    const magnifier = screen.getByRole("button", { name: "Abrir la búsqueda" });
+    const magnifier = screen.getByRole("button", { name: "Buscar" });
     expect(magnifier.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("opens the phone's field with the magnifier, focused, and shuts it clearing the search", async () => {
     setup();
     await loaded();
-    const magnifier = screen.getByRole("button", { name: "Abrir la búsqueda" });
+    const magnifier = screen.getByRole("button", { name: "Buscar" });
     fireEvent.click(magnifier);
     const field = searchFieldIn(phoneControls());
     expect(document.activeElement).toBe(field);
@@ -518,6 +518,32 @@ describe("the search", () => {
     expect(searchFieldIn(phoneControls()).value).toBe("cafe");
     expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
     expect(callsOf(api, "list")[0]!.query.q).toBe("cafe");
+  });
+
+  it("keeps both the month and the search when the month changes before the search is written", async () => {
+    setup();
+    await loaded();
+    fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "cafe" } });
+    // Inside the 350 ms of the pause: the month goes to the URL first, the search after it.
+    fireEvent.change(screen.getByRole("combobox", { name: "Mes" }), {
+      target: { value: "2026-09" },
+    });
+    expect(window.location.search).toBe("?mes=2026-09");
+    await waitFor(() => expect(window.location.search).toBe("?mes=2026-09&q=cafe"));
+    expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
+    expect((screen.getByRole("combobox", { name: "Mes" }) as HTMLSelectElement).value).toBe(
+      "2026-09",
+    );
+  });
+
+  it("keeps both the type and the search when the type changes before the search is written", async () => {
+    setup();
+    await loaded();
+    fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "cafe" } });
+    fireEvent.click(desktopFilters().getByRole("button", { name: "Gastos" }));
+    expect(window.location.search).toBe("?tipo=gastos");
+    await waitFor(() => expect(window.location.search).toBe("?tipo=gastos&q=cafe"));
+    expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
   });
 
   describe("'Quitar filtros' and a text that was typed and not searched yet", () => {
@@ -544,7 +570,7 @@ describe("the search", () => {
     it("empties the phone's field too", async () => {
       onlyIncomeWithGastos();
       await screen.findByText(NO_RESULTS);
-      fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
       fireEvent.change(searchFieldIn(phoneControls()), { target: { value: "x" } });
       fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
       expect(searchFieldIn(phoneControls()).value).toBe("");
@@ -570,15 +596,15 @@ describe("the search", () => {
   it("starts the phone's field shut again after leaving the screen", async () => {
     const { view } = setup();
     await loaded();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     expect(searchFieldIn(phoneControls())).toBeTruthy();
     view.unmount();
     setup();
     await loaded();
     expect(phoneControls().queryByRole("searchbox")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Abrir la búsqueda" }).getAttribute("aria-expanded"),
-    ).toBe("false");
+    expect(screen.getByRole("button", { name: "Buscar" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
   });
 
   it("cuts a link's search to 100 characters, in the field and in the request", async () => {
@@ -705,6 +731,10 @@ describe("the account and the category", () => {
     await loaded();
     await waitFor(() => expect(categorySelect().disabled).toBe(true));
     expect(accountSelect().disabled).toBe(false);
+    // It says why, in text, and the off select points to it (it cannot be tabbed to).
+    const note = desktopFilters().getByText("No se pudieron cargar tus categorías.");
+    expect(categorySelect().getAttribute("aria-describedby")).toBe(note.id);
+    expect(accountSelect().hasAttribute("aria-describedby")).toBe(false);
     // The list of movements is right without it.
     expect(hasRow("Café")).toBe(true);
   });
@@ -714,10 +744,8 @@ describe("the account and the category", () => {
       url: `/movimientos?categoria_id=${ID_SUPER}`,
       fault: (call) => (call.kind === "categories" ? "server" : undefined),
     });
-    await screen.findByText("No hay movimientos con estos filtros").catch(() => undefined);
-    await waitFor(() =>
-      expect(categorySelect().title).toBe("No se pudieron cargar tus categorías"),
-    );
+    const note = await desktopFilters().findByText("No se pudieron cargar tus categorías.");
+    expect(categorySelect().getAttribute("aria-describedby")).toBe(note.id);
     expect(categorySelect().disabled).toBe(false);
     expect(chosenLabel(categorySelect())).toBe("Otra categoría");
     fireEvent.change(categorySelect(), { target: { value: "" } });
@@ -798,7 +826,7 @@ describe("the sheet 'Filtrar movimientos' of a phone", () => {
   it("'Quitar filtros' also empties a text typed and not searched yet, in the phone's field and in desktop's", async () => {
     filterSetup();
     await loaded();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
     fireEvent.click(filterButton());
     const dialog = await sheet();
     // The boxes are behind the sheet. Typing and tapping "Quitar filtros" inside the 350 ms is what a

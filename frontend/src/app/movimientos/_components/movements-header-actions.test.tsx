@@ -35,7 +35,7 @@ describe("MovementsHeaderActions", () => {
     const { container } = render(<MovementsHeaderActions currentMonth={MONTH} />);
     const controls = container.querySelectorAll("a, button");
     expect(controls).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Abrir la búsqueda" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Buscar" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Registrar movimiento" })).toBeTruthy();
   });
 
@@ -47,7 +47,7 @@ describe("MovementsHeaderActions", () => {
 
   it("keeps the magnifier when there is no main action at all", () => {
     render(<MovementsHeaderActions noAccounts currentMonth={MONTH} />);
-    expect(screen.getByRole("button", { name: "Abrir la búsqueda" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Buscar" })).toBeTruthy();
   });
 
   it("opens the sheet over the screen with the URL of the main action", () => {

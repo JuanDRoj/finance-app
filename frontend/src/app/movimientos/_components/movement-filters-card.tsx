@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { CategoryRead } from "@/lib/core/data/categories";
 import {
@@ -16,6 +16,14 @@ import { MonthSelect } from "./month-select";
 import { SearchBox } from "./search-box";
 import { TypeChips } from "./type-chips";
 
+/** What the card says, in its own line, when the accounts or the categories did not load. */
+function describeFailedLists(accounts?: boolean, categories?: boolean): string | undefined {
+  if (accounts && categories) return "No se pudieron cargar tus cuentas ni tus categorías.";
+  if (accounts) return "No se pudieron cargar tus cuentas.";
+  if (categories) return "No se pudieron cargar tus categorías.";
+  return undefined;
+}
+
 /**
  * The filters card of desktop (K-V2-Escritorio, "movimientos"; from 1024 px, the screen hides it
  * below): a solid `surface` card of radius 20 with one row of controls, 10 px apart, in the order of the
@@ -26,7 +34,10 @@ import { TypeChips } from "./type-chips";
  * The account and category selects are 42 px pills (44 and 16 px of text for a finger) with no visible
  * label, named "Cuenta" and "Categoría". The category list is grouped in Gastos, Ingresos and
  * Archivadas on desktop too (the canvas draws it flat there; the groups tell apart a "Regalos" of
- * each kind). A list that did not load turns its select off; the one that is chosen stays on, so it can be taken off.
+ * each kind). A list that did not load turns its select off (the one that is chosen stays on, so it
+ * can be taken off) and **says so in a line of its own** under the controls, which the select points
+ * to with `aria-describedby`: a disabled select leaves the tab order and a tooltip is not seen, so the
+ * reason has to be text on the page.
  */
 export function MovementFiltersCard({
   filters,
@@ -61,6 +72,8 @@ export function MovementFiltersCard({
     () => buildCategoryOptions(categories, filters.categoryId),
     [categories, filters.categoryId],
   );
+  const failedNoteId = useId();
+  const failedNote = describeFailedLists(accountsFailed, categoriesFailed);
   return (
     <section
       aria-label="Filtros"
@@ -86,7 +99,7 @@ export function MovementFiltersCard({
         value={filters.accountId ?? ""}
         onValueChange={(value) => onChange({ accountId: value || undefined })}
         disabled={accountsFailed && !filters.accountId}
-        title={accountsFailed ? "No se pudieron cargar tus cuentas" : undefined}
+        describedBy={accountsFailed ? failedNoteId : undefined}
       >
         <AccountOptionElements options={accountOptions} />
       </FilterSelect>
@@ -95,11 +108,16 @@ export function MovementFiltersCard({
         value={filters.categoryId ?? ""}
         onValueChange={(value) => onChange({ categoryId: value || undefined })}
         disabled={categoriesFailed && !filters.categoryId}
-        title={categoriesFailed ? "No se pudieron cargar tus categorías" : undefined}
+        describedBy={categoriesFailed ? failedNoteId : undefined}
       >
         <CategoryOptionElements options={categoryOptions} />
       </FilterSelect>
       <TypeChips type={filters.type} onTypeChange={(type) => onChange({ type })} />
+      {failedNote ? (
+        <p id={failedNoteId} className="basis-full text-caption text-muted-foreground">
+          {failedNote}
+        </p>
+      ) : null}
     </section>
   );
 }

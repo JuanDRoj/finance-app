@@ -386,6 +386,9 @@ describe("MovementsScreenDemo", () => {
       await screen.findByRole("table");
       await waitFor(() => expect(select("Cuenta").disabled).toBe(true));
       expect(select("Categoría").disabled).toBe(true);
+      expect(
+        filtersCard().getByText("No se pudieron cargar tus cuentas ni tus categorías."),
+      ).toBeTruthy();
       choose("Qué responden las cuentas y las categorías", "categories");
       await waitFor(() => expect(select("Categoría").disabled).toBe(true));
       expect(select("Cuenta").disabled).toBe(false);
@@ -395,7 +398,7 @@ describe("MovementsScreenDemo", () => {
       render(<MovementsScreenDemo instant />);
       await screen.findByRole("table");
       expect(screen.getAllByRole("searchbox")).toHaveLength(1);
-      fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
       expect(screen.getAllByRole("searchbox")).toHaveLength(2);
       const register = screen.getByRole("link", { name: "Registrar movimiento" });
       // `fireEvent` answers `false` when somebody called `preventDefault()`: no navigation.

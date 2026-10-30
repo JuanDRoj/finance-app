@@ -199,8 +199,8 @@ describe("MovementFiltersCard", () => {
     expect((card.getByRole("combobox", { name: "Cuenta" }) as HTMLSelectElement).disabled).toBe(
       true,
     );
-    expect(card.getByRole("combobox", { name: "Categoría" }).getAttribute("title")).toBe(
-      "No se pudieron cargar tus categorías",
+    expect((card.getByRole("combobox", { name: "Categoría" }) as HTMLSelectElement).disabled).toBe(
+      true,
     );
     cleanup();
     const chosen = renderCard(
@@ -210,6 +210,70 @@ describe("MovementFiltersCard", () => {
     const account = chosen.card.getByRole("combobox", { name: "Cuenta" }) as HTMLSelectElement;
     expect(account.disabled).toBe(false);
     expect(account.selectedOptions[0]!.textContent).toBe("Otra cuenta");
+  });
+
+  describe("when a list did not load", () => {
+    it("says why in a line of its own, which the off selects point to", () => {
+      const { card } = renderCard(
+        { month: "2026-10" },
+        {
+          accounts: undefined,
+          accountsFailed: true,
+          categories: undefined,
+          categoriesFailed: true,
+        },
+      );
+      const note = card.getByText("No se pudieron cargar tus cuentas ni tus categorías.");
+      expect(note.id).not.toBe("");
+      // A disabled select leaves the tab order and a tooltip is not seen: the reason is text on the page.
+      expect(note.className).toContain("basis-full");
+      expect(note.className).toContain("text-muted-foreground");
+      for (const name of ["Cuenta", "Categoría"]) {
+        expect(card.getByRole("combobox", { name }).getAttribute("aria-describedby")).toBe(note.id);
+      }
+    });
+
+    it("names only the list that failed, and points only that select to it", () => {
+      const { card } = renderCard(
+        { month: "2026-10" },
+        { categories: undefined, categoriesFailed: true },
+      );
+      const note = card.getByText("No se pudieron cargar tus categorías.");
+      expect(
+        card.getByRole("combobox", { name: "Categoría" }).getAttribute("aria-describedby"),
+      ).toBe(note.id);
+      expect(card.getByRole("combobox", { name: "Cuenta" }).hasAttribute("aria-describedby")).toBe(
+        false,
+      );
+      cleanup();
+      const accounts = renderCard(
+        { month: "2026-10" },
+        { accounts: undefined, accountsFailed: true },
+      );
+      expect(accounts.card.getByText("No se pudieron cargar tus cuentas.")).toBeTruthy();
+      expect(
+        accounts.card.getByRole("combobox", { name: "Categoría" }).hasAttribute("aria-describedby"),
+      ).toBe(false);
+    });
+
+    it("keeps saying it when something is chosen and the select stays on", () => {
+      const { card } = renderCard(
+        { month: "2026-10", accountId: "a1" },
+        { accounts: undefined, accountsFailed: true },
+      );
+      const account = card.getByRole("combobox", { name: "Cuenta" });
+      const note = card.getByText("No se pudieron cargar tus cuentas.");
+      expect((account as HTMLSelectElement).disabled).toBe(false);
+      expect(account.getAttribute("aria-describedby")).toBe(note.id);
+    });
+
+    it("says nothing when both lists loaded", () => {
+      const { card } = renderCard();
+      expect(card.queryByText(/No se pudieron cargar/)).toBeNull();
+      expect(card.getByRole("combobox", { name: "Cuenta" }).hasAttribute("aria-describedby")).toBe(
+        false,
+      );
+    });
   });
 
   it("is a solid card of radius 20 with one row that wraps, and the search takes the room that is left", () => {

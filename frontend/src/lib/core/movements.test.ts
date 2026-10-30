@@ -262,6 +262,7 @@ describe("applyMovementFilters and serializeMovementFilters", () => {
       { month: "2026-09" },
       { month: CURRENT, type: "income" },
       { month: "1900-01", type: "transfer", q: "ñandú & café ☕" },
+      { month: CURRENT, q: `a+b "c" d's` },
       FULL,
     ];
     for (const filters of cases) {
@@ -295,6 +296,19 @@ describe("applyMovementFilters and serializeMovementFilters", () => {
     const url = serializeMovementFilters({ month: CURRENT, q: "a&b=c#d" }, CURRENT);
     expect(url.toString()).toBe("q=a%26b%3Dc%23d");
     expect(parseMovementFilters(url, CURRENT).q).toBe("a&b=c#d");
+  });
+
+  it("sends '+' as %2B and not as a space, and the quotes whole, and reads them back", () => {
+    const q = `2+2 "dos" y d's`;
+    const url = serializeMovementFilters({ month: CURRENT, q }, CURRENT);
+    // A space is "+" in a query, so a real "+" has to be %2B or it would come back as a space.
+    expect(url.toString()).toBe("q=2%2B2+%22dos%22+y+d%27s");
+    expect(parseMovementFilters(url, CURRENT).q).toBe(q);
+    // Read from the text of an address bar, and from the object of a page (already decoded).
+    expect(parseMovementFilters(new URLSearchParams(url.toString()), CURRENT).q).toBe(q);
+    expect(parseMovementFilters({ q }, CURRENT).q).toBe(q);
+    // A "+" that arrived as %2B is not turned into a space by the trim.
+    expect(parseMovementFilters(new URLSearchParams("q=%2B"), CURRENT).q).toBe("+");
   });
 
   it("has a word for every type that the chips can ask for", () => {

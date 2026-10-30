@@ -10,9 +10,9 @@ import { useMovementFilters } from "./use-movement-filters";
 
 /**
  * The magnifier in the header of a phone (docs/diseno.md D19; K-H1-Movimientos): a glass circle of
- * 44 px that opens "Buscar por descripción" under the header, and `primary` while it is open. Its name
- * is "Abrir la búsqueda" and `aria-expanded` says the rest. From 1024 px it is not there: the box is in
- * the filters card.
+ * 44 px that opens "Buscar por descripción" under the header, and `primary` while it is open. It is a
+ * disclosure button: its name is "Buscar", with no verb (the same tap that opens the field closes it),
+ * and `aria-expanded` says the state. From 1024 px it is not there: the box is in the filters card.
  *
  * - **Open** (the store, or a `?q=` in the URL: a link with a search shows the field): the field
  *   is drawn and **focused in the same tap** (`flushSync`, then `focus()`). iOS opens the keyboard only
@@ -42,7 +42,7 @@ export function SearchToggle({
     <button
       id={SEARCH_TOGGLE_ID}
       type="button"
-      aria-label="Abrir la búsqueda"
+      aria-label="Buscar"
       aria-expanded={open}
       onClick={toggle}
       className={cn(

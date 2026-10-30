@@ -47,10 +47,10 @@ function Harness() {
   );
 }
 
-const toggle = () => screen.getByRole("button", { name: "Abrir la búsqueda" });
+const toggle = () => screen.getByRole("button", { name: "Buscar" });
 
 describe("SearchToggle", () => {
-  it("is a button of 44 px named 'Abrir la búsqueda', closed at first, for a phone only", () => {
+  it("is a button of 44 px named 'Buscar', closed at first, for a phone only", () => {
     render(<SearchToggle currentMonth="2026-10" />);
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     expect(toggle().className).toContain("size-11");
@@ -63,6 +63,18 @@ describe("SearchToggle", () => {
     fireEvent.click(toggle());
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(screen.getByLabelText("campo"));
+  });
+
+  it("keeps its name when it is open: it is a disclosure, aria-expanded says the state", () => {
+    render(<Harness />);
+    fireEvent.click(toggle());
+    // No verb in the name ("Abrir…" would be wrong once the same tap closes it).
+    expect(screen.getByRole("button", { name: "Buscar" })).toBe(toggle());
+    expect(toggle().getAttribute("aria-label")).toBe("Buscar");
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle());
+    expect(toggle().getAttribute("aria-label")).toBe("Buscar");
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
   });
 
   it("is primary while it is open", () => {

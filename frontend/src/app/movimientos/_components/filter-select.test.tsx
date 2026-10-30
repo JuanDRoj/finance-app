@@ -54,10 +54,16 @@ describe("FilterSelect", () => {
     expect(select.parentElement!.className).toContain("min-w-0");
   });
 
-  it("is off when asked, with the reason for a mouse", () => {
-    const { select } = renderSelect({ disabled: true, title: "No se pudieron cargar tus cuentas" });
+  it("is off when asked, and points to the text that says why", () => {
+    const { select } = renderSelect({ disabled: true, describedBy: "why" });
     expect(select.disabled).toBe(true);
-    expect(select.title).toBe("No se pudieron cargar tus cuentas");
+    expect(select.getAttribute("aria-describedby")).toBe("why");
+    expect(select.hasAttribute("title")).toBe(false);
+  });
+
+  it("points to nothing when it has no reason to be off", () => {
+    const { select } = renderSelect();
+    expect(select.hasAttribute("aria-describedby")).toBe(false);
   });
 
   it("keeps the caret out of reach of the pointer and of speech", () => {

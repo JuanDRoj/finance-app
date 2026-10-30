@@ -246,7 +246,7 @@ describe("MovementsPage", () => {
   it("has the magnifier in the header, for a phone, closed at first", async () => {
     await renderPage();
     const magnifier = within(screen.getByRole("banner")).getByRole("button", {
-      name: "Abrir la búsqueda",
+      name: "Buscar",
     });
     expect(magnifier.className).toContain("lg:hidden");
     expect(magnifier.getAttribute("aria-expanded")).toBe("false");

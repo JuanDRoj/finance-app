@@ -17,7 +17,7 @@ export function FilterSelect({
   value,
   onValueChange,
   disabled,
-  title,
+  describedBy,
   children,
   className,
 }: Readonly<{
@@ -25,8 +25,8 @@ export function FilterSelect({
   value: string;
   onValueChange: (value: string) => void;
   disabled?: boolean;
-  /** Why it is off, for a mouse (a list that did not load). */
-  title?: string;
+  /** The id of the text that says why it is off (a list that did not load): a screen reader reads it with the name. */
+  describedBy?: string;
   children: ReactNode;
   className?: string;
 }>) {
@@ -39,7 +39,7 @@ export function FilterSelect({
         aria-label={label}
         value={value}
         disabled={disabled}
-        title={title}
+        aria-describedby={describedBy}
         onChange={(event) => onValueChange(event.target.value)}
         className={cn(
           FILTER_PILL,
