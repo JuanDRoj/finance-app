@@ -43,6 +43,9 @@ type SearchBoxProps = {
  *   back and forward) is adopted by the field. What the field itself wrote is not: when the URL
  *   gives back "uber" while the person has already typed "uber e", the field keeps "uber e". It
  *   remembers what it wrote and has not yet seen come back, so two quick writes cannot undo each other.
+ *   A text typed and not yet searched is invisible to the URL: when "Quitar filtros" runs with no
+ *   search in the URL, nothing there changes, so the screen gives the box a new `key` and it starts
+ *   again (no text, no timer, no memory of what it wrote).
  * - **The keyboard.** `type="search"`, `enterKeyHint="search"`, no autocapitalize, autocorrect nor
  *   spellcheck, 16 px text (below that iOS zooms in), and at most 100 characters.
  * - Both variants are `data-slot="movement-search"`: the CSS hides the bottom bar while a field of

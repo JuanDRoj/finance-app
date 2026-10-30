@@ -20,7 +20,7 @@ import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { CategoryRead } from "@/lib/core/data/categories";
 import type { MovementListItem } from "@/lib/core/data/transactions";
 import { MovementsScreen } from "./movements-screen";
-import { SEARCH_TOGGLE_ID } from "./search-box";
+import { PHONE_SEARCH_INPUT_ID, SEARCH_DEBOUNCE_MS, SEARCH_TOGGLE_ID } from "./search-box";
 import { SearchToggle } from "./search-toggle";
 
 // The screen runs for real (the filters in the URL, the queries, the lists, the states) against a
@@ -440,6 +440,11 @@ const chosenLabel = (select: HTMLSelectElement) => select.selectedOptions[0]?.te
 const hasRow = (description: string) =>
   within(screen.getByRole("table")).queryByRole("rowheader", { name: description }) !== null;
 const NO_RESULTS = "No hay movimientos con estos filtros";
+/** Lets the real clock run, so a debounce that was not cancelled has the time to fire. */
+const wait = (ms: number) =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
 
 describe("the search", () => {
   it("searches from the desktop field once the typing stops, and writes it to the URL", async () => {
@@ -513,6 +518,53 @@ describe("the search", () => {
     expect(searchFieldIn(phoneControls()).value).toBe("cafe");
     expect(searchFieldIn(desktopFilters()).value).toBe("cafe");
     expect(callsOf(api, "list")[0]!.query.q).toBe("cafe");
+  });
+
+  describe("'Quitar filtros' and a text that was typed and not searched yet", () => {
+    // A type with nothing in it: the empty state offers "Quitar filtros" while the URL has no search.
+    const onlyIncomeWithGastos = () =>
+      setup({
+        url: "/movimientos?tipo=gastos",
+        items: [incomeItem({ id: "only", date: "2026-10-27" })],
+      });
+
+    it("empties the desktop field and does not let the search come back", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(desktopFilters()).value).toBe("");
+      // The 350 ms of the text that was typed run out with nobody left to write it.
+      await wait(SEARCH_DEBOUNCE_MS + 150);
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(desktopFilters()).value).toBe("");
+    });
+
+    it("empties the phone's field too", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+      fireEvent.change(searchFieldIn(phoneControls()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      expect(searchFieldIn(phoneControls()).value).toBe("");
+      await wait(SEARCH_DEBOUNCE_MS + 150);
+      expect(window.location.search).toBe("");
+      expect(searchFieldIn(phoneControls()).value).toBe("");
+    });
+
+    it("still writes a search typed after it, and keeps what the person types next", async () => {
+      onlyIncomeWithGastos();
+      await screen.findByText(NO_RESULTS);
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "x" } });
+      fireEvent.click(screen.getByRole("button", { name: "Quitar filtros" }));
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "sueldo" } });
+      await waitFor(() => expect(window.location.search).toBe("?q=sueldo"));
+      // Two writes in a row do not undo each other: the field keeps what was typed after the echo.
+      fireEvent.change(searchFieldIn(desktopFilters()), { target: { value: "sueldo de" } });
+      await waitFor(() => expect(window.location.search).toBe("?q=sueldo+de"));
+      expect(searchFieldIn(desktopFilters()).value).toBe("sueldo de");
+    });
   });
 
   it("starts the phone's field shut again after leaving the screen", async () => {
@@ -741,6 +793,27 @@ describe("the sheet 'Filtrar movimientos' of a phone", () => {
     expect(window.location.search).toBe("?mes=2026-09");
     await closed();
     expect(filterButton("Filtrar")).toBeTruthy();
+  });
+
+  it("'Quitar filtros' also empties a text typed and not searched yet, in the phone's field and in desktop's", async () => {
+    filterSetup();
+    await loaded();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+    fireEvent.click(filterButton());
+    const dialog = await sheet();
+    // The boxes are behind the sheet. Typing and tapping "Quitar filtros" inside the 350 ms is what a
+    // quick finger does: here it happens in one tick, so the pause cannot hide the bug.
+    const phoneField = () => document.getElementById(PHONE_SEARCH_INPUT_ID) as HTMLInputElement;
+    const desktopField = () =>
+      document.querySelector<HTMLInputElement>("[data-variant='desktop'] input")!;
+    fireEvent.change(phoneField(), { target: { value: "x" } });
+    fireEvent.change(desktopField(), { target: { value: "y" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Quitar filtros" }));
+    await closed();
+    await wait(SEARCH_DEBOUNCE_MS + 150);
+    expect(window.location.search).toBe("");
+    expect(phoneField().value).toBe("");
+    expect(desktopField().value).toBe("");
   });
 
   it("says the categories did not load, and turns that select off", async () => {

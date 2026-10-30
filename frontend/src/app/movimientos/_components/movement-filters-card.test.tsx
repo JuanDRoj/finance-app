@@ -124,6 +124,35 @@ describe("MovementFiltersCard", () => {
     }
   });
 
+  it("starts the search again when the reset key changes: no text and no pending search", () => {
+    vi.useFakeTimers();
+    try {
+      const onChange = vi.fn();
+      const ui = (searchResetKey: number) => (
+        <MovementFiltersCard
+          filters={{ month: "2026-10" }}
+          currentMonth="2026-10"
+          accounts={ACCOUNTS}
+          categories={CATEGORIES}
+          onChange={onChange}
+          searchResetKey={searchResetKey}
+        />
+      );
+      const { rerender } = render(ui(0));
+      const field = () => screen.getByRole("searchbox") as HTMLInputElement;
+      fireEvent.change(field(), { target: { value: "x" } });
+      // The same key keeps the text: only a clear changes it.
+      rerender(ui(0));
+      expect(field().value).toBe("x");
+      rerender(ui(1));
+      expect(field().value).toBe("");
+      vi.advanceTimersByTime(1000);
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers the accounts, the active ones first and the archived ones with their mark", () => {
     const { card } = renderCard();
     const options = within(card.getByRole("combobox", { name: "Cuenta" })).getAllByRole("option");

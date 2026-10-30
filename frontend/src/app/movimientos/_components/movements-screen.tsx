@@ -95,6 +95,7 @@ type MovementsScreenProps = {
  *   movimientos" that the button of the month's row opens (with the number of filters on). The
  *   accounts and the categories come from two queries (archived ones included); a list that did not
  *   load turns its select off instead of passing for "no accounts".
+ *   "Quitar filtros" (the empty state's and the sheet's) also empties a text typed and not yet searched.
  * - **A space with no movement** shows the invitation. On desktop it hides the filters and the
  *   figures (there is nothing to filter); on a phone the month and the chips stay, as the canvas draws.
  * - The rows are **read only** (FE-22); editing and deleting are FE-23's.
@@ -168,6 +169,16 @@ export function MovementsScreen({
     document.getElementById(SEARCH_TOGGLE_ID)?.focus();
   };
 
+  // "Quitar filtros" also empties what was typed and not searched yet. The URL cannot say it: with no
+  // search in it, clearing changes nothing there, and a text still waiting for its 350 ms would come
+  // back as `?q=`. Each clear gives the boxes a new `key`, so they start again from the URL, with
+  // no text and no timer (the echo bookkeeping of a box lives and dies with it).
+  const [searchEpoch, setSearchEpoch] = useState(0);
+  const clearAll = () => {
+    clearFilters();
+    setSearchEpoch((epoch) => epoch + 1);
+  };
+
   const [sheetLoaded, setSheetLoaded] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
@@ -175,7 +186,7 @@ export function MovementsScreen({
   const filtersCardRef = useRef<HTMLDivElement>(null);
   const phoneControlsRef = useRef<HTMLDivElement>(null);
   const clearAndFocus = () => {
-    clearFilters();
+    clearAll();
     // "Quitar filtros" goes away with the state it was in: the focus goes to the type, the first filter.
     const desktop = window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
     (desktop ? filtersCardRef : phoneControlsRef).current
@@ -302,12 +313,14 @@ export function MovementsScreen({
             categories={categories.data}
             categoriesFailed={categories.isError && categories.data === undefined}
             onChange={setFilters}
+            searchResetKey={searchEpoch}
           />
         </div>
       )}
       <div ref={phoneControlsRef} className="flex flex-col gap-2 lg:hidden">
         {searchOpen ? (
           <SearchBox
+            key={searchEpoch}
             variant="phone"
             value={filters.q}
             onCommit={(q) => setFilters({ q })}
@@ -339,7 +352,7 @@ export function MovementsScreen({
           categories={categories.data}
           categoriesFailed={categories.isError && categories.data === undefined}
           onApply={setFilters}
-          onClear={clearFilters}
+          onClear={clearAll}
           finalFocus={filterButtonRef}
         />
       ) : null}

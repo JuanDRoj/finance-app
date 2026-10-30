@@ -36,6 +36,7 @@ export function MovementFiltersCard({
   categories,
   categoriesFailed,
   onChange,
+  searchResetKey,
   className,
 }: Readonly<{
   filters: MovementFilters;
@@ -45,6 +46,11 @@ export function MovementFiltersCard({
   categories: readonly CategoryRead[] | undefined;
   categoriesFailed?: boolean;
   onChange: (patch: MovementFiltersPatch) => void;
+  /**
+   * Changes when "Quitar filtros" runs: the search box starts again, with no text and no timer, even if
+   * the URL had no search to take off (a text typed and not yet searched would come back as `?q=`).
+   */
+  searchResetKey?: number;
   className?: string;
 }>) {
   const accountOptions = useMemo(
@@ -64,7 +70,12 @@ export function MovementFiltersCard({
         className,
       )}
     >
-      <SearchBox variant="desktop" value={filters.q} onCommit={(q) => onChange({ q })} />
+      <SearchBox
+        key={searchResetKey}
+        variant="desktop"
+        value={filters.q}
+        onCommit={(q) => onChange({ q })}
+      />
       <MonthSelect
         month={filters.month}
         currentMonth={currentMonth}
