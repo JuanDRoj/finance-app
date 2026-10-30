@@ -119,15 +119,22 @@ const LOAD_CHOICES: Record<ListLoad, string> = {
   refresh: "Carga bien y falla al refrescar",
 };
 
-export type NextPage = "ok" | "slow" | "offline" | "cursor";
+export type NextPage = "ok" | "slow" | "offline" | "cursor" | "invalid";
 const NEXT_CHOICES: Record<NextPage, string> = {
   ok: "Responde bien",
   slow: "Tarda 1,5 s (para probar el doble clic)",
   offline: "Falla (sin conexión)",
-  cursor: "Falla con 422 (el cursor no se puede leer)",
+  cursor: "Falla con 422 cursor_invalid (la lista empieza de nuevo)",
+  invalid: "Falla con otro 422 (se pide la misma página)",
 };
 
-type Settings = { load: ListLoad; next: NextPage };
+export type SummaryLoad = "ok" | "error";
+const SUMMARY_CHOICES: Record<SummaryLoad, string> = {
+  ok: "Responde bien",
+  error: "Falla (500): «No se pudo cargar el resumen»",
+};
+
+type Settings = { load: ListLoad; next: NextPage; summary?: SummaryLoad };
 
 /** What goes wrong for a request, given what the selects say. `listAnswers` counts the lists that already answered. */
 export function faultFor(
@@ -144,7 +151,10 @@ export function faultFor(
   if (call.kind === "next-page") {
     if (settings.next === "offline") return "offline";
     if (settings.next === "cursor") return "cursor";
+    if (settings.next === "invalid") return "invalid";
   }
+  // The summary of the filters; the total of the whole space (`total`) is not part of it.
+  if (call.kind === "summary" && settings.summary === "error") return "server";
   return undefined;
 }
 
@@ -154,12 +164,14 @@ export function demoApi({
   accounts,
   load,
   next,
+  summary = "ok",
   instant,
 }: Readonly<{
   data: ScreenData;
   accounts: Accounts;
   load: ListLoad;
   next: NextPage;
+  summary?: SummaryLoad;
   instant: boolean;
 }>) {
   let answered = 0;
@@ -167,7 +179,7 @@ export function demoApi({
     items: DATA[data],
     accounts: () => (accounts === "active" ? ACTIVE_ACCOUNTS : ONLY_ARCHIVED),
     fault: (call) => {
-      const fault = faultFor({ load, next }, call, answered);
+      const fault = faultFor({ load, next, summary }, call, answered);
       if (call.kind === "list" && fault === undefined) answered += 1;
       return fault;
     },
@@ -214,19 +226,20 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
   const [accounts, setAccounts] = useState<Accounts>("active");
   const [load, setLoad] = useState<ListLoad>("ok");
   const [next, setNext] = useState<NextPage>("ok");
+  const [summary, setSummary] = useState<SummaryLoad>("ok");
   const [round, setRound] = useState(0);
 
   // A new backend for every choice: changing what goes wrong starts the screen again, so "falla al
   // refrescar" always begins with a first list that answers well.
   const api = useMemo(
-    () => demoApi({ data, accounts, load, next, instant }),
-    [data, accounts, load, next, instant],
+    () => demoApi({ data, accounts, load, next, summary, instant }),
+    [data, accounts, load, next, summary, instant],
   );
 
   return (
-    <Isolated key={`${data}-${accounts}-${load}-${next}-${round}`}>
+    <Isolated key={`${data}-${accounts}-${load}-${next}-${summary}-${round}`}>
       <div className="flex flex-col gap-4">
-        <div className="grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SelectField
             label="Qué movimientos hay"
             value={data}
@@ -257,6 +270,17 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
             {(Object.keys(LOAD_CHOICES) as ListLoad[]).map((key) => (
               <option key={key} value={key}>
                 {LOAD_CHOICES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué responde el resumen"
+            value={summary}
+            onChange={(event) => setSummary(event.target.value as SummaryLoad)}
+          >
+            {(Object.keys(SUMMARY_CHOICES) as SummaryLoad[]).map((key) => (
+              <option key={key} value={key}>
+                {SUMMARY_CHOICES[key]}
               </option>
             ))}
           </SelectField>

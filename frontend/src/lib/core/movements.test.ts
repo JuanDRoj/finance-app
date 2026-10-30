@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "./data/errors";
 import type { MovementListItem, MovementPage } from "./data/transactions";
 import {
   MAX_MONTH,
@@ -24,6 +25,7 @@ import {
   formatMovementDate,
   groupMovementsByDay,
   hasActiveFilters,
+  isCursorInvalid,
   isQuietMovement,
   mergeMovementFilters,
   movementAmountView,
@@ -864,5 +866,41 @@ describe("summaryFigures with a total that is not a safe integer", () => {
     );
     expect(figures.income.text.startsWith("+$")).toBe(true);
     expect(figures.remaining.text.startsWith("+$")).toBe(true);
+  });
+});
+
+describe("isCursorInvalid", () => {
+  const detail = (...types: string[]) => ({
+    detail: types.map((type) => ({ type, loc: ["query", "cursor"], msg: "x" })),
+  });
+
+  it("is true for the 422 whose detail has the type cursor_invalid", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("cursor_invalid")))).toBe(true);
+  });
+
+  it("is true when it is one of several problems of the 422", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("missing", "cursor_invalid")))).toBe(true);
+  });
+
+  it("is false for any other 422", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("missing")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, detail("string_too_long")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, detail()))).toBe(false);
+  });
+
+  it("is false when the 422 has no detail we can read", () => {
+    expect(isCursorInvalid(new ApiError(422, undefined))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, "cursor_invalid"))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, { detail: "cursor_invalid" }))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, { code: "cursor_invalid", detail: "x" }))).toBe(false);
+  });
+
+  it("is false for the same type under another status, and for anything that is not an ApiError", () => {
+    expect(isCursorInvalid(new ApiError(400, detail("cursor_invalid")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(500, detail("cursor_invalid")))).toBe(false);
+    expect(isCursorInvalid(new TypeError("Failed to fetch"))).toBe(false);
+    expect(isCursorInvalid({ status: 422, body: detail("cursor_invalid") })).toBe(false);
+    expect(isCursorInvalid(null)).toBe(false);
+    expect(isCursorInvalid(undefined)).toBe(false);
   });
 });

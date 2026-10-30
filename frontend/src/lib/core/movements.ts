@@ -11,7 +11,8 @@ import {
   isMonth,
   shiftLocalDate,
 } from "./dates";
-import { describeTransactionStatus, describeTransactionType } from "./i18n";
+import { ApiError } from "./data/errors";
+import { describeTransactionStatus, describeTransactionType, isValidationErrorBody } from "./i18n";
 import { formatMoney, type Currency } from "./money";
 
 // Pure logic of Movimientos (docs/diseno.md D17 › Escritorio v2, D19; FE-32 / KAN-97): the filters
@@ -510,6 +511,20 @@ export type EmptyKind = "loading" | "empty" | "no-results";
 export function chooseEmptyState(total: { count?: number; failed?: boolean }): EmptyKind {
   if (total.count !== undefined) return total.count === 0 ? "empty" : "no-results";
   return total.failed ? "no-results" : "loading";
+}
+
+/** The `type` of the 422 of `GET /transactions` when the `cursor` it was given cannot be read. */
+export const CURSOR_INVALID = "cursor_invalid";
+
+/**
+ * Whether an error is the backend saying that the cursor of a page cannot be read (a 422 whose detail
+ * has the `type` `cursor_invalid`). Asking for the same page again cannot work, so the list starts
+ * over from the first one; any other 422 (or any other error) is just retried.
+ */
+export function isCursorInvalid(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 422) return false;
+  if (!isValidationErrorBody(error.body)) return false;
+  return (error.body.detail ?? []).some((issue) => issue.type === CURSOR_INVALID);
 }
 
 // --- Counts ----------------------------------------------------------------------------------------

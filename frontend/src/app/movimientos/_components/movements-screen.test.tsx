@@ -11,6 +11,7 @@ import {
 } from "@/components/movements/movement-fixtures";
 import {
   scriptedMovementsApi,
+  type Fault,
   type ScriptedCall,
   type ScriptedMovementsApi,
 } from "@/components/movements/scripted-movements-api";
@@ -114,7 +115,7 @@ const THREE: MovementListItem[] = [
 type Setup = {
   items?: MovementListItem[];
   accounts?: AccountWithBalance[];
-  fault?: (call: ScriptedCall) => "server" | "offline" | "never" | "cursor" | undefined;
+  fault?: (call: ScriptedCall) => Fault | undefined;
   delay?: (call: ScriptedCall) => number;
   url?: string;
 };
@@ -460,15 +461,119 @@ describe("when something fails", () => {
     await screen.findByText("No se pudieron cargar tus movimientos");
   });
 
-  it("keeps showing the table while the summary or the accounts fail: the list is still right", async () => {
-    setup({
-      fault: (call) => (call.kind === "summary" || call.kind === "accounts" ? "server" : undefined),
+  describe("the summary", () => {
+    const summaryNotice = () => document.querySelector<HTMLElement>("[data-slot='summary-error']");
+
+    it("says it could not load it, in the place of the figures, and the list stays right without it", async () => {
+      const { api } = setup({ fault: (call) => (call.kind === "summary" ? "server" : undefined) });
+      await loaded();
+      await screen.findByText("No se pudo cargar el resumen");
+      expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull();
+      expect(screen.getByRole("table")).toBeTruthy();
+      // With no total it says how many it shows, not "de m".
+      await screen.findByText("Mostrando 3 movimientos");
+      expect(screen.queryByText("No se pudieron cargar tus movimientos")).toBeNull();
+      expect(callsOf(api, "summary")).toHaveLength(1);
     });
+
+    it("asks for the summary again with 'Reintentar', and the figures take the notice's place", async () => {
+      let broken = true;
+      const { api } = setup({
+        fault: (call) => (broken && call.kind === "summary" ? "server" : undefined),
+      });
+      await screen.findByText("No se pudo cargar el resumen");
+      // Still broken: it asks again, says so again, and the button is free once it has answered.
+      fireEvent.click(within(summaryNotice()!).getByRole("button", { name: "Reintentar" }));
+      await waitFor(() => expect(callsOf(api, "summary")).toHaveLength(2));
+      await waitFor(() =>
+        expect(
+          within(summaryNotice()!)
+            .getByRole("button", { name: "Reintentar" })
+            .getAttribute("aria-busy"),
+        ).toBeNull(),
+      );
+      expect(screen.getByText("No se pudo cargar el resumen")).toBeTruthy();
+      broken = false;
+      fireEvent.click(within(summaryNotice()!).getByRole("button", { name: "Reintentar" }));
+      const summary = await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+      expect(summary.textContent).toContain("+$\u00A068.000,00");
+      expect(screen.queryByText("No se pudo cargar el resumen")).toBeNull();
+      expect(callsOf(api, "summary")).toHaveLength(3);
+      await screen.findByText("Mostrando 3 de 3 movimientos");
+    });
+
+    it("keeps the button busy while it asks again, so it is not asked twice", async () => {
+      let broken = true;
+      const { api, state } = setup({
+        fault: (call) => (broken && call.kind === "summary" ? "server" : undefined),
+      });
+      await screen.findByText("No se pudo cargar el resumen");
+      state.delay = (call) => (call.kind === "summary" ? 40 : 0);
+      broken = false;
+      const button = within(summaryNotice()!).getByRole("button", { name: "Reintentar" });
+      fireEvent.click(button);
+      await waitFor(() => expect(button.getAttribute("aria-busy")).toBe("true"));
+      fireEvent.click(button);
+      await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+      expect(callsOf(api, "summary")).toHaveLength(2);
+    });
+
+    it("says nothing while the summary is still loading", async () => {
+      setup({ fault: (call) => (call.kind === "summary" ? "never" : undefined) });
+      await loaded();
+      await act(async () => {});
+      expect(summaryNotice()).toBeNull();
+      expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull();
+    });
+
+    it("says nothing with Transferencias chosen: there is no figure to miss", async () => {
+      setup({
+        url: "/movimientos?tipo=transferencias",
+        fault: (call) => (call.kind === "summary" ? "server" : undefined),
+      });
+      await loaded();
+      await screen.findByText("Mostrando 1 movimiento");
+      expect(summaryNotice()).toBeNull();
+    });
+
+    it("keeps the previous figures, dimmed, while the new ones load, and only then says it failed", async () => {
+      let broken = false;
+      const { state } = setup({
+        fault: (call) => (broken && call.kind === "summary" ? "server" : undefined),
+      });
+      await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+      broken = true;
+      state.delay = (call) => (call.kind === "summary" ? 50 : 0);
+      fireEvent.click(desktopFilters().getByRole("button", { name: "Gastos" }));
+      await waitFor(() => expect(document.querySelector("[aria-busy='true']")).not.toBeNull());
+      expect(summaryNotice()).toBeNull();
+      expect(screen.getByRole("region", { name: "Resumen de Octubre 2026" })).toBeTruthy();
+      await screen.findByText("No se pudo cargar el resumen");
+      expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull();
+    });
+
+    it("keeps the figures it has when a refresh of the summary fails: they are still the month's", async () => {
+      let broken = false;
+      const { client } = setup({
+        fault: (call) => (broken && call.kind === "summary" ? "server" : undefined),
+      });
+      await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+      broken = true;
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ["spaces", "s1", "transactions", "summary"] });
+      });
+      expect(summaryNotice()).toBeNull();
+      expect(screen.getByRole("region", { name: "Resumen de Octubre 2026" })).toBeTruthy();
+    });
+  });
+
+  it("keeps showing the table while the accounts fail: the list is still right", async () => {
+    setup({ fault: (call) => (call.kind === "accounts" ? "server" : undefined) });
     await loaded();
-    expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull();
-    // With no total it says how many it shows, not "de m".
-    await screen.findByText("Mostrando 3 movimientos");
+    await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+    expect(document.querySelector("[data-slot='summary-error']")).toBeNull();
     expect(screen.queryByText("No se pudieron cargar tus movimientos")).toBeNull();
+    await screen.findByText("Mostrando 3 de 3 movimientos");
   });
 
   it("keeps the rows it has when a refresh fails, and says so with a way to try again", async () => {
@@ -635,7 +740,7 @@ describe("more movements", () => {
       expect(callsOf(api, "next-page")).toHaveLength(2);
     });
 
-    it("starts the list again from the first page when the cursor is not readable (422)", async () => {
+    it("starts the list again from the first page when the cursor is not readable (422 cursor_invalid)", async () => {
       let broken = true;
       const { api } = setup({
         items: expenses(120),
@@ -651,6 +756,30 @@ describe("more movements", () => {
       await waitFor(() => expect(callsOf(api, "list").length).toBe(listCalls + 1));
       await screen.findByText("Mostrando 50 de 120 movimientos");
       expect(screen.queryByText("No se pudieron cargar más movimientos")).toBeNull();
+    });
+
+    it("asks for the same page again, without starting over, on any other 422", async () => {
+      let broken = true;
+      const { api } = setup({
+        items: expenses(120),
+        fault: (call) => (broken && call.kind === "next-page" ? "invalid" : undefined),
+      });
+      await loaded();
+      fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+      await screen.findByText("No se pudieron cargar más movimientos");
+      // It is not the unreadable cursor, so it does not say the list changed.
+      expect(screen.getByRole("alert").textContent).not.toContain("desde el principio");
+      broken = false;
+      const listCalls = callsOf(api, "list").length;
+      fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+      await screen.findByText("Mostrando 100 de 120 movimientos");
+      expect(screen.queryByText("No se pudieron cargar más movimientos")).toBeNull();
+      // The same page again: a second request for the next page, and the first page is not asked for.
+      expect(callsOf(api, "next-page")).toHaveLength(2);
+      expect(callsOf(api, "next-page")[1]!.query.cursor).toBe(
+        callsOf(api, "next-page")[0]!.query.cursor,
+      );
+      expect(callsOf(api, "list")).toHaveLength(listCalls);
     });
   });
 });

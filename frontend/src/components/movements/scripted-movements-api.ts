@@ -13,8 +13,11 @@ import type {
 // that adds up only confirmed incomes and expenses, and a `count` of everything the list would show.
 // A test or a demo says what goes wrong (`fault`) and how long it takes (`delay`). Not used by the app.
 
-/** What goes wrong: a 500, no connection (`fetch` rejects), a request that never answers, or an unreadable cursor (422). */
-export type Fault = "server" | "offline" | "never" | "cursor";
+/**
+ * What goes wrong: a 500, no connection (`fetch` rejects), a request that never answers, an unreadable
+ * cursor (422 `cursor_invalid`) or any other 422 (`invalid`, a `missing` field).
+ */
+export type Fault = "server" | "offline" | "never" | "cursor" | "invalid";
 
 /** Which request it is: the first page, a later page, the summary, the total of the whole space, or the accounts. */
 export type CallKind = "list" | "next-page" | "summary" | "total" | "accounts";
@@ -132,6 +135,11 @@ export function scriptedMovementsApi({
     if (problem === "offline") throw new TypeError("Failed to fetch");
     if (problem === "server") {
       return failure(500, { code: "internal_error", detail: "Internal server error" });
+    }
+    if (problem === "invalid") {
+      return failure(422, {
+        detail: [{ type: "missing", loc: ["query", "month"], msg: "Field required" }],
+      });
     }
     if (problem === "cursor") {
       return failure(422, {

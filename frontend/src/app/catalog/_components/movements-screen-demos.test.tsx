@@ -102,8 +102,17 @@ describe("faultFor", () => {
   it("fails the next page as the select says", () => {
     expect(faultFor({ load: "ok", next: "offline" }, call("next-page"), 0)).toBe("offline");
     expect(faultFor({ load: "ok", next: "cursor" }, call("next-page"), 0)).toBe("cursor");
+    expect(faultFor({ load: "ok", next: "invalid" }, call("next-page"), 0)).toBe("invalid");
     expect(faultFor({ load: "ok", next: "slow" }, call("next-page"), 0)).toBeUndefined();
     expect(faultFor({ load: "ok", next: "offline" }, call("list"), 0)).toBeUndefined();
+  });
+
+  it("fails the summary of the filters when asked, and not the total of the whole space", () => {
+    const settings = { load: "ok", next: "ok", summary: "error" } as const;
+    expect(faultFor(settings, call("summary"), 0)).toBe("server");
+    expect(faultFor(settings, { kind: "total", path: "/x", query: {} }, 0)).toBeUndefined();
+    expect(faultFor(settings, call("list"), 0)).toBeUndefined();
+    expect(faultFor({ load: "ok", next: "ok" }, call("summary"), 0)).toBeUndefined();
   });
 });
 
@@ -188,6 +197,27 @@ describe("MovementsScreenDemo", () => {
     expect(await screen.findByText("No se pudieron cargar tus movimientos")).toBeTruthy();
     choose("Cómo carga la lista", "ok");
     expect(await screen.findByRole("table")).toBeTruthy();
+  });
+
+  it("says the summary could not be loaded, and gets it back with 'Reintentar'", async () => {
+    render(<MovementsScreenDemo instant />);
+    choose("Qué responde el resumen", "error");
+    await screen.findByText("No se pudo cargar el resumen");
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: /Resumen/ })).toBeNull();
+    choose("Qué responde el resumen", "ok");
+    await screen.findByRole("region", { name: "Resumen de Octubre 2026" });
+    expect(screen.queryByText("No se pudo cargar el resumen")).toBeNull();
+  });
+
+  it("takes another 422 from the next page without starting the list over", async () => {
+    render(<MovementsScreenDemo instant />);
+    choose("Qué movimientos hay", "many");
+    choose("Qué responde la página siguiente", "invalid");
+    await screen.findByText("Mostrando 50 de 500 movimientos");
+    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    await screen.findByText("No se pudieron cargar más movimientos");
+    expect(screen.getByRole("alert").textContent).not.toContain("desde el principio");
   });
 
   it("keeps the rows and says so when a refresh fails", async () => {

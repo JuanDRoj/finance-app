@@ -98,6 +98,18 @@ describe("TypeChips", () => {
     expect(other).not.toContain("bg-primary");
   });
 
+  it("lights up a chip that is not chosen under a mouse, with a token, as the project's segmented control does", () => {
+    render(<TypeChips type="income" onTypeChange={() => {}} />);
+    const other = screen.getByRole("button", { name: "Gastos" }).className;
+    // `hover:` only applies where there is a hover (a mouse), and it is `accent`, a token.
+    expect(other).toContain("hover:bg-accent");
+    // The old hover (`brightness`) fell on a transparent chip and did nothing.
+    expect(other).not.toContain("hover:brightness");
+    // The chosen one stays primary under the mouse: no hover change.
+    const chosen = screen.getByRole("button", { name: "Ingresos" }).className;
+    expect(chosen).not.toContain("hover:");
+  });
+
   it("is a button of type button: it never submits a form around it", () => {
     render(<TypeChips type={undefined} onTypeChange={() => {}} />);
     for (const button of screen.getAllByRole("button")) {

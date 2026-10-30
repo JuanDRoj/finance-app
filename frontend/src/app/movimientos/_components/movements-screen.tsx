@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { browserApi } from "@/lib/api/browser";
 import { accountsQueryOptions } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
-import { ApiError } from "@/lib/core/data/errors";
 import {
   transactionsListKey,
   transactionsListQueryOptions,
@@ -36,12 +35,14 @@ import {
   flattenMovementPages,
   groupMovementsByDay,
   hasActiveFilters,
+  isCursorInvalid,
   showsSummary,
 } from "@/lib/core/movements";
 import { cn } from "@/lib/utils";
 import { MoreFooter, MoreSentinel, NextPageError } from "./load-more";
 import { MonthNav } from "./month-nav";
 import { MovementFiltersCard } from "./movement-filters-card";
+import { SummaryError } from "./summary-error";
 import { TypeChips } from "./type-chips";
 import { useMovementFilters } from "./use-movement-filters";
 
@@ -54,11 +55,6 @@ type MovementsScreenProps = {
   /** The API client; the browser's by default (the catalog and the tests pass a scripted one). */
   api?: ApiClient;
 };
-
-/** A 422 of the list is a cursor the backend cannot read: asking for the same page again cannot work. */
-function isUnprocessable(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 422;
-}
 
 /**
  * The body of Movimientos (docs/diseno.md D17 › Escritorio v2, D19; K-H1-Movimientos and
@@ -78,8 +74,10 @@ function isUnprocessable(error: unknown): boolean {
  *   CSS hides one, so nothing changes size when it hydrates.
  * - **Failures.** The first load failing is "No se pudieron cargar tus movimientos" with
  *   "Reintentar" (never "no movements"); a refresh that fails with rows on screen keeps them and says
- *   so; a next page that fails says so once, under the list, and asks nothing until "Reintentar"
- *   (a 422 starts the list again from the first page).
+ *   so; a summary that fails says "No se pudo cargar el resumen" with "Reintentar" in the place of the
+ *   figures (the list stays right without it); a next page that fails says so once, under the list,
+ *   and asks nothing until "Reintentar" (an unreadable cursor, the 422 `cursor_invalid`, starts the
+ *   list again from the first page; any other failure asks for the same page again).
  * - **A space with no movement** shows the invitation. On desktop it hides the filters and the
  *   figures (there is nothing to filter); on a phone the month and the chips stay, as the canvas draws.
  * - The rows are **read only** (FE-22); editing and deleting are FE-23's.
@@ -129,7 +127,8 @@ export function MovementsScreen({
     void fetchNextPage({ cancelRefetch: false });
   }, [fetchNextPage]);
   const retryNextPage = () => {
-    if (isUnprocessable(list.error)) {
+    // Only an unreadable cursor starts the list over; any other failure asks for the same page again.
+    if (isCursorInvalid(list.error)) {
       void queryClient.resetQueries({
         queryKey: transactionsListKey(space.id, filters),
         exact: true,
@@ -175,6 +174,12 @@ export function MovementsScreen({
   } else {
     const refreshFailed = list.isError && !list.isFetchNextPageError;
     const figures = summary.data;
+    // Failed and with nothing to show (not loading, not the previous filters' figures): say so. While
+    // "Reintentar" asks again, the query goes back to "pending" (it has no data), so a fetch that
+    // follows a failure keeps the notice, with its button busy, instead of making it blink.
+    const summaryFailed =
+      figures === undefined &&
+      (summary.isError || (summary.isFetching && summary.errorUpdateCount > 0));
     const shown = figures
       ? describeShown(rows.length, figures.count)
       : `Mostrando ${describeMovementCount(rows.length)}`;
@@ -206,6 +211,9 @@ export function MovementsScreen({
         ) : null}
         {figures && showsSummary(filters) ? (
           <MovementsSummary summary={figures} currency={space.currency} period={period} />
+        ) : null}
+        {summaryFailed && showsSummary(filters) ? (
+          <SummaryError onRetry={() => void summary.refetch()} busy={summary.isFetching} />
         ) : null}
         <MovementDayGroups groups={groups} currency={space.currency} className="lg:hidden" />
         <div className="rounded-card border border-border bg-surface px-5.5 pt-2.5 pb-4 max-lg:hidden">

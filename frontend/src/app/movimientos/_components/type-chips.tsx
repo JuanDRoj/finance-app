@@ -25,6 +25,9 @@ const CHIPS: readonly Chip[] = [
  * - **Desktop:** the four inside one segmented pill (4 px of padding), buttons of 34 px (44 with a
  *   finger), the chosen one `primary`.
  *
+ * A chip that is not chosen lights up with `accent` under a mouse (`hover:bg-accent`, what the
+ * project's segmented control does); the chosen one stays `primary`.
+ *
  * The last chip says "Transf." on a phone and "Transferencias" from 1024 px, but its name is always
  * "Transferencias" (the short text is hidden from assistive technology).
  */
@@ -61,7 +64,7 @@ export function TypeChips({
               "lg:min-h-8.5 lg:flex-none lg:border-0 lg:pointer-coarse:min-h-11",
               pressed
                 ? "border-primary bg-primary font-bold text-primary-foreground"
-                : "border-input bg-glass font-semibold text-foreground hover:brightness-95 lg:bg-transparent",
+                : "border-input bg-glass font-semibold text-foreground hover:bg-accent lg:bg-transparent",
               focusRing,
             )}
           >
