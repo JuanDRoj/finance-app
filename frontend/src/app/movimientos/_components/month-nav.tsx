@@ -7,13 +7,15 @@ import { shiftMonth } from "@/lib/core/movements";
 
 /**
  * The month of a phone, with "Mes anterior" and "Mes siguiente" (K-H1-Movimientos): two arrows of
- * 44 px around "Octubre 2026" (16 px in bold, at least 112 px wide, announced when it changes). An
+ * 44 px around "Octubre 2026" (16 px in bold, at least 112 px wide). An
  * arrow is off at the end of the months the backend takes (1900-01 and 2199-12); it stays in the
  * tab order and says it is off, like every button of the project. The month after the current one
  * is allowed: a movement can be dated in the future.
  *
- * It is only the group of three: the row it sits in is the screen's, which leaves the right side for
- * the "Filtrar" button (FE-33). From 1024 px the screen uses `MonthSelect` instead.
+ * It is only the group of three: the row it sits in is the screen's, which has "Filtrar" on the right.
+ * From 1024 px the screen uses `MonthSelect` instead. It does not announce the month by itself (no
+ * `aria-live`): the `status` region of the screen says the month and the count in one go, so a change
+ * of month is announced once.
  */
 export function MonthNav({
   month,
@@ -35,9 +37,7 @@ export function MonthNav({
         >
           <CaretLeft aria-hidden weight="bold" />
         </Button>
-        <span aria-live="polite" className="min-w-28 text-center text-base font-bold">
-          {formatMonth(month)}
-        </span>
+        <span className="min-w-28 text-center text-base font-bold">{formatMonth(month)}</span>
         <Button
           variant="ghost"
           size="icon"

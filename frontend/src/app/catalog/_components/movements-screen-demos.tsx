@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { MovementsHeaderActions } from "@/app/movimientos/_components/movements-header-actions";
 import { MovementsScreen } from "@/app/movimientos/_components/movements-screen";
 import { MovementsSubtitle } from "@/app/movimientos/_components/movements-subtitle";
@@ -12,39 +12,34 @@ import {
 } from "@/components/movements/scripted-movements-api";
 import { SelectField } from "@/components/select-field";
 import { Button } from "@/components/ui/button";
-import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { MovementListItem } from "@/lib/core/data/transactions";
 import { transactionsQueryKey } from "@/lib/core/data/transactions";
 import { Isolated } from "./category-demos";
+import {
+  ACCOUNT_CHOICES,
+  CATEGORY_CHOICES,
+  accountsFor,
+  categoriesFor,
+  uuidOf,
+  withUuids,
+  type Accounts,
+  type Categories,
+} from "./movement-filter-lists";
 import { TODAY, normalMovements, worstMovements } from "./movement-pieces-demos";
 
 // The screen Movimientos (FE-22 / KAN-82) with the real components and a **scripted backend** (the
 // catalog has no session): it filters by month, type, text, account and category, pages by cursor
 // and adds up the summary like the real one. Selects choose the data and what goes wrong, and a row of
 // links writes the URLs that a link or a person could (nonsense included) into this page's address.
-// The filters live in the URL, so this page's `?mes=`, `?tipo=` and `?q=` are the screen's.
+// The filters live in the URL, so this page's `?mes=`, `?tipo=`, `?q=`, `?cuenta_id=` and
+// `?categoria_id=` are the screen's. The accounts and the categories are derived from the movements on
+// show (`movement-filter-lists.ts`), with UUIDs for ids because the URL only takes those.
 
 const SPACE = {
   id: "00000000-0000-4000-8000-000000000000",
   currency: { code: "UYU", exponent: 2 },
 };
 const CURRENT_MONTH = "2026-10";
-
-const ACCOUNT = (overrides: Partial<AccountWithBalance>): AccountWithBalance => ({
-  id: "a1",
-  name: "Itaú",
-  type: "bank",
-  balance_minor: 0,
-  archived_at: null,
-  closing_day: null,
-  due_day: null,
-  ...overrides,
-});
-const ACTIVE_ACCOUNTS = [
-  ACCOUNT({}),
-  ACCOUNT({ id: "a2", name: "Visa Itaú", type: "credit_card" }),
-];
-const ONLY_ARCHIVED = [ACCOUNT({ archived_at: "2026-09-01T12:00:00Z" })];
 
 const byDateDesc = (items: MovementListItem[]) =>
   items.sort((a, b) => b.date.localeCompare(a.date));
@@ -88,6 +83,7 @@ export function crowdedMonth(): MovementListItem[] {
   return crowdedCache;
 }
 
+export type { Accounts, Categories };
 export type ScreenData = "history" | "worst" | "many" | "emptyMonth" | "none";
 const DATA_CHOICES: Record<ScreenData, string> = {
   history: "Datos normales (octubre, setiembre y agosto)",
@@ -102,12 +98,6 @@ const DATA: Record<ScreenData, () => MovementListItem[]> = {
   many: crowdedMonth,
   emptyMonth: emptyMonthMovements,
   none: () => [],
-};
-
-export type Accounts = "active" | "archived";
-const ACCOUNT_CHOICES: Record<Accounts, string> = {
-  active: "Con cuentas activas",
-  archived: "Sin cuentas activas (solo una archivada)",
 };
 
 export type ListLoad = "ok" | "loading" | "error" | "offline" | "refresh";
@@ -134,7 +124,15 @@ const SUMMARY_CHOICES: Record<SummaryLoad, string> = {
   error: "Falla (500): «No se pudo cargar el resumen»",
 };
 
-type Settings = { load: ListLoad; next: NextPage; summary?: SummaryLoad };
+export type ListsLoad = "ok" | "accounts" | "categories" | "both";
+const LISTS_CHOICES: Record<ListsLoad, string> = {
+  ok: "Responden bien",
+  accounts: "Las cuentas fallan (500): el filtro de cuenta se apaga",
+  categories: "Las categorías fallan (500): el filtro de categoría se apaga",
+  both: "Las dos fallan",
+};
+
+type Settings = { load: ListLoad; next: NextPage; summary?: SummaryLoad; lists?: ListsLoad };
 
 /** What goes wrong for a request, given what the selects say. `listAnswers` counts the lists that already answered. */
 export function faultFor(
@@ -155,31 +153,54 @@ export function faultFor(
   }
   // The summary of the filters; the total of the whole space (`total`) is not part of it.
   if (call.kind === "summary" && settings.summary === "error") return "server";
+  // The lists the filters are made of: a failing one turns its select off, and the screen goes on.
+  const lists = settings.lists ?? "ok";
+  if (call.kind === "accounts" && (lists === "accounts" || lists === "both")) return "server";
+  if (call.kind === "categories" && (lists === "categories" || lists === "both")) return "server";
   return undefined;
+}
+
+const datasets = new Map<ScreenData, MovementListItem[]>();
+/** The movements of a choice with UUIDs for their accounts and categories, made once (500 are not free). */
+function itemsOf(data: ScreenData): MovementListItem[] {
+  let items = datasets.get(data);
+  if (items === undefined) {
+    items = withUuids(DATA[data]());
+    datasets.set(data, items);
+  }
+  return items;
 }
 
 /** The scripted backend of the demo for a choice of selects. `answered` counts the lists that came out well. */
 export function demoApi({
   data,
   accounts,
+  categories = "data",
   load,
   next,
   summary = "ok",
+  lists = "ok",
   instant,
 }: Readonly<{
   data: ScreenData;
   accounts: Accounts;
+  categories?: Categories;
   load: ListLoad;
   next: NextPage;
   summary?: SummaryLoad;
+  lists?: ListsLoad;
   instant: boolean;
 }>) {
   let answered = 0;
+  const items = itemsOf(data);
+  const accountList = accountsFor(accounts, items);
+  const categoryList = categoriesFor(categories, items);
   return scriptedMovementsApi({
-    items: DATA[data],
-    accounts: () => (accounts === "active" ? ACTIVE_ACCOUNTS : ONLY_ARCHIVED),
+    items: () => items,
+    accounts: () => accountList,
+    categories: () => categoryList,
     fault: (call) => {
-      const fault = faultFor({ load, next, summary }, call, answered);
+      const fault = faultFor({ load, next, summary, lists }, call, answered);
       if (call.kind === "list" && fault === undefined) answered += 1;
       return fault;
     },
@@ -195,10 +216,24 @@ const TRY_URLS: ReadonlyArray<readonly [string, string]> = [
   ["Con ?tipo=transferencias", "?tipo=transferencias"],
   ["Basura en la URL", "?mes=2026-13&tipo=otro&cuenta_id=abc&categoria_id=%20&q=%20%20"],
   ["Búsqueda de 100 caracteres", `?q=${"a".repeat(100)}`],
+  ["Búsqueda de 150 caracteres", `?q=${"a".repeat(150)}`],
+  ["Itaú y Supermercado", `?cuenta_id=${uuidOf("a1")}&categoria_id=${uuidOf("c-super")}`],
+  [
+    "Cuenta y categoría que no existen",
+    "?cuenta_id=00000000-0000-4000-8000-0000000000ff&categoria_id=00000000-0000-4000-8000-0000000000fe",
+  ],
   ["Mes 1900-01", "?mes=1900-01"],
   ["Mes 2199-12", "?mes=2199-12"],
   ["Diciembre de 2025", "?mes=2025-12"],
 ];
+
+/** The links of the header open a panel that needs a session: here they do nothing (the magnifier is a button and works). */
+function ignoreLinks(event: MouseEvent<HTMLElement>) {
+  if ((event.target as HTMLElement).closest("a")) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
 
 /** Asks again for the movements of the space, as after registering one: the way to see a refresh that fails. */
 function RefreshButton() {
@@ -224,6 +259,8 @@ function RefreshButton() {
 export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: boolean }>) {
   const [data, setData] = useState<ScreenData>("history");
   const [accounts, setAccounts] = useState<Accounts>("active");
+  const [categories, setCategories] = useState<Categories>("data");
+  const [lists, setLists] = useState<ListsLoad>("ok");
   const [load, setLoad] = useState<ListLoad>("ok");
   const [next, setNext] = useState<NextPage>("ok");
   const [summary, setSummary] = useState<SummaryLoad>("ok");
@@ -232,12 +269,14 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
   // A new backend for every choice: changing what goes wrong starts the screen again, so "falla al
   // refrescar" always begins with a first list that answers well.
   const api = useMemo(
-    () => demoApi({ data, accounts, load, next, summary, instant }),
-    [data, accounts, load, next, summary, instant],
+    () => demoApi({ data, accounts, categories, load, next, summary, lists, instant }),
+    [data, accounts, categories, load, next, summary, lists, instant],
   );
 
   return (
-    <Isolated key={`${data}-${accounts}-${load}-${next}-${summary}-${round}`}>
+    <Isolated
+      key={`${data}-${accounts}-${categories}-${lists}-${load}-${next}-${summary}-${round}`}
+    >
       <div className="flex flex-col gap-4">
         <div className="grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SelectField
@@ -259,6 +298,28 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
             {(Object.keys(ACCOUNT_CHOICES) as Accounts[]).map((key) => (
               <option key={key} value={key}>
                 {ACCOUNT_CHOICES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué categorías hay"
+            value={categories}
+            onChange={(event) => setCategories(event.target.value as Categories)}
+          >
+            {(Object.keys(CATEGORY_CHOICES) as Categories[]).map((key) => (
+              <option key={key} value={key}>
+                {CATEGORY_CHOICES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué responden las cuentas y las categorías"
+            value={lists}
+            onChange={(event) => setLists(event.target.value as ListsLoad)}
+          >
+            {(Object.keys(LISTS_CHOICES) as ListsLoad[]).map((key) => (
+              <option key={key} value={key}>
+                {LISTS_CHOICES[key]}
               </option>
             ))}
           </SelectField>
@@ -302,8 +363,10 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
           el scroll carga la página siguiente; desde 1024 px, la tarjeta de filtros, las cifras y la
           tabla con «Cargar más». Los filtros están en la dirección de <em>esta</em> página: los
           enlaces de abajo escriben en ella lo que un enlace o una persona podría escribir. La
-          búsqueda (la lupa y la caja) llega con FE-33: aquí sólo funciona <code>?q=</code>. Con
-          «Carga bien y falla al refrescar», «Refrescar la lista» pide de nuevo y falla.
+          búsqueda es la caja de la tarjeta (desde 1024 px) o la lupa del encabezado (debajo, abre
+          la caja con el teclado); la cuenta y la categoría son los selects de la tarjeta o el botón
+          «Filtrar» (la hoja). Con «Carga bien y falla al refrescar», «Refrescar la lista» pide de
+          nuevo y falla.
         </p>
         <div className="flex flex-wrap gap-2">
           {TRY_URLS.map(([label, search]) => (
@@ -333,10 +396,14 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
             </span>
           </span>
           <span className="text-sm text-muted-foreground">
-            «Registrar movimiento» del encabezado necesita sesión: aquí se ve, pero no se prueba.
+            La lupa del encabezado (bajo 1024 px) funciona; «Registrar movimiento» necesita sesión:
+            aquí se ve, pero no abre nada.
           </span>
-          <div inert className="flex">
-            <MovementsHeaderActions noAccounts={accounts === "archived"} />
+          <div className="flex" onClickCapture={ignoreLinks}>
+            <MovementsHeaderActions
+              noAccounts={accounts === "archived"}
+              currentMonth={CURRENT_MONTH}
+            />
           </div>
         </div>
         <MovementsScreen space={SPACE} currentMonth={CURRENT_MONTH} today={TODAY} api={api} />

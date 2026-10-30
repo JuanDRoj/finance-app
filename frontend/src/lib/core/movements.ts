@@ -11,6 +11,8 @@ import {
   isMonth,
   shiftLocalDate,
 } from "./dates";
+import type { AccountWithBalance } from "./data/accounts";
+import type { CategoryRead } from "./data/categories";
 import { ApiError } from "./data/errors";
 import { describeTransactionStatus, describeTransactionType, isValidationErrorBody } from "./i18n";
 import { formatMoney, type Currency } from "./money";
@@ -525,6 +527,109 @@ export function isCursorInvalid(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 422) return false;
   if (!isValidationErrorBody(error.body)) return false;
   return (error.body.detail ?? []).some((issue) => issue.type === CURSOR_INVALID);
+}
+
+// --- The options of the account and category filters ------------------------------------------------
+
+/** One choice of a filter's select: `value` is the id that goes to the URL, `label` what is read. */
+export type FilterOption = { value: string; label: string };
+
+/** A group of choices (`optgroup`): "Gastos", "Ingresos" or "Archivadas". */
+export type FilterOptionGroup = { label: string; options: FilterOption[] };
+
+/** The label of an account id that is not in the list (another space's, or one that does not exist). */
+export const OTHER_ACCOUNT_LABEL = "Otra cuenta";
+
+/** The label of a category id that is not in the list. */
+export const OTHER_CATEGORY_LABEL = "Otra categoría";
+
+const ARCHIVED_SUFFIX = "(archivada)";
+
+/**
+ * The accounts a person can filter by (docs/diseno.md D19; K-H1-Movimientos, "Filtrar"): the active
+ * ones in the order the API gives them (by name), then the archived ones as "Nombre (archivada)":
+ * their movements are still in the list. If the URL names an account that is not in the list (a link
+ * to another space's, a deleted one, or a list that did not load) it is added as "Otra cuenta", so the
+ * select never says "Todas las cuentas" while something is filtering.
+ */
+export function buildAccountOptions(
+  accounts: readonly Pick<AccountWithBalance, "id" | "name" | "archived_at">[] | undefined,
+  selectedId?: string,
+): FilterOption[] {
+  const list = accounts ?? [];
+  const options: FilterOption[] = [
+    ...list
+      .filter((account) => !account.archived_at)
+      .map((account) => ({ value: account.id, label: account.name })),
+    ...list
+      .filter((account) => account.archived_at)
+      .map((account) => ({ value: account.id, label: `${account.name} ${ARCHIVED_SUFFIX}` })),
+  ];
+  if (selectedId && !list.some((account) => account.id === selectedId)) {
+    options.push({ value: selectedId, label: OTHER_ACCOUNT_LABEL });
+  }
+  return options;
+}
+
+type CategoryLike = Pick<CategoryRead, "id" | "name" | "kind" | "parent_id" | "archived_at">;
+
+/** The choices of the category select: the groups, and the one extra choice when the URL names a category that is not in them. */
+export type CategoryFilterOptions = { groups: FilterOptionGroup[]; extra?: FilterOption };
+
+/**
+ * The categories a person can filter by, as the canvas draws them: only the **principal** ones
+ * ("Una categoría principal incluye sus subcategorías."), in the groups Gastos and Ingresos, in the
+ * order of the API, and the archived principal ones in a last group, Archivadas (their movements are
+ * still there). A group with nothing in it is left out.
+ *
+ * What the URL names that is not in a group becomes the `extra` choice, so the select never says
+ * "Todas las categorías" while something is filtering: a subcategory the list knows is named in full
+ * ("Comida › Supermercado", with "(archivada)" if it or its principal is), and an id nobody knows is
+ * "Otra categoría".
+ */
+export function buildCategoryOptions(
+  categories: readonly CategoryLike[] | undefined,
+  selectedId?: string,
+): CategoryFilterOptions {
+  const list = categories ?? [];
+  const principals = list.filter((category) => category.parent_id === null);
+  const groupOf = (label: string, items: readonly CategoryLike[]): FilterOptionGroup[] =>
+    items.length === 0
+      ? []
+      : [{ label, options: items.map((item) => ({ value: item.id, label: item.name })) }];
+  const archived = principals.filter((category) => category.archived_at);
+  const groups: FilterOptionGroup[] = [
+    ...groupOf(
+      "Gastos",
+      principals.filter((category) => !category.archived_at && category.kind === "expense"),
+    ),
+    ...groupOf(
+      "Ingresos",
+      principals.filter((category) => !category.archived_at && category.kind === "income"),
+    ),
+    ...(archived.length === 0
+      ? []
+      : [
+          {
+            label: "Archivadas",
+            options: archived.map((category) => ({
+              value: category.id,
+              label: `${category.name} ${ARCHIVED_SUFFIX}`,
+            })),
+          },
+        ]),
+  ];
+
+  if (!selectedId || principals.some((category) => category.id === selectedId)) return { groups };
+  const known = list.find((category) => category.id === selectedId);
+  if (!known) return { groups, extra: { value: selectedId, label: OTHER_CATEGORY_LABEL } };
+  const parent = list.find((category) => category.id === known.parent_id);
+  const name = parent ? `${parent.name} › ${known.name}` : known.name;
+  const isArchived = Boolean(known.archived_at || parent?.archived_at);
+  return {
+    groups,
+    extra: { value: known.id, label: isArchived ? `${name} ${ARCHIVED_SUFFIX}` : name },
+  };
 }
 
 // --- Counts ----------------------------------------------------------------------------------------

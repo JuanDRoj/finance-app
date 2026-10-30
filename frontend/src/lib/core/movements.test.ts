@@ -9,6 +9,8 @@ import {
   MOVEMENT_TYPE_PARAMS,
   activeFilterCount,
   applyMovementFilters,
+  buildAccountOptions,
+  buildCategoryOptions,
   buildMonthOptions,
   chooseEmptyState,
   clearMovementFilters,
@@ -902,5 +904,163 @@ describe("isCursorInvalid", () => {
     expect(isCursorInvalid({ status: 422, body: detail("cursor_invalid") })).toBe(false);
     expect(isCursorInvalid(null)).toBe(false);
     expect(isCursorInvalid(undefined)).toBe(false);
+  });
+});
+
+describe("buildAccountOptions", () => {
+  const account = (id: string, name: string, archived = false) => ({
+    id,
+    name,
+    archived_at: archived ? "2026-09-01T12:00:00Z" : null,
+  });
+
+  it("lists the active accounts in the order of the API, then the archived ones with their suffix", () => {
+    const options = buildAccountOptions([
+      account("a1", "BROU", true),
+      account("a2", "Efectivo"),
+      account("a3", "Itaú"),
+      account("a4", "Visa", true),
+    ]);
+    expect(options).toEqual([
+      { value: "a2", label: "Efectivo" },
+      { value: "a3", label: "Itaú" },
+      { value: "a1", label: "BROU (archivada)" },
+      { value: "a4", label: "Visa (archivada)" },
+    ]);
+  });
+
+  it("is empty for no accounts, and for a list that did not load", () => {
+    expect(buildAccountOptions([])).toEqual([]);
+    expect(buildAccountOptions(undefined)).toEqual([]);
+  });
+
+  it("adds 'Otra cuenta' for an id that is not in the list, so the select never lies", () => {
+    const options = buildAccountOptions([account("a1", "Itaú")], "zzz");
+    expect(options.at(-1)).toEqual({ value: "zzz", label: "Otra cuenta" });
+    expect(options).toHaveLength(2);
+  });
+
+  it("names the selected account when it is in the list, active or archived, with no extra choice", () => {
+    expect(buildAccountOptions([account("a1", "Itaú")], "a1")).toHaveLength(1);
+    expect(buildAccountOptions([account("a1", "Itaú", true)], "a1")).toEqual([
+      { value: "a1", label: "Itaú (archivada)" },
+    ]);
+  });
+
+  it("keeps a selected id visible when the accounts did not load", () => {
+    expect(buildAccountOptions(undefined, "a1")).toEqual([{ value: "a1", label: "Otra cuenta" }]);
+  });
+
+  it("holds names of 80 characters whole, for the select to cut", () => {
+    const long = "N".repeat(80);
+    expect(buildAccountOptions([account("a1", long, true)])[0]!.label).toBe(`${long} (archivada)`);
+  });
+});
+
+describe("buildCategoryOptions", () => {
+  const category = (
+    id: string,
+    name: string,
+    over: Partial<{
+      kind: "expense" | "income";
+      parent_id: string | null;
+      archived_at: string | null;
+    }> = {},
+  ) => ({ id, name, kind: "expense" as const, parent_id: null, archived_at: null, ...over });
+  const ARCHIVED = "2026-09-01T12:00:00Z";
+
+  const LIST = [
+    category("c1", "Comida"),
+    category("c2", "Supermercado", { parent_id: "c1" }),
+    category("c3", "Transporte"),
+    category("c4", "Trabajo", { kind: "income" }),
+    category("c5", "Sueldo", { kind: "income", parent_id: "c4" }),
+    category("c6", "Mascotas", { archived_at: ARCHIVED }),
+    category("c7", "Veterinaria", { parent_id: "c6", archived_at: ARCHIVED }),
+    category("c8", "Intereses", { kind: "income", parent_id: "c4", archived_at: ARCHIVED }),
+  ];
+
+  it("groups the principal categories as Gastos, Ingresos and Archivadas, in the order of the API", () => {
+    expect(buildCategoryOptions(LIST).groups).toEqual([
+      {
+        label: "Gastos",
+        options: [
+          { value: "c1", label: "Comida" },
+          { value: "c3", label: "Transporte" },
+        ],
+      },
+      { label: "Ingresos", options: [{ value: "c4", label: "Trabajo" }] },
+      { label: "Archivadas", options: [{ value: "c6", label: "Mascotas (archivada)" }] },
+    ]);
+  });
+
+  it("offers only principal categories: a principal includes its subcategories", () => {
+    const values = buildCategoryOptions(LIST).groups.flatMap((g) => g.options.map((o) => o.value));
+    expect(values).toEqual(["c1", "c3", "c4", "c6"]);
+  });
+
+  it("leaves out a group that has nothing in it", () => {
+    expect(buildCategoryOptions([category("c1", "Comida")]).groups.map((g) => g.label)).toEqual([
+      "Gastos",
+    ]);
+    expect(buildCategoryOptions([]).groups).toEqual([]);
+    expect(buildCategoryOptions(undefined).groups).toEqual([]);
+  });
+
+  it("keeps two principals with the same name in different kinds, each in its own group", () => {
+    const { groups } = buildCategoryOptions([
+      category("c1", "Regalos"),
+      category("c2", "Regalos", { kind: "income" }),
+    ]);
+    expect(groups.map((g) => [g.label, g.options[0]!.value])).toEqual([
+      ["Gastos", "c1"],
+      ["Ingresos", "c2"],
+    ]);
+  });
+
+  it("has no extra choice when the selected category is a principal one, active or archived", () => {
+    expect(buildCategoryOptions(LIST, "c1").extra).toBeUndefined();
+    expect(buildCategoryOptions(LIST, "c6").extra).toBeUndefined();
+    expect(buildCategoryOptions(LIST).extra).toBeUndefined();
+  });
+
+  it("names a subcategory that the list knows in full, instead of 'Otra categoría'", () => {
+    expect(buildCategoryOptions(LIST, "c2").extra).toEqual({
+      value: "c2",
+      label: "Comida › Supermercado",
+    });
+  });
+
+  it("marks that subcategory archived when it is, or its principal is", () => {
+    expect(buildCategoryOptions(LIST, "c8").extra).toEqual({
+      value: "c8",
+      label: "Trabajo › Intereses (archivada)",
+    });
+    expect(buildCategoryOptions(LIST, "c7").extra).toEqual({
+      value: "c7",
+      label: "Mascotas › Veterinaria (archivada)",
+    });
+  });
+
+  it("says 'Otra categoría' for an id nobody knows, and keeps it as the value", () => {
+    expect(buildCategoryOptions(LIST, "zzz").extra).toEqual({
+      value: "zzz",
+      label: "Otra categoría",
+    });
+    expect(buildCategoryOptions(undefined, "zzz").extra).toEqual({
+      value: "zzz",
+      label: "Otra categoría",
+    });
+  });
+
+  it("names a subcategory whose principal is not in the list by its own name", () => {
+    const orphan = [category("c9", "Huérfana", { parent_id: "gone" })];
+    expect(buildCategoryOptions(orphan, "c9").extra).toEqual({ value: "c9", label: "Huérfana" });
+  });
+
+  it("holds names of 80 characters whole", () => {
+    const long = "C".repeat(80);
+    const { groups } = buildCategoryOptions([category("c1", long)]);
+    expect(groups[0]!.options[0]!.label).toBe(long);
   });
 });

@@ -74,12 +74,21 @@ const MOVEMENT = {
   to_account: null,
   balance_after_minor: null,
 };
+const CATEGORY = {
+  id: "c1",
+  name: "Comida",
+  kind: "expense",
+  icon: "fork-knife",
+  parent_id: null,
+  archived_at: null,
+};
 const PAGE = { items: [MOVEMENT], next_cursor: null };
 const SUMMARY = { count: 1, income_minor: 0, expense_minor: 234000, remaining_minor: -234000 };
 
 const LIST_PATH = "/spaces/{space_id}/transactions";
 const SUMMARY_PATH = "/spaces/{space_id}/transactions/summary";
 const ACCOUNTS_PATH = "/spaces/{space_id}/accounts";
+const CATEGORIES_PATH = "/spaces/{space_id}/categories";
 
 const ok = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) });
 const failure = (status: number, body?: { code: string; detail: string }) => ({
@@ -89,7 +98,9 @@ const failure = (status: number, body?: { code: string; detail: string }) => ({
 const UNAUTHORIZED = failure(401, { code: "invalid_session", detail: "x" });
 const BROKEN = failure(500, { code: "internal_error", detail: "boom" });
 
-type Answers = Partial<Record<"me" | "spaces" | "list" | "summary" | "accounts", unknown>>;
+type Answers = Partial<
+  Record<"me" | "spaces" | "list" | "summary" | "accounts" | "categories", unknown>
+>;
 
 function backend(answers: Answers = {}) {
   mocks.get.mockImplementation(async (path: string) => {
@@ -98,6 +109,7 @@ function backend(answers: Answers = {}) {
     if (path === LIST_PATH) return answers.list ?? ok(PAGE);
     if (path === SUMMARY_PATH) return answers.summary ?? ok(SUMMARY);
     if (path === ACCOUNTS_PATH) return answers.accounts ?? ok([ACCOUNT]);
+    if (path === CATEGORIES_PATH) return answers.categories ?? ok([CATEGORY]);
     throw new Error(`unexpected path ${path}`);
   });
 }
@@ -158,6 +170,13 @@ describe("MovementsPage", () => {
     ]);
   });
 
+  it("asks for the categories with the archived ones too: the filter offers them", async () => {
+    await renderPage();
+    expect(callsTo(CATEGORIES_PATH)).toEqual([
+      { params: { path: { space_id: "s1" }, query: { include_archived: true } } },
+    ]);
+  });
+
   it("takes the filters from the URL, so the first page is already the one that was asked for", async () => {
     await renderPage({ mes: "2026-08", tipo: "gastos", q: "uber" });
     const query = { month: "2026-08", type: "expense", q: "uber" };
@@ -180,7 +199,7 @@ describe("MovementsPage", () => {
     });
   });
 
-  it("hydrates the client with the list, the summary and the accounts under the keys it will ask with", async () => {
+  it("hydrates the client with the list, the summary, the accounts and the categories under the keys it will ask with", async () => {
     const client = await renderPage({ tipo: "ingresos" });
     const filters = { month: "2026-10", type: "income" as const };
     expect(client.getQueryData(transactionsListKey("s1", filters))).toEqual({
@@ -190,6 +209,9 @@ describe("MovementsPage", () => {
     expect(client.getQueryData(transactionsSummaryKey("s1", filters))).toEqual(SUMMARY);
     expect(client.getQueryData(["spaces", "s1", "accounts", { includeArchived: true }])).toEqual([
       ACCOUNT,
+    ]);
+    expect(client.getQueryData(["spaces", "s1", "categories", { includeArchived: true }])).toEqual([
+      CATEGORY,
     ]);
   });
 
@@ -219,6 +241,15 @@ describe("MovementsPage", () => {
     const subtitle = screen.getByTestId("movements-subtitle");
     expect(subtitle.closest("header")).not.toBeNull();
     expect(subtitle.parentElement!.className).toContain("lg:block");
+  });
+
+  it("has the magnifier in the header, for a phone, closed at first", async () => {
+    await renderPage();
+    const magnifier = within(screen.getByRole("banner")).getByRole("button", {
+      name: "Abrir la búsqueda",
+    });
+    expect(magnifier.className).toContain("lg:hidden");
+    expect(magnifier.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("has 'Registrar movimiento' in the header, a link that opens the sheet", async () => {
@@ -257,6 +288,7 @@ describe("MovementsPage", () => {
     ["the movements", { list: UNAUTHORIZED }],
     ["the summary", { summary: UNAUTHORIZED }],
     ["the accounts", { accounts: UNAUTHORIZED }],
+    ["the categories", { categories: UNAUTHORIZED }],
   ])("goes to /login on a 401 from %s", async (_name, answers) => {
     backend(answers);
     await expect(renderPage()).rejects.toThrow("NEXT_REDIRECT /login");
@@ -275,6 +307,7 @@ describe("MovementsPage", () => {
     ["the movements", { list: BROKEN }],
     ["the summary", { summary: BROKEN }],
     ["the accounts", { accounts: BROKEN }],
+    ["the categories", { categories: BROKEN }],
   ])(
     "leaves a failure of %s to the screen: no Alert, nothing hydrated for it",
     async (_name, answers) => {
@@ -287,7 +320,9 @@ describe("MovementsPage", () => {
           ? transactionsListKey("s1", { month: "2026-10" })
           : "summary" in answers
             ? transactionsSummaryKey("s1", { month: "2026-10" })
-            : ["spaces", "s1", "accounts", { includeArchived: true }];
+            : "categories" in answers
+              ? ["spaces", "s1", "categories", { includeArchived: true }]
+              : ["spaces", "s1", "accounts", { includeArchived: true }];
       expect(client.getQueryData(key)).toBeUndefined();
     },
   );
@@ -299,7 +334,7 @@ describe("MovementsPage", () => {
     expect(screen.queryByTestId("movements-screen")).toBeNull();
   });
 
-  it("asks for the movements, the summary and the accounts in parallel, after /me and /spaces", async () => {
+  it("asks for the movements, the summary, the accounts and the categories in parallel, after /me and /spaces", async () => {
     const started: string[] = [];
     mocks.get.mockImplementation(async (path: string) => {
       started.push(path);
@@ -309,12 +344,15 @@ describe("MovementsPage", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (path === LIST_PATH) return ok(PAGE);
       if (path === SUMMARY_PATH) return ok(SUMMARY);
-      return ok([ACCOUNT]);
+      if (path === ACCOUNTS_PATH) return ok([ACCOUNT]);
+      return ok([CATEGORY]);
     });
     vi.useRealTimers();
     await renderPage();
     expect(started.slice(0, 2).sort()).toEqual(["/me", "/spaces"]);
-    expect(new Set(started.slice(2))).toEqual(new Set([LIST_PATH, SUMMARY_PATH, ACCOUNTS_PATH]));
+    expect(new Set(started.slice(2))).toEqual(
+      new Set([LIST_PATH, SUMMARY_PATH, ACCOUNTS_PATH, CATEGORIES_PATH]),
+    );
   });
 
   it("logs only the kind of failure, never its message", async () => {

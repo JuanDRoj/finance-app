@@ -8,6 +8,7 @@ import {
   faultFor,
   historyMovements,
 } from "./movements-screen-demos";
+import { uuidOf } from "./movement-filter-lists";
 import { worstMovements } from "./movement-pieces-demos";
 
 // The demo runs the real screen against a scripted backend. This keeps the script honest: if the
@@ -83,7 +84,11 @@ describe("the datasets", () => {
 });
 
 describe("faultFor", () => {
-  const call = (kind: "list" | "next-page" | "summary") => ({ kind, path: "/x", query: {} });
+  const call = (kind: "list" | "next-page" | "summary" | "accounts" | "categories") => ({
+    kind,
+    path: "/x",
+    query: {},
+  });
 
   it("fails the list as the select says, and nothing else", () => {
     expect(faultFor({ load: "ok", next: "ok" }, call("list"), 0)).toBeUndefined();
@@ -113,6 +118,27 @@ describe("faultFor", () => {
     expect(faultFor(settings, { kind: "total", path: "/x", query: {} }, 0)).toBeUndefined();
     expect(faultFor(settings, call("list"), 0)).toBeUndefined();
     expect(faultFor({ load: "ok", next: "ok" }, call("summary"), 0)).toBeUndefined();
+  });
+});
+
+describe("faultFor, the lists of the filters", () => {
+  const call = (kind: "accounts" | "categories" | "list") => ({ kind, path: "/x", query: {} });
+  const settings = (lists: "ok" | "accounts" | "categories" | "both") =>
+    ({ load: "ok", next: "ok", lists }) as const;
+
+  it("fails the accounts, the categories, both or none, as the select says, and nothing else", () => {
+    expect(faultFor(settings("ok"), call("accounts"), 0)).toBeUndefined();
+    expect(faultFor(settings("accounts"), call("accounts"), 0)).toBe("server");
+    expect(faultFor(settings("accounts"), call("categories"), 0)).toBeUndefined();
+    expect(faultFor(settings("categories"), call("categories"), 0)).toBe("server");
+    expect(faultFor(settings("categories"), call("accounts"), 0)).toBeUndefined();
+    expect(faultFor(settings("both"), call("accounts"), 0)).toBe("server");
+    expect(faultFor(settings("both"), call("categories"), 0)).toBe("server");
+    expect(faultFor(settings("both"), call("list"), 0)).toBeUndefined();
+  });
+
+  it("does not fail them when the setting is not there (the older callers)", () => {
+    expect(faultFor({ load: "ok", next: "ok" }, call("accounts"), 0)).toBeUndefined();
   });
 });
 
@@ -262,5 +288,119 @@ describe("MovementsScreenDemo", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Empezar de nuevo" }));
     await screen.findByRole("table");
+  });
+
+  describe("search and filters (FE-33)", () => {
+    const filtersCard = () => within(screen.getByRole("region", { name: "Filtros" }));
+    const select = (name: string) =>
+      filtersCard().getByRole("combobox", { name }) as HTMLSelectElement;
+    const labels = (element: HTMLSelectElement) =>
+      Array.from(element.options).map((option) => option.textContent);
+
+    it("lists the accounts and the categories of the movements, the archived ones marked", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      await waitFor(() => expect(labels(select("Cuenta"))).toContain("Visa Itaú"));
+      expect(labels(select("Cuenta"))).toEqual(
+        expect.arrayContaining(["Todas las cuentas", "Itaú", "Efectivo", "Mastercard OCA"]),
+      );
+      expect(labels(select("Categoría"))).toEqual(
+        expect.arrayContaining(["Todas las categorías", "Comida", "Ocio", "Mascotas (archivada)"]),
+      );
+    });
+
+    it("filters by the account chosen in the card, and a main category takes its subcategories", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      await waitFor(() => expect(labels(select("Cuenta"))).toContain("Efectivo"));
+      fireEvent.change(select("Cuenta"), {
+        target: { value: uuidOf("a3") },
+      });
+      expect(window.location.search).toBe(`?cuenta_id=${uuidOf("a3")}`);
+      await waitFor(() =>
+        expect(within(screen.getByRole("table")).queryByText("Tienda Inglesa")).toBeNull(),
+      );
+      expect(within(screen.getByRole("table")).getByText("Café")).toBeTruthy();
+      fireEvent.change(select("Cuenta"), { target: { value: "" } });
+      fireEvent.change(select("Categoría"), { target: { value: uuidOf("p-comida") } });
+      await waitFor(() => expect(within(screen.getByRole("table")).queryByText("Café")).toBeNull());
+      // "Tienda Inglesa" is on Supermercado, a subcategory of Comida.
+      expect(within(screen.getByRole("table")).getByText("Tienda Inglesa")).toBeTruthy();
+    });
+
+    it("opens with the account and the subcategory of a link, named as the lists name them", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      fireEvent.click(screen.getByRole("button", { name: "Itaú y Supermercado" }));
+      await waitFor(() => expect(select("Cuenta").selectedOptions[0]?.textContent).toBe("Itaú"));
+      expect(select("Categoría").selectedOptions[0]?.textContent).toBe("Comida › Supermercado");
+    });
+
+    it("names an account and a category that do not exist 'Otra', and says there is nothing", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      fireEvent.click(screen.getByRole("button", { name: "Cuenta y categoría que no existen" }));
+      await screen.findByText("No hay movimientos con estos filtros");
+      expect(select("Cuenta").selectedOptions[0]?.textContent).toBe("Otra cuenta");
+      expect(select("Categoría").selectedOptions[0]?.textContent).toBe("Otra categoría");
+    });
+
+    it("takes a search of 150 characters down to 100", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      fireEvent.click(screen.getByRole("button", { name: "Búsqueda de 150 caracteres" }));
+      await screen.findByText("No hay movimientos con estos filtros");
+      const field = filtersCard().getByRole("searchbox", { name: "Buscar por descripción" });
+      expect((field as HTMLInputElement).value).toHaveLength(100);
+    });
+
+    it("has the choices of accounts: long and archived names, only an archived one, none", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      choose("Qué cuentas hay", "extras");
+      await waitFor(() =>
+        expect(labels(select("Cuenta")).some((label) => label?.includes("(archivada)"))).toBe(true),
+      );
+      expect(labels(select("Cuenta")).some((label) => label?.includes("🏦"))).toBe(true);
+      choose("Qué cuentas hay", "none");
+      await waitFor(() => expect(labels(select("Cuenta"))).toEqual(["Todas las cuentas"]));
+    });
+
+    it("has the choices of categories: all archived, none", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      choose("Qué categorías hay", "archived");
+      await waitFor(() => {
+        const groups = Array.from(select("Categoría").querySelectorAll("optgroup")).map(
+          (group) => group.label,
+        );
+        expect(groups).toEqual(["Archivadas"]);
+      });
+      choose("Qué categorías hay", "none");
+      await waitFor(() => expect(labels(select("Categoría"))).toEqual(["Todas las categorías"]));
+    });
+
+    it("turns the select off when its list fails, and the table stays", async () => {
+      render(<MovementsScreenDemo instant />);
+      choose("Qué responden las cuentas y las categorías", "both");
+      await screen.findByRole("table");
+      await waitFor(() => expect(select("Cuenta").disabled).toBe(true));
+      expect(select("Categoría").disabled).toBe(true);
+      choose("Qué responden las cuentas y las categorías", "categories");
+      await waitFor(() => expect(select("Categoría").disabled).toBe(true));
+      expect(select("Cuenta").disabled).toBe(false);
+    });
+
+    it("opens the phone's search with the magnifier of the header, and 'Registrar movimiento' does nothing", async () => {
+      render(<MovementsScreenDemo instant />);
+      await screen.findByRole("table");
+      expect(screen.getAllByRole("searchbox")).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Abrir la búsqueda" }));
+      expect(screen.getAllByRole("searchbox")).toHaveLength(2);
+      const register = screen.getByRole("link", { name: "Registrar movimiento" });
+      // `fireEvent` answers `false` when somebody called `preventDefault()`: no navigation.
+      expect(fireEvent.click(register)).toBe(false);
+      expect(window.location.search).toBe("");
+    });
   });
 });
