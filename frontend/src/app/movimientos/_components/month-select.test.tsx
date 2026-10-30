@@ -60,6 +60,9 @@ describe("MonthSelect", () => {
     const classes = screen.getByRole("combobox", { name: "Mes" }).className;
     expect(classes).toContain("h-10.5");
     expect(classes).toContain("pointer-coarse:h-11");
+    // 15 px with a mouse, 16 px with a finger: under 16 px iOS zooms into the field when it is focused.
+    expect(classes).toContain("text-item");
+    expect(classes).toContain("pointer-coarse:text-base");
     expect(classes).toContain("rounded-full");
     expect(classes).toContain("border-input");
     expect(classes).toContain("appearance-none");
