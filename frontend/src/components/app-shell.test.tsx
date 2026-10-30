@@ -172,6 +172,21 @@ describe("AppShell", () => {
       expect(subtitle.closest("header")).not.toBeNull();
     });
 
+    it("takes a component as the subtitle, in the same paragraph (Movimientos writes its own line)", () => {
+      function Line() {
+        return <>Octubre 2026 · 48 movimientos</>;
+      }
+      render(
+        <AppShell title="Movimientos" subtitle={<Line />}>
+          x
+        </AppShell>,
+      );
+      const subtitle = screen.getByText("Octubre 2026 · 48 movimientos");
+      expect(subtitle.tagName).toBe("P");
+      expect(subtitle.className).toContain("lg:block");
+      expect(subtitle.previousElementSibling).toBe(screen.getByRole("heading", { level: 1 }));
+    });
+
     it("draws nothing when there is no subtitle", () => {
       render(<AppShell title="Inicio">x</AppShell>);
       expect(document.querySelector("header p")).toBeNull();

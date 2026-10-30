@@ -38,9 +38,12 @@ describe("SidebarNav (the app's own list)", () => {
   it("is the main navigation, with a link per section named by its visible text", () => {
     render(<SidebarNav group="main" />);
     const nav = screen.getByRole("navigation", { name: "Principal" });
-    expect(nav.querySelectorAll("a")).toHaveLength(2);
+    expect(nav.querySelectorAll("a")).toHaveLength(3);
     const link = screen.getByRole("link", { name: "Inicio" });
     expect(link.getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: "Movimientos" }).getAttribute("href")).toBe(
+      "/movimientos",
+    );
     expect(screen.getByRole("link", { name: "Cuentas" }).getAttribute("href")).toBe("/cuentas");
     // The text names the link: an `aria-label` would hide it from speech recognition (WCAG 2.5.3).
     expect(link.getAttribute("aria-label")).toBeNull();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApiError } from "./data/errors";
 import type { MovementListItem, MovementPage } from "./data/transactions";
 import {
   MAX_MONTH,
@@ -8,6 +9,8 @@ import {
   MOVEMENT_TYPE_PARAMS,
   activeFilterCount,
   applyMovementFilters,
+  buildMonthOptions,
+  chooseEmptyState,
   clearMovementFilters,
   describeDayTitle,
   describeFilterButton,
@@ -22,7 +25,9 @@ import {
   formatMovementDate,
   groupMovementsByDay,
   hasActiveFilters,
+  isCursorInvalid,
   isQuietMovement,
+  mergeMovementFilters,
   movementAmountView,
   movementTypeFromParam,
   normalizeSearch,
@@ -726,5 +731,176 @@ describe("flattenMovementPages", () => {
   it("is empty before the first page and for an empty page", () => {
     expect(flattenMovementPages(undefined)).toEqual([]);
     expect(flattenMovementPages({ pages: [{ items: [], next_cursor: null }] })).toEqual([]);
+  });
+});
+
+describe("mergeMovementFilters", () => {
+  const CURRENT_FILTERS: MovementFilters = {
+    month: "2026-10",
+    type: "expense",
+    q: "uber",
+    accountId: ID_A,
+    categoryId: ID_B,
+  };
+
+  it("sets what the patch says and keeps the rest", () => {
+    expect(mergeMovementFilters({ month: CURRENT }, { type: "income" })).toEqual({
+      month: CURRENT,
+      type: "income",
+    });
+    expect(mergeMovementFilters(CURRENT_FILTERS, { month: "2026-09" })).toEqual({
+      ...CURRENT_FILTERS,
+      month: "2026-09",
+    });
+  });
+
+  it("takes a filter away with undefined, and only that one", () => {
+    expect(mergeMovementFilters(CURRENT_FILTERS, { type: undefined })).toEqual({
+      month: "2026-10",
+      q: "uber",
+      accountId: ID_A,
+      categoryId: ID_B,
+    });
+    expect(
+      mergeMovementFilters(CURRENT_FILTERS, {
+        type: undefined,
+        q: undefined,
+        accountId: undefined,
+        categoryId: undefined,
+      }),
+    ).toEqual({ month: "2026-10" });
+  });
+
+  it("does not take a filter away that the patch does not mention, even if it is undefined in the type", () => {
+    expect(mergeMovementFilters(CURRENT_FILTERS, {})).toEqual(CURRENT_FILTERS);
+  });
+
+  it("never leaves the month out, and ignores one that is not a month", () => {
+    expect(mergeMovementFilters(CURRENT_FILTERS, { month: undefined }).month).toBe("2026-10");
+    expect(mergeMovementFilters(CURRENT_FILTERS, { month: "2026-13" }).month).toBe("2026-10");
+    expect(mergeMovementFilters(CURRENT_FILTERS, { month: "" }).month).toBe("2026-10");
+  });
+
+  it("trims and cuts a search, and leaves it off when nothing is left", () => {
+    expect(mergeMovementFilters({ month: CURRENT }, { q: "  café  " }).q).toBe("café");
+    expect(mergeMovementFilters({ month: CURRENT }, { q: "x".repeat(150) }).q).toBe(
+      "x".repeat(MOVEMENT_SEARCH_MAX_LENGTH),
+    );
+    expect(mergeMovementFilters(CURRENT_FILTERS, { q: "   " })).not.toHaveProperty("q");
+  });
+
+  it("does not change the filters it is given", () => {
+    const before = { ...CURRENT_FILTERS };
+    mergeMovementFilters(CURRENT_FILTERS, { type: undefined, month: "2026-01" });
+    expect(CURRENT_FILTERS).toEqual(before);
+  });
+});
+
+describe("buildMonthOptions", () => {
+  it("goes from six months ahead to 36 months back, newest first", () => {
+    const options = buildMonthOptions("2026-10", "2026-10");
+    expect(options).toHaveLength(6 + 36 + 1);
+    expect(options[0]).toEqual({ value: "2027-04", label: "Abril 2027" });
+    expect(options[6]).toEqual({ value: "2026-10", label: "Octubre 2026" });
+    expect(options.at(-1)).toEqual({ value: "2023-10", label: "Octubre 2023" });
+    const values = options.map((option) => option.value);
+    expect(values).toEqual([...values].sort().reverse());
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("keeps the selected month in the list even when it is far outside it, in its place", () => {
+    const old = buildMonthOptions("2019-03", "2026-10");
+    expect(old.some((option) => option.value === "2019-03")).toBe(true);
+    expect(old.at(-1)).toEqual({ value: "2019-03", label: "Marzo 2019" });
+    const far = buildMonthOptions("2199-12", "2026-10");
+    expect(far[0]).toEqual({ value: "2199-12", label: "Diciembre 2199" });
+    const values = far.map((option) => option.value);
+    expect(values).toEqual([...values].sort().reverse());
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("does not repeat a selected month that is already in the range", () => {
+    const options = buildMonthOptions("2026-01", "2026-10");
+    expect(options.filter((option) => option.value === "2026-01")).toHaveLength(1);
+    expect(options).toHaveLength(43);
+  });
+
+  it("stops at the months the backend takes when the current month is at an edge", () => {
+    expect(buildMonthOptions("2199-12", "2199-12")[0]!.value).toBe("2199-12");
+    const early = buildMonthOptions("1900-01", "1900-01");
+    expect(early.at(-1)!.value).toBe("1900-01");
+    expect(early).toHaveLength(7);
+  });
+
+  it("names every month the way the title does (es-UY writes 'Setiembre')", () => {
+    const options = buildMonthOptions("2026-09", "2026-10");
+    expect(options.find((option) => option.value === "2026-09")!.label).toBe("Setiembre 2026");
+  });
+});
+
+describe("chooseEmptyState", () => {
+  it("is 'empty' when the space has no movement at all", () => {
+    expect(chooseEmptyState({ count: 0 })).toBe("empty");
+  });
+
+  it("is 'no-results' when the space has movements and these filters match none", () => {
+    expect(chooseEmptyState({ count: 1 })).toBe("no-results");
+    expect(chooseEmptyState({ count: 48 })).toBe("no-results");
+  });
+
+  it("waits while the count of the space is asked", () => {
+    expect(chooseEmptyState({})).toBe("loading");
+  });
+
+  it("falls to 'no-results' if the count could not be asked: never a false 'Aún no tienes movimientos'", () => {
+    expect(chooseEmptyState({ failed: true })).toBe("no-results");
+  });
+});
+
+describe("summaryFigures with a total that is not a safe integer", () => {
+  it("still writes the figures instead of throwing: the sum of huge movements is a JSON number", () => {
+    const beyond = Number.MAX_SAFE_INTEGER * 2;
+    const figures = summaryFigures(
+      { count: 2, income_minor: beyond, expense_minor: 0, remaining_minor: beyond },
+      UYU,
+    );
+    expect(figures.income.text.startsWith("+$")).toBe(true);
+    expect(figures.remaining.text.startsWith("+$")).toBe(true);
+  });
+});
+
+describe("isCursorInvalid", () => {
+  const detail = (...types: string[]) => ({
+    detail: types.map((type) => ({ type, loc: ["query", "cursor"], msg: "x" })),
+  });
+
+  it("is true for the 422 whose detail has the type cursor_invalid", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("cursor_invalid")))).toBe(true);
+  });
+
+  it("is true when it is one of several problems of the 422", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("missing", "cursor_invalid")))).toBe(true);
+  });
+
+  it("is false for any other 422", () => {
+    expect(isCursorInvalid(new ApiError(422, detail("missing")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, detail("string_too_long")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, detail()))).toBe(false);
+  });
+
+  it("is false when the 422 has no detail we can read", () => {
+    expect(isCursorInvalid(new ApiError(422, undefined))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, "cursor_invalid"))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, { detail: "cursor_invalid" }))).toBe(false);
+    expect(isCursorInvalid(new ApiError(422, { code: "cursor_invalid", detail: "x" }))).toBe(false);
+  });
+
+  it("is false for the same type under another status, and for anything that is not an ApiError", () => {
+    expect(isCursorInvalid(new ApiError(400, detail("cursor_invalid")))).toBe(false);
+    expect(isCursorInvalid(new ApiError(500, detail("cursor_invalid")))).toBe(false);
+    expect(isCursorInvalid(new TypeError("Failed to fetch"))).toBe(false);
+    expect(isCursorInvalid({ status: 422, body: detail("cursor_invalid") })).toBe(false);
+    expect(isCursorInvalid(null)).toBe(false);
+    expect(isCursorInvalid(undefined)).toBe(false);
   });
 });

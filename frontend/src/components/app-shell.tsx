@@ -42,9 +42,11 @@ type AppShellProps = {
   noAccounts?: boolean;
   /**
    * The secondary line under the `h1` (docs/diseno.md D17 › Escritorio v2: "Miércoles 21 de
-   * octubre"). Shown from 1024 px only; below it the header is just the title and the avatar.
+   * octubre"). Shown from 1024 px only; below it the header is just the title and the avatar. Text,
+   * or a Client Component that writes it when the line depends on something the page (a Server
+   * Component) cannot see, like the month and the count of Movimientos (FE-22), which follow the URL.
    */
-  subtitle?: string;
+  subtitle?: ReactNode;
   /**
    * What goes before the title, for a screen with a form: its "Volver" (`BackLink`). A phone
    * screen, so it is not shown specially on desktop; give it only where it makes sense.

@@ -388,3 +388,22 @@ describe("formatMonth", () => {
     }
   });
 });
+
+describe("formatLocalDate with its formatters kept (a table formats one date per row)", () => {
+  it("does not mix styles or locales when it reuses a formatter", () => {
+    for (let round = 0; round < 3; round += 1) {
+      expect(formatLocalDate("2026-10-20", "short")).toBe("20 oct.");
+      expect(formatLocalDate("2026-10-20", "medium")).toBe("20 oct. 2026");
+      expect(formatLocalDate("2026-10-20", "long")).toBe("20 de octubre de 2026");
+      expect(formatLocalDate("2026-10-20", "long", "en-US")).toBe("October 20, 2026");
+      expect(formatLocalDate("2026-10-20", "short", "en-US")).toBe("Oct 20");
+    }
+  });
+
+  it("still refuses a text that is not a real day, however many times it is asked", () => {
+    for (let round = 0; round < 3; round += 1) {
+      expect(() => formatLocalDate("2026-02-30")).toThrow(RangeError);
+    }
+    expect(formatLocalDate("2026-02-28", "short")).toBe("28 feb.");
+  });
+});

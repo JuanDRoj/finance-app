@@ -39,6 +39,7 @@ import {
 } from "./_components/base-demos";
 import { LoadingDemo } from "./_components/loading-demo";
 import { MovementPiecesDemo } from "./_components/movement-pieces-demos";
+import { MovementsScreenDemo } from "./_components/movements-screen-demos";
 import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
 import { NavPreview } from "./_components/nav-preview";
 import { SessionDemo } from "./_components/session-demo";
@@ -537,6 +538,10 @@ export default async function CatalogPage({
 
         <Section title="Movimientos: piezas (lista, tabla, resumen y estados)">
           <MovementPiecesDemo />
+        </Section>
+
+        <Section title="Pantalla Movimientos">
+          <MovementsScreenDemo />
         </Section>
 
         <Section title="Cifras (tnum)">
