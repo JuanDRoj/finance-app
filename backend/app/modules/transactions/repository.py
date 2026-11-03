@@ -294,6 +294,30 @@ async def get_with_entries(
     return await session.scalar(stmt)
 
 
+async def get_for_update(
+    session: AsyncSession, *, space_id: uuid.UUID, transaction_id: uuid.UUID
+) -> Transaction | None:
+    """One transaction of the space with its entries, `FOR NO KEY UPDATE`, whatever its state.
+
+    For whoever reads a movement to change it (edit, delete, restore): the row stays locked until
+    the transaction ends, so those operations on the same movement run one after the other and the
+    second one sees what the first one committed (a deleted movement, the entries of an edit). It
+    is the lock the UPDATE of the row takes anyway, and it does not stop the foreign keys of the
+    entries and of `idempotency_keys` (`FOR UPDATE` would). It shows deleted, pending and skipped
+    movements too: the service decides what each operation does with them. The entries are read
+    after the lock, so they are the ones the previous holder left. `populate_existing` makes the
+    answer reflect the locked row and not the copy the session may hold.
+    """
+    stmt = (
+        select(Transaction)
+        .where(Transaction.space_id == space_id, Transaction.id == transaction_id)
+        .options(selectinload(Transaction.entries))
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    return await session.scalar(stmt)
+
+
 async def claim_idempotency_key(
     session: AsyncSession,
     *,

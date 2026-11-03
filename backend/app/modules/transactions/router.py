@@ -19,8 +19,8 @@ from app.modules.transactions.schemas import (
     TransactionSummaryRead,
 )
 
-# Creating, listing and reading a movement, its summary and the balance summary are served here so
-# far. Editing and deleting movements over HTTP is still to do.
+# Creating, listing, reading, editing, deleting and restoring a movement, its summary and the
+# balance summary are served here.
 router = APIRouter(
     prefix="/spaces/{space_id}/transactions",
     tags=["transactions"],
@@ -141,6 +141,70 @@ async def read_transaction(
     A deleted one, one of another space and one that does not exist are the same 404.
     """
     return await service.get_movement(session, space_id, transaction_id)
+
+
+@router.put(
+    "/{transaction_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=MovementRead,
+    responses={409: {"model": ErrorResponse}},
+)
+async def update_transaction(
+    space_id: uuid.UUID, transaction_id: uuid.UUID, data: MovementCreate, session: DbSession
+) -> MovementRead:
+    """Replace an expense, an income or a transfer; the backend rebuilds the entries.
+
+    The body is the whole movement, the same as the creation (`type` decides its fields): what is
+    not sent is not kept, so omitting `description` clears the note. The type may change among
+    expense, income and transfer. Balances, the list and the summary follow. Answers with the
+    movement as the detail shows it.
+
+    Accounts and categories are validated as in the creation (422 with `loc`
+    `["body", "<type>", "<field>"]`), with one difference: the archived category the movement
+    already has may be sent again. Every account of the body must be active. A movement that is
+    deleted is a 404. 409 `transaction_not_editable` for an adjustment, a pending or a skipped
+    movement; 409 `account_archived` if an account the movement is moving out of is archived.
+    """
+    return await service.update_transaction(
+        session, space_id, transaction_id, data, now=datetime.now(UTC)
+    )
+
+
+@router.delete(
+    "/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={409: {"model": ErrorResponse}},
+)
+async def delete_transaction(
+    space_id: uuid.UUID, transaction_id: uuid.UUID, session: DbSession
+) -> None:
+    """Delete a movement (soft delete): it stops counting in balances, lists and totals.
+
+    `POST .../restore` brings it back as it was ("Deshacer"). Deleting one that is already deleted
+    is a 204 that changes nothing. 409 `transaction_not_editable` for an adjustment, a pending or a
+    skipped movement; 409 `account_archived` if one of its accounts is archived.
+    """
+    await service.delete_transaction(session, space_id, transaction_id, now=datetime.now(UTC))
+
+
+@router.post(
+    "/{transaction_id}/restore",
+    status_code=status.HTTP_200_OK,
+    response_model=MovementRead,
+    responses={409: {"model": ErrorResponse}},
+)
+async def restore_transaction(
+    space_id: uuid.UUID, transaction_id: uuid.UUID, session: DbSession
+) -> MovementRead:
+    """Undo a delete: the movement comes back identical and counts again.
+
+    Restoring one that is not deleted is a 200 that changes nothing. 409 `account_archived` if one
+    of its accounts was archived meanwhile (unarchive it first); 409 `transaction_not_editable`
+    as for the edit.
+    """
+    return await service.restore_transaction(
+        session, space_id, transaction_id, now=datetime.now(UTC)
+    )
 
 
 @balance_router.get("", status_code=status.HTTP_200_OK, response_model=BalanceSummaryRead)

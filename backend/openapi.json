@@ -3355,6 +3355,81 @@
       }
     },
     "/spaces/{space_id}/transactions/{transaction_id}": {
+      "delete": {
+        "description": "Delete a movement (soft delete): it stops counting in balances, lists and totals.\n\n`POST .../restore` brings it back as it was (\"Deshacer\"). Deleting one that is already deleted\nis a 204 that changes nothing. 409 `transaction_not_editable` for an adjustment, a pending or a\nskipped movement; 409 `account_archived` if one of its accounts is archived.",
+        "operationId": "delete_transaction_spaces__space_id__transactions__transaction_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Transaction",
+        "tags": [
+          "transactions"
+        ]
+      },
       "get": {
         "description": "One movement of the space, with the same shape as an item of the list.\n\nA deleted one, one of another space and one that does not exist are the same 404.",
         "operationId": "read_transaction_spaces__space_id__transactions__transaction_id__get",
@@ -3423,6 +3498,201 @@
           }
         },
         "summary": "Read Transaction",
+        "tags": [
+          "transactions"
+        ]
+      },
+      "put": {
+        "description": "Replace an expense, an income or a transfer; the backend rebuilds the entries.\n\nThe body is the whole movement, the same as the creation (`type` decides its fields): what is\nnot sent is not kept, so omitting `description` clears the note. The type may change among\nexpense, income and transfer. Balances, the list and the summary follow. Answers with the\nmovement as the detail shows it.\n\nAccounts and categories are validated as in the creation (422 with `loc`\n`[\"body\", \"<type>\", \"<field>\"]`), with one difference: the archived category the movement\nalready has may be sent again. Every account of the body must be active. A movement that is\ndeleted is a 404. 409 `transaction_not_editable` for an adjustment, a pending or a skipped\nmovement; 409 `account_archived` if an account the movement is moving out of is archived.",
+        "operationId": "update_transaction_spaces__space_id__transactions__transaction_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "expense": "#/components/schemas/ExpenseCreate",
+                    "income": "#/components/schemas/IncomeCreate",
+                    "transfer": "#/components/schemas/TransferCreate"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ExpenseCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/IncomeCreate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TransferCreate"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Transaction",
+        "tags": [
+          "transactions"
+        ]
+      }
+    },
+    "/spaces/{space_id}/transactions/{transaction_id}/restore": {
+      "post": {
+        "description": "Undo a delete: the movement comes back identical and counts again.\n\nRestoring one that is not deleted is a 200 that changes nothing. 409 `account_archived` if one\nof its accounts was archived meanwhile (unarchive it first); 409 `transaction_not_editable`\nas for the edit.",
+        "operationId": "restore_transaction_spaces__space_id__transactions__transaction_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Transaction",
         "tags": [
           "transactions"
         ]
