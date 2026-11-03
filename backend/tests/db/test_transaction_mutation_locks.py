@@ -18,6 +18,21 @@ UPDATE`), wait for them or are waited for:
 As in `test_transaction_account_lock.py`, the lock is proved with `NOWAIT` (while an
 operation is in flight, a `FOR NO KEY UPDATE` on its rows is refused at once) and the races with the
 forced overlap of `tests/overlap.py` on two real connections.
+
+What each test can tell apart matters, because the row of the transaction is also locked by the
+`UPDATE` that every operation ends with, so many results would look the same without
+`get_for_update`:
+
+- The `NOWAIT` probes of an operation in flight show that its rows are locked **by the time it has
+  written**, whoever took the lock (the account probes do prove `FOR SHARE`, nothing else locks an
+  account; the transaction probes would also pass with only the `UPDATE`).
+- `test_get_for_update_holds_the_row_before_anything_is_written` is the one that proves the
+  repository lock itself: it reads and writes nothing else.
+- `test_an_edit_that_waits_for_a_restore_...` is the one that proves the service uses it. A plain
+  `SELECT` of a deleted movement does not wait for anybody, so without the lock the edit would read
+  it still deleted and answer 404 at once; with it, the edit waits and edits the restored movement.
+  Edit against delete (below) ends in the same state with or without the lock, because the edit
+  would then wait on its own `UPDATE`; those tests prove the outcome, not the lock.
 """
 
 import asyncio
@@ -43,7 +58,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.errors import ConflictError, NotFoundError
 from app.modules.accounts import service as accounts_service
-from app.modules.transactions import service
+from app.modules.transactions import repository, service
 from app.modules.transactions.schemas import MovementCreate, MovementRead
 from tests.overlap import Operation, overlap
 from tests.transactions_helpers import make_account, make_category, make_user_and_space
@@ -56,6 +71,7 @@ EVEN_LATER = datetime(2026, 10, 22, 12, 0, tzinfo=UTC)
 
 LOCK_ACCOUNT = text("SELECT id FROM accounts WHERE id = :id FOR NO KEY UPDATE NOWAIT")
 LOCK_TRANSACTION = text("SELECT id FROM transactions WHERE id = :id FOR NO KEY UPDATE NOWAIT")
+SHARE_TRANSACTION = text("SELECT id FROM transactions WHERE id = :id FOR KEY SHARE NOWAIT")
 adapter: TypeAdapter[Any] = TypeAdapter(MovementCreate)
 
 
@@ -202,7 +218,7 @@ def _reconcile(world: World, account_id: uuid.UUID, real_balance: int) -> Operat
 
 
 async def _can_lock(engine: AsyncEngine, statement: TextClause, row_id: uuid.UUID) -> bool:
-    """Whether a `FOR NO KEY UPDATE` on that row is granted right now (NOWAIT: no waiting)."""
+    """Whether `statement` (a `... NOWAIT` lock on one row) is granted right now: no waiting."""
     async with engine.connect() as conn:
         try:
             await conn.execute(statement, {"id": row_id})
@@ -229,6 +245,9 @@ async def test_nothing_in_flight_means_the_locks_are_granted(
 async def test_an_edit_in_flight_locks_its_transaction_and_both_the_old_and_the_new_account(
     engines: tuple[AsyncEngine, ...],
 ) -> None:
+    """The accounts are locked `FOR SHARE` (old and new); the transaction row is locked too, but by
+    the end of the operation that also holds it through its own `UPDATE` (see the module docstring
+    and the test of `get_for_update`)."""
     creator, prober, _ = engines
     world = await _committed_world(creator)
 
@@ -251,6 +270,8 @@ async def test_an_edit_in_flight_locks_its_transaction_and_both_the_old_and_the_
 async def test_a_delete_in_flight_locks_its_transaction_and_its_account(
     engines: tuple[AsyncEngine, ...],
 ) -> None:
+    """The account is locked `FOR SHARE` and released by the rollback; the transaction row is held
+    by the time the delete has written (its own `UPDATE`), not specifically by `get_for_update`."""
     creator, prober, _ = engines
     world = await _committed_world(creator)
 
@@ -268,6 +289,7 @@ async def test_a_delete_in_flight_locks_its_transaction_and_its_account(
 async def test_a_restore_in_flight_locks_its_transaction_and_its_account(
     engines: tuple[AsyncEngine, ...],
 ) -> None:
+    """Same as the delete: the account lock is the point; the row is held by the `UPDATE` too."""
     creator, prober, _ = engines
     world = await _committed_world(creator)
     async with async_sessionmaker(creator, expire_on_commit=False)() as session:
@@ -283,6 +305,52 @@ async def test_a_restore_in_flight_locks_its_transaction_and_its_account(
         await session.commit()
 
     assert await _can_lock(prober, LOCK_ACCOUNT, world.bank_id)
+
+
+async def test_get_for_update_holds_the_row_before_anything_is_written(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    """The repository lock on its own: a read that writes nothing already refuses `NO KEY UPDATE`.
+
+    No `UPDATE` is involved, so this is what tells `get_for_update` apart from the row lock an
+    operation gets by writing. It is `FOR NO KEY UPDATE`, not `FOR UPDATE`: a `FOR KEY SHARE` (what
+    the foreign keys of the entries and of `idempotency_keys` take) is still granted.
+    """
+    creator, prober, _ = engines
+    world = await _committed_world(creator)
+
+    async with async_sessionmaker(creator, expire_on_commit=False)() as session:
+        locked = await repository.get_for_update(
+            session, space_id=world.space_id, transaction_id=world.expense_id
+        )
+
+        assert locked is not None
+        assert not await _can_lock(prober, LOCK_TRANSACTION, world.expense_id)
+        assert await _can_lock(prober, SHARE_TRANSACTION, world.expense_id)  # the FKs go on
+        assert await _can_lock(prober, LOCK_TRANSACTION, world.other_expense_id)  # only this row
+        await session.rollback()
+
+    assert await _can_lock(prober, LOCK_TRANSACTION, world.expense_id)  # released at the end
+
+
+async def test_get_for_update_also_locks_a_deleted_movement(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    creator, prober, _ = engines
+    world = await _committed_world(creator)
+    async with async_sessionmaker(creator, expire_on_commit=False)() as session:
+        await _delete(world, world.expense_id)(session)
+        await session.commit()
+
+    async with async_sessionmaker(creator, expire_on_commit=False)() as session:
+        locked = await repository.get_for_update(
+            session, space_id=world.space_id, transaction_id=world.expense_id
+        )
+
+        assert locked is not None
+        assert locked.deleted_at == LATER  # a restore needs to find it
+        assert not await _can_lock(prober, LOCK_TRANSACTION, world.expense_id)
+        await session.rollback()
 
 
 async def test_two_edits_over_the_same_account_do_not_wait_for_each_other(
@@ -387,9 +455,41 @@ async def test_a_delete_that_waits_for_a_reconciliation_goes_after_it(
 # the same movement ------------------------------------------------------------------------------
 
 
+async def test_an_edit_that_waits_for_a_restore_of_the_same_movement_edits_the_restored_one(
+    engines: tuple[AsyncEngine, ...],
+) -> None:
+    """The test that tells the row lock apart: without it the edit does not wait at all.
+
+    The movement is deleted and committed, and a restore is in flight. A plain read would see it
+    still deleted and the edit would answer 404 at once, so the overlap would never happen (the
+    helper times out). With `get_for_update` the edit waits for the restore, reads the restored
+    movement and edits it.
+    """
+    creator = engines[0]
+    world = await _committed_world(creator)
+    async with async_sessionmaker(creator, expire_on_commit=False)() as session:
+        await _delete(world, world.expense_id)(session)
+        await session.commit()
+
+    restored, edited = await overlap(
+        engines,
+        _restore(world, world.expense_id),
+        _edit(world, world.expense_id, _expense(world, world.cash_id, 99)),
+    )
+
+    assert isinstance(restored, MovementRead)
+    assert isinstance(edited, MovementRead)
+    assert await _deleted_at(creator, world.expense_id) is None
+    assert await _entry_accounts(creator, world.expense_id) == [world.cash_id]
+    assert await _balance(creator, world.bank_id) == 0
+    assert await _balance(creator, world.cash_id) == -700 - 99
+
+
 async def test_an_edit_that_waits_for_a_delete_of_the_same_movement_finds_it_deleted(
     engines: tuple[AsyncEngine, ...],
 ) -> None:
+    """The outcome of the race (404 and the movement untouched), not the row lock: see the module
+    docstring. The test of the edit that waits for a restore is the one that needs the lock."""
     creator = engines[0]
     world = await _committed_world(creator)
 
