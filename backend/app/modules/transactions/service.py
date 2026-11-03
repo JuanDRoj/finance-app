@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -25,6 +26,7 @@ from app.modules.transactions.schemas import (
     CATEGORY_KIND_MISMATCH,
     CATEGORY_NOT_FOUND,
     IDEMPOTENCY_KEY_REUSED,
+    TRANSACTION_NOT_EDITABLE,
     TRANSACTION_NOT_FOUND,
     AdjustmentCreate,
     BalanceSummaryRead,
@@ -39,6 +41,9 @@ from app.modules.transactions.schemas import (
     TransactionRead,
     TransactionSummaryRead,
 )
+
+# What a person registers by hand (`MovementCreate`): the only types the API edits and deletes.
+_REGISTERED_TYPES = ("expense", "income", "transfer")
 
 # Callers (the router) are already known to belong to the space: `require_space_member` ran first.
 # Every query still filters by `space_id`, so an id from another space is a plain "not found".
@@ -75,20 +80,106 @@ async def create_transaction(
         description=data.description,
         created_by=user_id,
     )
-    # Ids are generated here, in order, so the entries read back in the order they were built.
-    transaction.entries = [
-        Entry(
-            id=uuid.uuid7(),
-            account_id=draft.account_id,
-            amount_minor=draft.amount_minor,
-            category_id=draft.category_id,
-        )
-        for draft in build_entries(data)
-    ]
+    transaction.entries = _entries_for(data)
     session.add(transaction)
     # One flush writes the transaction and then its entries (the relationship orders them).
     await session.flush()
     return TransactionRead.model_validate(transaction)
+
+
+async def update_transaction(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    transaction_id: uuid.UUID,
+    data: MovementCreate,
+    *,
+    now: datetime,
+) -> MovementRead:
+    """Replace a movement with `data`: type, date, description and its entries, rebuilt.
+
+    What `PUT /spaces/{id}/transactions/{transaction_id}` does. The body is the whole movement, as
+    in the creation: an omitted `description` clears the note, and the type may change among
+    expense, income and transfer (the entries are made again from scratch by `build_entries`; the
+    old ones are deleted). The id, the creator, the creation date and the status stay.
+
+    Only a confirmed expense, income or transfer can be edited (409 `transaction_not_editable`
+    otherwise: adjustments are made by the system, pending and skipped ones belong to the recurring
+    flow); a deleted one is a 404, like in the detail. The order of things matters:
+
+    1. The transaction row is read `FOR NO KEY UPDATE`, so edit, delete and restore of the same
+       movement run one after the other.
+    2. The accounts of the old entries **and** of the new ones are read `FOR SHARE`, in order of id
+       (`_lock_accounts`): both balances change, and reconcile and archive decide from a balance.
+    3. Everything is validated before a row changes, so a refused edit leaves the movement as it
+       was. An account of the body must exist and be active (422 on its field, as in the creation,
+       even if the movement already had it); an account that is only in the old entries must be
+       active too (409 `account_archived`: an archived account cannot change its balance). The
+       category is checked as in the creation, except that the archived category the movement
+       already has may stay: old movements keep their archived categories.
+    4. The transaction and its entries are written; `updated_at` is `now` (it has to be written
+       because an edit that only changes the entries would not touch the row).
+    """
+    transaction = await _lock_transaction(session, space_id, transaction_id)
+    if transaction.deleted_at is not None:
+        raise _not_found()
+    _require_editable(transaction)
+    stored = {entry.account_id for entry in transaction.entries}
+    stored_category = next(
+        (entry.category_id for entry in transaction.entries if entry.category_id is not None), None
+    )
+    await _check_accounts(session, space_id, data, stored=stored)
+    await _check_category(session, space_id, data, current=stored_category)
+    transaction.type = data.type
+    transaction.date = data.date
+    transaction.description = data.description
+    transaction.updated_at = now
+    transaction.entries = _entries_for(data)
+    await session.flush()
+    return await get_movement(session, space_id, transaction_id)
+
+
+async def delete_transaction(
+    session: AsyncSession, space_id: uuid.UUID, transaction_id: uuid.UUID, *, now: datetime
+) -> None:
+    """Soft-delete a movement (`deleted_at`): it stops counting in balances, lists and totals.
+
+    What `DELETE /spaces/{id}/transactions/{transaction_id}` does. Its entries stay, so
+    `restore_transaction` brings it back as it was. Deleting one that is already deleted changes
+    nothing (it keeps its first `deleted_at`). Same rule as the edit for what can be deleted (409
+    `transaction_not_editable`) and the same locks (the transaction, then its accounts `FOR SHARE`),
+    so a reconciliation that decides from the balance waits for the delete and reads the balance
+    after it. The accounts must be active (409 `account_archived`).
+    """
+    transaction = await _lock_transaction(session, space_id, transaction_id)
+    _require_editable(transaction)
+    if transaction.deleted_at is not None:
+        return
+    await _lock_active_accounts(session, space_id, transaction)
+    transaction.deleted_at = now
+    transaction.updated_at = now
+    await session.flush()
+
+
+async def restore_transaction(
+    session: AsyncSession, space_id: uuid.UUID, transaction_id: uuid.UUID, *, now: datetime
+) -> MovementRead:
+    """Undo a delete: the movement comes back with its id, date and entries, and counts again.
+
+    What `POST /spaces/{id}/transactions/{transaction_id}/restore` does. Restoring one that is not
+    deleted changes nothing. The accounts are read `FOR SHARE` and must be active (409
+    `account_archived`): the movement puts money back on them, and an archive that ran in between
+    (possible because the balance was 0 while it was deleted) must not end with a balance. If the
+    archive is in flight, whoever goes second sees the other: the archive sees the balance (409
+    `account_has_balance`) or this sees the archived account.
+    """
+    transaction = await _lock_transaction(session, space_id, transaction_id)
+    _require_editable(transaction)
+    if transaction.deleted_at is not None:
+        await _lock_active_accounts(session, space_id, transaction)
+        transaction.deleted_at = None
+        transaction.updated_at = now
+        await session.flush()
+    return await get_movement(session, space_id, transaction_id)
 
 
 async def create_movement(
@@ -385,32 +476,123 @@ async def _lookups(
     )
 
 
-async def _check_accounts(
-    session: AsyncSession, space_id: uuid.UUID, data: TransactionCreate
-) -> None:
-    references = referenced_accounts(data)
-    archived: dict[uuid.UUID, bool | None] = {}  # None = not in the space
-    # Lock order: by id, so two movements over the same accounts never cross. SHARE locks do not
-    # conflict with each other anyway; the order protects the day an operation takes a stronger one.
-    for account_id in sorted({account_id for _, account_id in references}):
+def _entries_for(data: TransactionCreate) -> list[Entry]:
+    """The entries of a movement as `build_entries` decides them, with ids made in order.
+
+    The ids are generated here, in order, so the entries read back in the order they were built.
+    """
+    return [
+        Entry(
+            id=uuid.uuid7(),
+            account_id=draft.account_id,
+            amount_minor=draft.amount_minor,
+            category_id=draft.category_id,
+        )
+        for draft in build_entries(data)
+    ]
+
+
+def _not_found() -> NotFoundError:
+    return NotFoundError(TRANSACTION_NOT_FOUND, "Transaction not found")
+
+
+async def _lock_transaction(
+    session: AsyncSession, space_id: uuid.UUID, transaction_id: uuid.UUID
+) -> Transaction:
+    """The transaction of the space (deleted or not) read `FOR NO KEY UPDATE`, or a 404."""
+    transaction = await repository.get_for_update(
+        session, space_id=space_id, transaction_id=transaction_id
+    )
+    if transaction is None:
+        raise _not_found()
+    return transaction
+
+
+def _require_editable(transaction: Transaction) -> None:
+    """Only a confirmed expense, income or transfer is changed through the API (409 otherwise)."""
+    if transaction.type not in _REGISTERED_TYPES or transaction.status != "confirmed":
+        raise ConflictError(
+            TRANSACTION_NOT_EDITABLE,
+            "Only a confirmed expense, income or transfer can be edited, deleted or restored",
+        )
+
+
+async def _lock_accounts(
+    session: AsyncSession, space_id: uuid.UUID, account_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, AccountRead | None]:
+    """Read each account `FOR SHARE`, in order of id; `None` = not in the space.
+
+    Lock order: by id, so two movements over the same accounts never cross. SHARE locks do not
+    conflict with each other anyway; the order protects the day an operation takes a stronger one.
+    """
+    accounts: dict[uuid.UUID, AccountRead | None] = {}
+    for account_id in sorted(set(account_ids)):
         try:
-            account = await accounts_service.get_account_for_share(session, space_id, account_id)
+            accounts[account_id] = await accounts_service.get_account_for_share(
+                session, space_id, account_id
+            )
         except NotFoundError:
-            archived[account_id] = None
-        else:
-            archived[account_id] = account.archived_at is not None
+            accounts[account_id] = None
+    return accounts
+
+
+def _require_active(
+    accounts: dict[uuid.UUID, AccountRead | None], ids: Collection[uuid.UUID]
+) -> None:
+    """409 if any of these (stored) accounts is archived: its balance cannot change."""
+    if any((account := accounts[i]) is not None and account.archived_at is not None for i in ids):
+        raise ConflictError(ACCOUNT_ARCHIVED, "An account of this movement is archived")
+
+
+async def _lock_active_accounts(
+    session: AsyncSession, space_id: uuid.UUID, transaction: Transaction
+) -> None:
+    """Lock the accounts of the entries of a stored movement and require them to be active."""
+    ids = {entry.account_id for entry in transaction.entries}
+    _require_active(await _lock_accounts(session, space_id, ids), ids)
+
+
+async def _check_accounts(
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    data: TransactionCreate,
+    *,
+    stored: Collection[uuid.UUID] = (),
+) -> None:
+    """Lock and validate the accounts of the body; `stored` are the ones an edit takes money from.
+
+    The accounts of the body must exist in the space and be active (422 on the field, whatever the
+    movement had before). `stored` ones are locked too, in the same order, but they are not in the
+    body, so an archived one is a 409.
+    """
+    references = referenced_accounts(data)
+    accounts = await _lock_accounts(
+        session, space_id, [account_id for _, account_id in references] + list(stored)
+    )
     for field, account_id in references:
-        state = archived[account_id]
+        account = accounts[account_id]
         loc = ("body", data.type, field)
-        if state is None:
+        if account is None:
             raise InvalidFieldError(loc, ACCOUNT_NOT_FOUND, "Account not found")
-        if state:
+        if account.archived_at is not None:
             raise InvalidFieldError(loc, ACCOUNT_ARCHIVED, "The account is archived")
+    in_body = {account_id for _, account_id in references}
+    _require_active(accounts, [account_id for account_id in stored if account_id not in in_body])
 
 
 async def _check_category(
-    session: AsyncSession, space_id: uuid.UUID, data: TransactionCreate
+    session: AsyncSession,
+    space_id: uuid.UUID,
+    data: TransactionCreate,
+    *,
+    current: uuid.UUID | None = None,
 ) -> None:
+    """The category of an expense or an income: it exists, is of its kind and is active.
+
+    `current` is the category the movement already has (an edit): if it is sent again it may be
+    archived, because old movements keep their archived categories and the person could not even
+    change the note otherwise. Any other archived category is refused.
+    """
     if not isinstance(data, ExpenseCreate | IncomeCreate):
         return  # a transfer and an adjustment have no category
     loc = ("body", data.type, "category_id")
@@ -422,5 +604,5 @@ async def _check_category(
         raise InvalidFieldError(
             loc, CATEGORY_KIND_MISMATCH, "The category is not of the kind of this movement"
         )
-    if category.archived_at is not None:
+    if category.archived_at is not None and category.id != current:
         raise InvalidFieldError(loc, CATEGORY_ARCHIVED, "The category is archived")

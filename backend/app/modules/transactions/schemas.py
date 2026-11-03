@@ -29,6 +29,7 @@ CATEGORY_ARCHIVED = "category_archived"
 CATEGORY_KIND_MISMATCH = "transaction_category_kind_mismatch"
 CURSOR_INVALID = "cursor_invalid"
 IDEMPOTENCY_KEY_REUSED = "idempotency_key_reused"
+TRANSACTION_NOT_EDITABLE = "transaction_not_editable"
 TRANSACTION_NOT_FOUND = "transaction_not_found"
 TRANSFER_SAME_ACCOUNT = "transfer_same_account"
 

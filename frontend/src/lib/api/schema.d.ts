@@ -467,8 +467,55 @@ export interface paths {
          *     A deleted one, one of another space and one that does not exist are the same 404.
          */
         get: operations["read_transaction_spaces__space_id__transactions__transaction_id__get"];
-        put?: never;
+        /**
+         * Update Transaction
+         * @description Replace an expense, an income or a transfer; the backend rebuilds the entries.
+         *
+         *     The body is the whole movement, the same as the creation (`type` decides its fields): what is
+         *     not sent is not kept, so omitting `description` clears the note. The type may change among
+         *     expense, income and transfer. Balances, the list and the summary follow. Answers with the
+         *     movement as the detail shows it.
+         *
+         *     Accounts and categories are validated as in the creation (422 with `loc`
+         *     `["body", "<type>", "<field>"]`), with one difference: the archived category the movement
+         *     already has may be sent again. Every account of the body must be active. A movement that is
+         *     deleted is a 404. 409 `transaction_not_editable` for an adjustment, a pending or a skipped
+         *     movement; 409 `account_archived` if an account the movement is moving out of is archived.
+         */
+        put: operations["update_transaction_spaces__space_id__transactions__transaction_id__put"];
         post?: never;
+        /**
+         * Delete Transaction
+         * @description Delete a movement (soft delete): it stops counting in balances, lists and totals.
+         *
+         *     `POST .../restore` brings it back as it was ("Deshacer"). Deleting one that is already deleted
+         *     is a 204 that changes nothing. 409 `transaction_not_editable` for an adjustment, a pending or a
+         *     skipped movement; 409 `account_archived` if one of its accounts is archived.
+         */
+        delete: operations["delete_transaction_spaces__space_id__transactions__transaction_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spaces/{space_id}/transactions/{transaction_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Transaction
+         * @description Undo a delete: the movement comes back identical and counts again.
+         *
+         *     Restoring one that is not deleted is a 200 that changes nothing. 409 `account_archived` if one
+         *     of its accounts was archived meanwhile (unarchive it first); 409 `transaction_not_editable`
+         *     as for the edit.
+         */
+        post: operations["restore_transaction_spaces__space_id__transactions__transaction_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2242,6 +2289,185 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_transaction_spaces__space_id__transactions__transaction_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseCreate"] | components["schemas"]["IncomeCreate"] | components["schemas"]["TransferCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovementRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_transaction_spaces__space_id__transactions__transaction_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_transaction_spaces__space_id__transactions__transaction_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                transaction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovementRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
