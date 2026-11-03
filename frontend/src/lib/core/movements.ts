@@ -1,6 +1,8 @@
 import type {
+  MovementCreate,
   MovementListItem,
   MovementPage,
+  MovementRead,
   TransactionSummary,
   TransactionType,
 } from "./data/transactions";
@@ -15,7 +17,8 @@ import type { AccountWithBalance } from "./data/accounts";
 import type { CategoryRead } from "./data/categories";
 import { ApiError } from "./data/errors";
 import { describeTransactionStatus, describeTransactionType, isValidationErrorBody } from "./i18n";
-import { formatMoney, type Currency } from "./money";
+import { formatMoney, minorToDecimalString, type Currency } from "./money";
+import type { MovementFormValues } from "./schemas/movement";
 
 // Pure logic of Movimientos (docs/diseno.md D17 › Escritorio v2, D19; FE-32 / KAN-97): the filters
 // of the list and their place in the URL, the month, the days the phone groups by, and how each
@@ -655,4 +658,157 @@ export function flattenMovementPages(
   data: { pages: readonly MovementPage[] } | undefined,
 ): MovementListItem[] {
   return data ? data.pages.flatMap((page) => page.items) : [];
+}
+
+// --- One movement: editing it, or only reading it (FE-34, KAN-99) ----------------------------------
+
+/**
+ * Whether the API lets a movement be edited, deleted and restored: only a **confirmed** expense, income
+ * or transfer (docs/arquitectura-backend.md §4, 409 `transaction_not_editable`). An adjustment is made
+ * by the system ("Cuadrar saldo"), and a pending or skipped one belongs to the recurring flow.
+ */
+export function isMovementEditable(item: Pick<MovementLike, "type" | "status">): boolean {
+  return item.status === "confirmed" && item.type !== "adjustment";
+}
+
+/** The accounts a movement touches: its account, or the two of a transfer. */
+function accountsOf(movement: MovementLike) {
+  return [movement.account, movement.from_account, movement.to_account].filter(
+    (account): account is NonNullable<typeof account> => account !== null,
+  );
+}
+
+/**
+ * The accounts of a movement that are archived, by the list of the space **with** its archived ones
+ * (`accountsQueryOptions` with `includeArchived`). An account the list does not have is not counted:
+ * the backend decides. Empty when none is.
+ */
+export function archivedAccountsOf(
+  movement: MovementLike,
+  accounts: readonly Pick<AccountWithBalance, "id" | "archived_at">[],
+): { id: string; name: string }[] {
+  const archived = new Set(
+    accounts.filter((account) => account.archived_at !== null).map((account) => account.id),
+  );
+  return accountsOf(movement)
+    .filter((account) => archived.has(account.id))
+    .map(({ id, name }) => ({ id, name }));
+}
+
+/**
+ * What opening a movement shows (docs/diseno.md D19):
+ * - `editable`: the form "Editar movimiento".
+ * - `adjustment`: "Ajuste de saldo", read only. The API refuses to edit **and to delete** an
+ *   adjustment (409 `transaction_not_editable`); it is corrected with "Cuadrar saldo".
+ * - `unconfirmed`: a pending or skipped movement, read only, for the same reason.
+ * - `archived-account`: an account of the movement is archived, so editing or deleting it would be a
+ *   409 `account_archived`; read only, with the way out (unarchive the account).
+ * The order is the one of the list: an adjustment first, then the status, then the account.
+ */
+export type MovementDetailKind = "editable" | "adjustment" | "unconfirmed" | "archived-account";
+
+export function movementDetailKind(
+  movement: MovementLike,
+  accounts: readonly Pick<AccountWithBalance, "id" | "archived_at">[],
+): MovementDetailKind {
+  if (movement.type === "adjustment") return "adjustment";
+  if (movement.status !== "confirmed") return "unconfirmed";
+  if (archivedAccountsOf(movement, accounts).length > 0) return "archived-account";
+  return "editable";
+}
+
+/** The title of the sheet or panel of a read-only movement: "Ajuste de saldo" (the canvas) or "Detalle del movimiento". */
+export function describeMovementDetailTitle(movement: Pick<MovementLike, "type">): string {
+  return movement.type === "adjustment" ? "Ajuste de saldo" : "Detalle del movimiento";
+}
+
+/**
+ * The date of the detail ("Martes 13 de octubre"), with the year when it is not the current one
+ * (`today`, the space's day, if known). Falls back to the text as it came for a date that is not real.
+ */
+export function describeMovementDetailDate(date: string, today?: string): string {
+  try {
+    return formatLocalWeekdayDate(date, {
+      year: today !== undefined && yearOf(date) !== yearOf(today),
+    });
+  } catch {
+    return date;
+  }
+}
+
+/** The amount in the text field of the form: "380,00" (the decimal comma of every currency we seed). */
+function amountText(minor: number, exponent: number): string {
+  return minorToDecimalString(Math.abs(minor), exponent).replace(".", ",");
+}
+
+/**
+ * The values "Editar movimiento" starts with: the movement's own, as the text the form holds (the
+ * amount without sign, "380,00"; `accountId` is the "Cuenta" or the "Desde"). `null` for an
+ * adjustment, which has no form. The amount is the exact one of the minor unit (integers and strings,
+ * no float), so a movement of the largest amount the backend takes reads back exactly.
+ */
+export function movementFormValuesOf(
+  movement: MovementRead,
+  exponent: number,
+): MovementFormValues | null {
+  if (movement.type === "adjustment") return null;
+  const common = {
+    type: movement.type,
+    amount: amountText(movement.amount_minor, exponent),
+    date: movement.date,
+    description: movement.description ?? "",
+  };
+  if (movement.type === "transfer") {
+    return {
+      ...common,
+      accountId: movement.from_account?.id ?? "",
+      toAccountId: movement.to_account?.id ?? "",
+      categoryId: "",
+    };
+  }
+  return {
+    ...common,
+    accountId: movement.account?.id ?? "",
+    toAccountId: "",
+    categoryId: movement.category?.id ?? "",
+  };
+}
+
+/**
+ * The body that saving the movement **as it is** would send (`PUT`, the whole movement), or `null` for
+ * an adjustment. The form compares the body it is about to send with this one: if they are the same
+ * nothing changed and no request is made. A description left empty is left out, as the form does.
+ */
+export function movementBodyOf(movement: MovementRead): MovementCreate | null {
+  if (movement.type === "adjustment") return null;
+  const common = {
+    date: movement.date,
+    amount_minor: Math.abs(movement.amount_minor),
+    ...(movement.description?.trim() ? { description: movement.description.trim() } : {}),
+  };
+  if (movement.type === "transfer") {
+    return {
+      type: "transfer",
+      from_account_id: movement.from_account?.id ?? "",
+      to_account_id: movement.to_account?.id ?? "",
+      ...common,
+    };
+  }
+  return {
+    type: movement.type,
+    account_id: movement.account?.id ?? "",
+    category_id: movement.category?.id ?? "",
+    ...common,
+  };
+}
+
+/** Whether two bodies of a movement are the same one, whatever the order of their keys. */
+export function sameMovementBody(a: MovementCreate, b: MovementCreate): boolean {
+  const left: Record<string, unknown> = { ...a };
+  const right: Record<string, unknown> = { ...b };
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (left[key] !== right[key]) return false;
+  }
+  return true;
 }

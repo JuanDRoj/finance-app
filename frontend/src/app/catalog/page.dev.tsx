@@ -38,6 +38,7 @@ import {
   PickersDemo,
 } from "./_components/base-demos";
 import { LoadingDemo } from "./_components/loading-demo";
+import { MovementEditDemo } from "./_components/movement-edit-demos";
 import { MovementPiecesDemo } from "./_components/movement-pieces-demos";
 import { MovementsScreenDemo } from "./_components/movements-screen-demos";
 import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
@@ -534,6 +535,10 @@ export default async function CatalogPage({
 
         <Section title="Registrar movimiento (hoja y panel)">
           <MovementSheetDemo />
+        </Section>
+
+        <Section title="Editar y borrar movimientos (hoja y panel)">
+          <MovementEditDemo />
         </Section>
 
         <Section title="Movimientos: piezas (lista, tabla, resumen y estados)">

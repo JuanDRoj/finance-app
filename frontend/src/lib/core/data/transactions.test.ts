@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, type InfiniteData } from "@tanstack/react-query";
 import createClient from "openapi-fetch";
 import { describe, expect, it, vi } from "vitest";
 import type { paths } from "@/lib/api/schema";
@@ -7,14 +7,22 @@ import { spaceQueryKey } from "./spaces";
 import {
   TRANSACTIONS_PAGE_SIZE,
   createTransaction,
+  deleteTransaction,
+  getTransaction,
   getTransactionsSummary,
   listTransactions,
+  removeMovementFromListCache,
+  restoreTransaction,
+  transactionDetailKey,
+  transactionDetailQueryOptions,
   transactionsListKey,
   transactionsListQueryOptions,
   transactionsQueryKey,
   transactionsSummaryKey,
   transactionsSummaryQueryOptions,
+  updateTransaction,
   type MovementCreate,
+  type MovementListItem,
   type MovementPage,
 } from "./transactions";
 
@@ -425,5 +433,239 @@ describe("transactionsSummaryQueryOptions", () => {
     expect(new URL(fetch.mock.calls[0]![0].url).pathname).toBe(
       `/spaces/${SPACE_ID}/transactions/summary`,
     );
+  });
+});
+
+// --- One movement (FE-34, KAN-99) -----------------------------------------------------------------
+
+const MOVEMENT_ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020";
+const MOVEMENT = {
+  id: MOVEMENT_ID,
+  type: "expense",
+  status: "confirmed",
+  date: "2026-10-19",
+  description: "Uber",
+  amount_minor: -38000,
+  category: null,
+  account: { id: ACCOUNT_ID, name: "Itaú", type: "bank" },
+  from_account: null,
+  to_account: null,
+};
+const ONE_PATH = `/spaces/${SPACE_ID}/transactions/${MOVEMENT_ID}`;
+
+describe("transactionDetailKey", () => {
+  it("hangs from the root of the movements, so changing them invalidates the detail", () => {
+    expect(transactionDetailKey(SPACE_ID, MOVEMENT_ID)).toEqual([
+      "spaces",
+      SPACE_ID,
+      "transactions",
+      "detail",
+      MOVEMENT_ID,
+    ]);
+    expect(transactionDetailKey(SPACE_ID, MOVEMENT_ID).slice(0, 3)).toEqual(
+      transactionsQueryKey(SPACE_ID),
+    );
+  });
+});
+
+describe("getTransaction", () => {
+  it("sends GET /spaces/{id}/transactions/{id} and returns the movement", async () => {
+    const { api, fetch } = clientAnswering(Response.json(MOVEMENT));
+    await expect(getTransaction(api, SPACE_ID, MOVEMENT_ID)).resolves.toEqual(MOVEMENT);
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("GET");
+    expect(new URL(request.url).pathname).toBe(ONE_PATH);
+  });
+
+  it("throws an ApiError with the code of a 404 (gone, deleted or of another space)", async () => {
+    const body = { code: "transaction_not_found", detail: "Transaction not found" };
+    const { api } = clientAnswering(Response.json(body, { status: 404 }));
+    await expect(getTransaction(api, SPACE_ID, MOVEMENT_ID)).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      body,
+    });
+  });
+
+  it("throws on a 422 for an id that is not a UUID, and on a 401", async () => {
+    const invalid = clientAnswering(Response.json({ detail: [] }, { status: 422 }));
+    await expect(getTransaction(invalid.api, SPACE_ID, "nope")).rejects.toMatchObject({
+      status: 422,
+    });
+    const anonymous = clientAnswering(Response.json({}, { status: 401 }));
+    await expect(getTransaction(anonymous.api, SPACE_ID, MOVEMENT_ID)).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+});
+
+describe("updateTransaction", () => {
+  const body: MovementCreate = {
+    type: "expense",
+    account_id: ACCOUNT_ID,
+    category_id: CATEGORY_ID,
+    amount_minor: 38000,
+    date: "2026-10-19",
+    description: "Uber",
+  };
+
+  it("sends PUT with the whole movement, no Idempotency-Key, and returns the movement", async () => {
+    const { api, fetch } = clientAnswering(Response.json(MOVEMENT));
+    await expect(updateTransaction(api, SPACE_ID, MOVEMENT_ID, body)).resolves.toEqual(MOVEMENT);
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("PUT");
+    expect(new URL(request.url).pathname).toBe(ONE_PATH);
+    expect(await request.json()).toEqual(body);
+    expect(request.headers.has("Idempotency-Key")).toBe(false);
+  });
+
+  it("sends a transfer with its two accounts and no category", async () => {
+    const { api, fetch } = clientAnswering(Response.json(MOVEMENT));
+    const transfer: MovementCreate = {
+      type: "transfer",
+      from_account_id: ACCOUNT_ID,
+      to_account_id: OTHER_ACCOUNT_ID,
+      amount_minor: 1,
+      date: "2026-10-19",
+    };
+    await updateTransaction(api, SPACE_ID, MOVEMENT_ID, transfer);
+    expect(await fetch.mock.calls[0]![0].json()).toEqual(transfer);
+  });
+
+  it("throws the 409 (not editable, account archived) and the 422 as an ApiError", async () => {
+    const conflict = { code: "transaction_not_editable", detail: "x" };
+    const refused = clientAnswering(Response.json(conflict, { status: 409 }));
+    await expect(updateTransaction(refused.api, SPACE_ID, MOVEMENT_ID, body)).rejects.toMatchObject(
+      { status: 409, body: conflict },
+    );
+    const invalid = clientAnswering(Response.json({ detail: [] }, { status: 422 }));
+    await expect(updateTransaction(invalid.api, SPACE_ID, MOVEMENT_ID, body)).rejects.toMatchObject(
+      { status: 422 },
+    );
+  });
+});
+
+describe("deleteTransaction", () => {
+  it("sends DELETE and resolves with nothing on the 204", async () => {
+    const { api, fetch } = clientAnswering(new Response(null, { status: 204 }));
+    await expect(deleteTransaction(api, SPACE_ID, MOVEMENT_ID)).resolves.toBeUndefined();
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("DELETE");
+    expect(new URL(request.url).pathname).toBe(ONE_PATH);
+  });
+
+  it("throws on a 409 (an adjustment cannot be deleted) and a 404", async () => {
+    const conflict = { code: "transaction_not_editable", detail: "x" };
+    const refused = clientAnswering(Response.json(conflict, { status: 409 }));
+    await expect(deleteTransaction(refused.api, SPACE_ID, MOVEMENT_ID)).rejects.toMatchObject({
+      status: 409,
+      body: conflict,
+    });
+    const gone = clientAnswering(new Response(null, { status: 404 }));
+    await expect(deleteTransaction(gone.api, SPACE_ID, MOVEMENT_ID)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+});
+
+describe("restoreTransaction", () => {
+  it("sends POST .../restore and returns the movement", async () => {
+    const { api, fetch } = clientAnswering(Response.json(MOVEMENT));
+    await expect(restoreTransaction(api, SPACE_ID, MOVEMENT_ID)).resolves.toEqual(MOVEMENT);
+    const request = fetch.mock.calls[0]![0];
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe(`${ONE_PATH}/restore`);
+  });
+
+  it("throws the 409 account_archived as an ApiError", async () => {
+    const conflict = { code: "account_archived", detail: "x" };
+    const { api } = clientAnswering(Response.json(conflict, { status: 409 }));
+    await expect(restoreTransaction(api, SPACE_ID, MOVEMENT_ID)).rejects.toMatchObject({
+      status: 409,
+      body: conflict,
+    });
+  });
+});
+
+describe("transactionDetailQueryOptions", () => {
+  it("uses the detail key and fetches the movement", async () => {
+    const { api, fetch } = clientAnswering(Response.json(MOVEMENT));
+    const options = transactionDetailQueryOptions(api, SPACE_ID, MOVEMENT_ID);
+    expect(options.queryKey).toEqual(transactionDetailKey(SPACE_ID, MOVEMENT_ID));
+    await expect(new QueryClient().fetchQuery(options)).resolves.toEqual(MOVEMENT);
+    expect(new URL(fetch.mock.calls[0]![0].url).pathname).toBe(ONE_PATH);
+  });
+
+  it("is never kept: always stale and collected as soon as nobody watches it", () => {
+    const options = transactionDetailQueryOptions(
+      clientAnswering(Response.json({})).api,
+      SPACE_ID,
+      MOVEMENT_ID,
+    );
+    expect(options.staleTime).toBe(0);
+    expect(options.gcTime).toBe(0);
+  });
+
+  it("does not retry an answer that will not change (401, 404, 422) and retries the rest, up to 3 times", () => {
+    const options = transactionDetailQueryOptions(
+      clientAnswering(Response.json({})).api,
+      SPACE_ID,
+      MOVEMENT_ID,
+    );
+    const retry = options.retry as (count: number, error: unknown) => boolean;
+    for (const status of [401, 404, 422]) {
+      expect(retry(0, new ApiError(status, undefined))).toBe(false);
+    }
+    expect(retry(0, new ApiError(500, undefined))).toBe(true);
+    expect(retry(2, new TypeError("Failed to fetch"))).toBe(true);
+    expect(retry(3, new ApiError(500, undefined))).toBe(false);
+  });
+});
+
+describe("removeMovementFromListCache", () => {
+  function item(id: string): MovementListItem {
+    return { ...MOVEMENT, id, balance_after_minor: null } as MovementListItem;
+  }
+  function data(...pages: string[][]): InfiniteData<MovementPage, string | null> {
+    return {
+      pages: pages.map((ids, index) => ({
+        items: ids.map(item),
+        next_cursor: index < pages.length - 1 ? `cursor-${index + 2}` : null,
+      })),
+      pageParams: pages.map((_, index) => (index === 0 ? null : `cursor-${index + 1}`)),
+    };
+  }
+
+  it("takes the movement out of every loaded page of every list of the space", () => {
+    const client = new QueryClient();
+    const october = transactionsListKey(SPACE_ID, { month: "2026-10" });
+    const search = transactionsListKey(SPACE_ID, { month: "2026-10", q: "uber" });
+    client.setQueryData(october, data(["a", "b"], ["c", "d"]));
+    client.setQueryData(search, data(["b"]));
+    removeMovementFromListCache(client, SPACE_ID, "b");
+    const left = client.getQueryData<InfiniteData<MovementPage>>(october);
+    expect(left?.pages.map((page) => page.items.map((i) => i.id))).toEqual([["a"], ["c", "d"]]);
+    expect(left?.pages[0]?.next_cursor).toBe("cursor-2");
+    expect(client.getQueryData<InfiniteData<MovementPage>>(search)?.pages[0]?.items).toEqual([]);
+  });
+
+  it("leaves the summary, the detail and the lists of another space alone", () => {
+    const client = new QueryClient();
+    const summary = transactionsSummaryKey(SPACE_ID, { month: "2026-10" });
+    const detail = transactionDetailKey(SPACE_ID, "b");
+    const other = transactionsListKey("another-space", { month: "2026-10" });
+    client.setQueryData(summary, { count: 2 });
+    client.setQueryData(detail, MOVEMENT);
+    client.setQueryData(other, data(["b"]));
+    removeMovementFromListCache(client, SPACE_ID, "b");
+    expect(client.getQueryData(summary)).toEqual({ count: 2 });
+    expect(client.getQueryData(detail)).toEqual(MOVEMENT);
+    expect(client.getQueryData<InfiniteData<MovementPage>>(other)?.pages[0]?.items).toHaveLength(1);
+  });
+
+  it("does nothing when no list is in the cache", () => {
+    const client = new QueryClient();
+    expect(() => removeMovementFromListCache(client, SPACE_ID, "b")).not.toThrow();
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 });

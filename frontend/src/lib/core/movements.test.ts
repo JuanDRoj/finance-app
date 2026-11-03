@@ -9,6 +9,7 @@ import {
   MOVEMENT_TYPE_PARAMS,
   activeFilterCount,
   applyMovementFilters,
+  archivedAccountsOf,
   buildAccountOptions,
   buildCategoryOptions,
   buildMonthOptions,
@@ -19,6 +20,8 @@ import {
   describeMovementAccount,
   describeMovementCategory,
   describeMovementCount,
+  describeMovementDetailDate,
+  describeMovementDetailTitle,
   describeMovementStatusNote,
   describeMovementSubline,
   describeMovementTitle,
@@ -28,12 +31,17 @@ import {
   groupMovementsByDay,
   hasActiveFilters,
   isCursorInvalid,
+  isMovementEditable,
   isQuietMovement,
   mergeMovementFilters,
   movementAmountView,
+  movementBodyOf,
+  movementDetailKind,
+  movementFormValuesOf,
   movementTypeFromParam,
   normalizeSearch,
   parseMovementFilters,
+  sameMovementBody,
   serializeMovementFilters,
   shiftMonth,
   showsSummary,
@@ -1076,5 +1084,201 @@ describe("buildCategoryOptions", () => {
     const long = "C".repeat(80);
     const { groups } = buildCategoryOptions([category("c1", long)]);
     expect(groups[0]!.options[0]!.label).toBe(long);
+  });
+});
+
+// --- One movement: editing it, or only reading it (FE-34, KAN-99) ----------------------------------
+
+describe("isMovementEditable", () => {
+  it("is true for a confirmed expense, income or transfer", () => {
+    expect(isMovementEditable(item())).toBe(true);
+    expect(isMovementEditable(item({ type: "income" }))).toBe(true);
+    expect(isMovementEditable(transfer())).toBe(true);
+  });
+
+  it("is false for an adjustment and for a pending or skipped movement (409 transaction_not_editable)", () => {
+    expect(isMovementEditable(adjustment())).toBe(false);
+    expect(isMovementEditable(item({ status: "pending" }))).toBe(false);
+    expect(isMovementEditable(item({ status: "skipped" }))).toBe(false);
+    expect(isMovementEditable(transfer({ status: "pending" }))).toBe(false);
+  });
+});
+
+describe("archivedAccountsOf and movementDetailKind", () => {
+  const active = { id: ITAU.id, archived_at: null };
+  const archivedItau = { id: ITAU.id, archived_at: "2026-10-01T10:00:00Z" };
+  const archivedVisa = { id: VISA.id, archived_at: "2026-10-01T10:00:00Z" };
+
+  it("names the archived accounts of an expense, of a transfer (either side) and of an adjustment", () => {
+    expect(archivedAccountsOf(item(), [archivedVisa])).toEqual([{ id: VISA.id, name: VISA.name }]);
+    expect(archivedAccountsOf(transfer(), [archivedItau, archivedVisa])).toEqual([
+      { id: ITAU.id, name: ITAU.name },
+      { id: VISA.id, name: VISA.name },
+    ]);
+    expect(archivedAccountsOf(transfer(), [archivedVisa])).toEqual([
+      { id: VISA.id, name: VISA.name },
+    ]);
+    expect(archivedAccountsOf(adjustment(), [archivedItau])).toEqual([
+      { id: ITAU.id, name: ITAU.name },
+    ]);
+  });
+
+  it("is empty when the accounts are active, or when the list does not have them (the backend decides)", () => {
+    expect(archivedAccountsOf(item(), [{ id: VISA.id, archived_at: null }])).toEqual([]);
+    expect(archivedAccountsOf(item(), [])).toEqual([]);
+    expect(archivedAccountsOf(item(), [archivedItau])).toEqual([]);
+  });
+
+  it("an editable movement is 'editable'", () => {
+    expect(movementDetailKind(item(), [{ id: VISA.id, archived_at: null }])).toBe("editable");
+    expect(movementDetailKind(transfer(), [])).toBe("editable");
+  });
+
+  it("reads an adjustment, then a state that is not confirmed, then an archived account", () => {
+    expect(movementDetailKind(adjustment(), [active])).toBe("adjustment");
+    // An adjustment on an archived account stays 'adjustment' (its page then hides "Cuadrar saldo").
+    expect(movementDetailKind(adjustment(), [archivedItau])).toBe("adjustment");
+    expect(movementDetailKind(item({ status: "pending" }), [])).toBe("unconfirmed");
+    expect(movementDetailKind(item({ status: "skipped" }), [archivedVisa])).toBe("unconfirmed");
+    expect(movementDetailKind(item(), [archivedVisa])).toBe("archived-account");
+    expect(movementDetailKind(transfer(), [archivedItau])).toBe("archived-account");
+  });
+});
+
+describe("describeMovementDetailTitle and describeMovementDetailDate", () => {
+  it("titles an adjustment 'Ajuste de saldo' (the canvas) and anything else 'Detalle del movimiento'", () => {
+    expect(describeMovementDetailTitle(adjustment())).toBe("Ajuste de saldo");
+    expect(describeMovementDetailTitle(item({ status: "pending" }))).toBe("Detalle del movimiento");
+  });
+
+  it("writes the weekday date, with the year only when it is not the current one", () => {
+    expect(describeMovementDetailDate("2026-10-13", "2026-10-21")).toBe("Martes 13 de octubre");
+    expect(describeMovementDetailDate("2025-10-13", "2026-10-21")).toBe(
+      "Lunes 13 de octubre de 2025",
+    );
+    // Without "today" it cannot tell the year: it is left out, as the canvas draws it.
+    expect(describeMovementDetailDate("2026-10-13")).toBe("Martes 13 de octubre");
+  });
+
+  it("gives back a date that is not real instead of throwing", () => {
+    expect(describeMovementDetailDate("2026-02-31", "2026-10-21")).toBe("2026-02-31");
+  });
+});
+
+describe("movementFormValuesOf", () => {
+  const read = (overrides: Partial<MovementListItem> = {}) => item(overrides);
+
+  it("starts an expense on its own values: the amount without sign, in text, with a decimal comma", () => {
+    expect(
+      movementFormValuesOf(
+        read({
+          amount_minor: -38000,
+          description: "Uber",
+          account: ITAU,
+          category: GROCERIES,
+          date: "2026-10-19",
+        }),
+        2,
+      ),
+    ).toEqual({
+      type: "expense",
+      amount: "380,00",
+      accountId: ITAU.id,
+      toAccountId: "",
+      categoryId: GROCERIES.id,
+      date: "2026-10-19",
+      description: "Uber",
+    });
+  });
+
+  it("starts an income with its positive amount, and an empty description when it has none", () => {
+    expect(
+      movementFormValuesOf(read({ type: "income", amount_minor: 5_000_000, description: null }), 2),
+    ).toMatchObject({ type: "income", amount: "50000,00", description: "" });
+  });
+
+  it("starts a transfer with 'Desde' and 'Hacia' and no category", () => {
+    expect(movementFormValuesOf(transfer({ amount_minor: 1850000 }), 2)).toEqual({
+      type: "transfer",
+      amount: "18500,00",
+      accountId: ITAU.id,
+      toAccountId: VISA.id,
+      categoryId: "",
+      date: "2026-10-20",
+      description: "Pago de Visa Itaú",
+    });
+  });
+
+  it("is exact at the exponent of the currency: 0, 2 and 3 decimals", () => {
+    expect(movementFormValuesOf(read({ amount_minor: -1500 }), 0)?.amount).toBe("1500");
+    expect(movementFormValuesOf(read({ amount_minor: -5 }), 2)?.amount).toBe("0,05");
+    expect(movementFormValuesOf(read({ amount_minor: -1234 }), 3)?.amount).toBe("1,234");
+    expect(movementFormValuesOf(read({ amount_minor: -1 }), 3)?.amount).toBe("0,001");
+  });
+
+  it("reads back the largest amount the backend takes, with no float rounding", () => {
+    expect(movementFormValuesOf(read({ amount_minor: -Number.MAX_SAFE_INTEGER }), 2)?.amount).toBe(
+      "90071992547409,91",
+    );
+    expect(movementFormValuesOf(read({ amount_minor: Number.MAX_SAFE_INTEGER }), 0)?.amount).toBe(
+      "9007199254740991",
+    );
+  });
+
+  it("has no form for an adjustment", () => {
+    expect(movementFormValuesOf(adjustment(), 2)).toBeNull();
+  });
+
+  it("gives an empty id for an account or a category the movement does not have", () => {
+    expect(movementFormValuesOf(read({ account: null, category: null }), 2)).toMatchObject({
+      accountId: "",
+      categoryId: "",
+    });
+  });
+});
+
+describe("movementBodyOf and sameMovementBody", () => {
+  it("builds the body that saving the movement as it is would send", () => {
+    expect(
+      movementBodyOf(item({ amount_minor: -38000, description: "Uber", date: "2026-10-19" })),
+    ).toEqual({
+      type: "expense",
+      account_id: VISA.id,
+      category_id: GROCERIES.id,
+      amount_minor: 38000,
+      date: "2026-10-19",
+      description: "Uber",
+    });
+    expect(movementBodyOf(transfer())).toEqual({
+      type: "transfer",
+      from_account_id: ITAU.id,
+      to_account_id: VISA.id,
+      amount_minor: 1850000,
+      date: "2026-10-20",
+      description: "Pago de Visa Itaú",
+    });
+  });
+
+  it("leaves the description out when there is none, as the form does", () => {
+    expect(movementBodyOf(item({ description: null }))).not.toHaveProperty("description");
+    expect(movementBodyOf(item({ description: "  " }))).not.toHaveProperty("description");
+  });
+
+  it("has no body for an adjustment", () => {
+    expect(movementBodyOf(adjustment())).toBeNull();
+  });
+
+  it("two bodies are the same whatever the order of their keys, and differ in any value or key", () => {
+    const base = movementBodyOf(item())!;
+    expect(sameMovementBody(base, { ...base })).toBe(true);
+    const reordered = Object.fromEntries(Object.entries(base).reverse()) as typeof base;
+    expect(sameMovementBody(base, reordered)).toBe(true);
+    expect(sameMovementBody(base, { ...base, amount_minor: base.amount_minor + 1 })).toBe(false);
+    expect(sameMovementBody(base, { ...base, date: "2026-10-21" })).toBe(false);
+    expect(sameMovementBody(base, { ...base, description: "otra" })).toBe(false);
+    const { description, ...without } = base;
+    void description;
+    expect(sameMovementBody(base, without as typeof base)).toBe(false);
+    expect(sameMovementBody(without as typeof base, base)).toBe(false);
   });
 });

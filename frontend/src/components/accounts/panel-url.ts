@@ -31,9 +31,26 @@ export const NEW_ACCOUNT_PANEL: PanelRef = { param: "cuenta", value: "nueva" };
 /**
  * The panel "Registrar movimiento" opens in (`PRIMARY_ACTION.panel`, KAN-76): `?movimiento=nuevo`.
  * Below 1024 px it is the bottom sheet, from 1024 px the side panel; the same URL opens either.
- * FE-23 will add `?movimiento=editar` for editing one.
+ * Editing one is `movementEditPanel(id)`: `?movimiento=editar&id=<id>`.
  */
 export const MOVEMENT_PANEL: PanelRef = { param: "movimiento", value: "nuevo" };
+
+/**
+ * The params of the panel of an existing movement besides `?movimiento`: closing it takes them out
+ * (`closePanelInUrl(MOVEMENT_PANEL.param, ...MOVEMENT_PANEL_COMPANIONS)`), as the category panel does
+ * with `id` and `padre`. FE-34 (KAN-99).
+ */
+export const MOVEMENT_PANEL_COMPANIONS = ["id"] as const;
+
+/**
+ * The panel of the movement with this id (`?movimiento=editar&id=<id>`, FE-34): "Editar movimiento",
+ * or "Ajuste de saldo" in read-only for an adjustment. The same URL opens the bottom sheet of a phone
+ * and the side panel of desktop. `id` is a UUID: it is read by `getTransaction`, and anything else
+ * is a 422 that the host that opens it (KAN-83) takes out of the URL.
+ */
+export function movementEditPanel(movementId: string): PanelRef {
+  return { param: MOVEMENT_PANEL.param, value: "editar", extra: { id: movementId } };
+}
 
 function writeUrl(url: URL): void {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);

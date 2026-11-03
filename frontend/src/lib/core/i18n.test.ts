@@ -6,6 +6,7 @@ import {
   CATEGORY_KIND_NAMES,
   CATEGORY_KIND_PLURAL_NAMES,
   CURRENCY_NAMES,
+  MOVEMENT_EDIT_SAVE_LABEL,
   MOVEMENT_SAVE_LABEL,
   TRANSACTION_STATUS_NAMES,
   TRANSACTION_TYPE_NAMES,
@@ -14,6 +15,7 @@ import {
   describeCategoryIcon,
   describeCategoryKind,
   describeCurrency,
+  describeMovementError,
   describeTransactionStatus,
   describeTransactionType,
   fieldErrorMessage,
@@ -612,5 +614,77 @@ describe("describeApiError with cursor_invalid (GET /transactions)", () => {
     expect(message).not.toContain("Corrígelo");
     expect(`${title} ${message}`).not.toContain("cursor");
     expect(`${title} ${message}`).not.toContain("Invalid");
+  });
+});
+
+describe("codes of one movement (BE-20, FE-34)", () => {
+  const detail = "Only a confirmed expense, income or transfer can be edited, deleted or restored";
+
+  it("translates transaction_not_found without the English detail or the raw code", () => {
+    const { title, message } = describeApiError(
+      apiError(404, { code: "transaction_not_found", detail: "Transaction not found" }),
+    );
+    expect(title).toBe("No encontramos ese movimiento");
+    expect(message).toContain("Movimientos");
+    expect(`${title} ${message}`).not.toContain("Transaction");
+    expect(`${title} ${message}`).not.toContain("transaction_not_found");
+    // Not the generic 404 ("No encontramos lo que buscabas").
+    expect(title).not.toBe(describeApiError(apiError(404, undefined)).title);
+  });
+
+  it("translates transaction_not_editable and sends an adjustment to 'Cuadrar saldo'", () => {
+    const { title, message } = describeApiError(
+      apiError(409, { code: "transaction_not_editable", detail }),
+    );
+    expect(title).toBe("Este movimiento no se puede cambiar");
+    expect(message).toContain("Cuadrar saldo");
+    expect(message).toContain("pendientes u omitidos");
+    expect(`${title} ${message}`).not.toContain("confirmed");
+    // Not the generic 409 ("Esto choca con el estado actual").
+    expect(title).not.toBe(describeApiError(apiError(409, undefined)).title);
+  });
+
+  it("says the account is archived for each operation, each with its own way out", () => {
+    const archived = apiError(409, { code: "account_archived", detail: "The account is archived" });
+    const update = describeMovementError(archived, "update");
+    const remove = describeMovementError(archived, "delete");
+    const restore = describeMovementError(archived, "restore");
+    expect(update.message).toBe("Desarchívala desde Cuentas para poder editar este movimiento.");
+    expect(remove.message).toBe("Desarchívala desde Cuentas para poder eliminar este movimiento.");
+    // 'Deshacer': the movement is already deleted and the toast gone, so it says to register it again.
+    expect(restore.title).toBe("No se pudo deshacer");
+    expect(restore.message).toContain("registra el movimiento de nuevo");
+    // None of them is the text of 'Cuadrar saldo' (describeApiError of the same error).
+    const reconcile = describeApiError(archived);
+    for (const text of [update, remove, restore]) {
+      expect(text.message).not.toBe(reconcile.message);
+    }
+    expect(reconcile.message).toContain("cuadrar su saldo");
+  });
+
+  it("is describeApiError for everything else", () => {
+    for (const error of [
+      apiError(409, { code: "transaction_not_editable", detail }),
+      apiError(404, { code: "transaction_not_found", detail: "x" }),
+      apiError(500, undefined),
+      apiError(422, undefined),
+      new TypeError("Failed to fetch"),
+      new Error("boom"),
+    ]) {
+      expect(describeMovementError(error, "delete")).toEqual(describeApiError(error));
+    }
+  });
+
+  it("does not confuse an account_archived 422 (a field) with the 409", () => {
+    const field = apiError(422, {
+      detail: [{ type: "account_archived", loc: ["body", "expense", "account_id"], msg: "x" }],
+    });
+    expect(describeMovementError(field, "update")).toEqual(describeApiError(field));
+  });
+});
+
+describe("MOVEMENT_EDIT_SAVE_LABEL", () => {
+  it("is 'Guardar cambios', whatever the type", () => {
+    expect(MOVEMENT_EDIT_SAVE_LABEL).toBe("Guardar cambios");
   });
 });

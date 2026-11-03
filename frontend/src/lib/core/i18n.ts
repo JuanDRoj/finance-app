@@ -99,9 +99,48 @@ const ERROR_BY_CODE: Record<string, ErrorDescription> = {
     message:
       "Parece que se guardó cuando se cortó la conexión. Revisa el saldo de tus cuentas antes de guardar de nuevo.",
   },
+  // `/spaces/{id}/transactions/{transaction_id}` (BE-20): a movement that does not exist, is deleted
+  // or belongs to another space (the three are the same 404, so nothing leaks across spaces).
+  transaction_not_found: {
+    title: "No encontramos ese movimiento",
+    message: "Puede que ya lo hayas eliminado o que no sea de este espacio. Vuelve a Movimientos.",
+  },
+  // `PUT`, `DELETE` and `POST .../restore` of a movement (BE-20): only a confirmed expense, income or
+  // transfer changes through the API. An adjustment is corrected with "Cuadrar saldo".
+  transaction_not_editable: {
+    title: "Este movimiento no se puede cambiar",
+    message:
+      "Los ajustes y los movimientos pendientes u omitidos no se editan ni se eliminan desde aquí. Para corregir un saldo, usa «Cuadrar saldo».",
+  },
   internal_error: {
     title: "Algo salió mal de nuestro lado",
     message: `Inténtalo de nuevo en unos minutos. ${SAFE}`,
+  },
+};
+
+/** What a person does to a movement that is already saved; the 409 `account_archived` reads differently for each. */
+export type MovementOperation = "update" | "delete" | "restore";
+
+/**
+ * The 409 `account_archived` of editing, deleting or restoring a movement (BE-20): one of its
+ * accounts is archived, so its balance cannot change. `ERROR_BY_CODE.account_archived` is the one of
+ * "Cuadrar saldo"; here the way out is the same (unarchive it) but the sentence is about the movement.
+ * For "Deshacer" the movement is already deleted and the toast is gone, so the text says to register it
+ * again once the account is back.
+ */
+const MOVEMENT_ARCHIVED_ACCOUNT: Readonly<Record<MovementOperation, ErrorDescription>> = {
+  update: {
+    title: "Esa cuenta está archivada",
+    message: "Desarchívala desde Cuentas para poder editar este movimiento.",
+  },
+  delete: {
+    title: "Esa cuenta está archivada",
+    message: "Desarchívala desde Cuentas para poder eliminar este movimiento.",
+  },
+  restore: {
+    title: "No se pudo deshacer",
+    message:
+      "La cuenta del movimiento se archivó mientras tanto. Desarchívala desde Cuentas y registra el movimiento de nuevo.",
   },
 };
 
@@ -293,6 +332,25 @@ export function describeApiError(error: unknown): ErrorDescription {
 }
 
 /**
+ * `describeApiError` for editing, deleting or restoring a movement: the same text, except the 409
+ * `account_archived`, which says what that account blocks (`MOVEMENT_ARCHIVED_ACCOUNT`).
+ */
+export function describeMovementError(
+  error: unknown,
+  operation: MovementOperation,
+): ErrorDescription {
+  if (
+    error instanceof ApiError &&
+    error.status === 409 &&
+    isErrorResponse(error.body) &&
+    error.body.code === "account_archived"
+  ) {
+    return MOVEMENT_ARCHIVED_ACCOUNT[operation];
+  }
+  return describeApiError(error);
+}
+
+/**
  * Names of the currencies a space can use, in Spanish. `GET /currencies` sends only the code and
  * the exponent, so the name lives here (docs/diseno.md D18). The order is the one of the list the
  * user picks from (FE-16): UYU, COP, USD, ARS, BRL, EUR.
@@ -382,6 +440,9 @@ export const MOVEMENT_SAVE_LABEL: Readonly<
   income: "Guardar ingreso",
   transfer: "Guardar transferencia",
 };
+
+/** The button of "Editar movimiento" (docs/diseno.md D19), whatever the type: the type does not change. */
+export const MOVEMENT_EDIT_SAVE_LABEL = "Guardar cambios";
 
 /**
  * The currencies of `GET /currencies` in the order the person picks from (the order of

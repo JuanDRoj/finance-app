@@ -7,6 +7,7 @@ import {
   categoryKindParam,
   buildCategoryTree,
   categoryNameOf,
+  categoryOptionLabel,
   countUnarchivable,
   describeArchiveHelp,
   describeArchivedCategory,
@@ -526,5 +527,116 @@ describe("the ?tipo= of Categorías", () => {
     for (const kind of ["expense", "income"] as const) {
       expect(categoryKindFromParam(categoryKindParam(kind))).toBe(kind);
     }
+  });
+});
+
+describe("buildCategoryTree with keep (editing a movement, FE-34)", () => {
+  const ARCHIVED_AT = "2026-10-01T10:00:00Z";
+
+  it("changes nothing without keep, or with a keep that is active, unknown or of another kind", () => {
+    const { all, comida, sueldoSub } = sample();
+    const plain = buildCategoryTree(all, "expense");
+    expect(buildCategoryTree(all, "expense", {})).toEqual(plain);
+    expect(buildCategoryTree(all, "expense", { keep: comida.id })).toEqual(plain);
+    expect(buildCategoryTree(all, "expense", { keep: "nope" })).toEqual(plain);
+    // An income subcategory kept while the tree is of expenses: its principal is not of the kind.
+    expect(buildCategoryTree(all, "expense", { keep: sueldoSub.id })).toEqual(plain);
+    expect(plain.every((branch) => branch.choosable === undefined)).toBe(true);
+  });
+
+  it("keeps an archived principal the movement has, as the only archived one", () => {
+    const { all, ropa, comida } = sample();
+    const archivedRopa = { ...ropa, archived_at: ARCHIVED_AT };
+    const list = all.map((c) => (c.id === ropa.id ? archivedRopa : c));
+    expect(buildCategoryTree(list, "expense").map((b) => b.principal.id)).not.toContain(ropa.id);
+    const tree = buildCategoryTree(list, "expense", { keep: ropa.id });
+    const kept = tree.find((branch) => branch.principal.id === ropa.id);
+    expect(kept?.principal).toEqual(archivedRopa);
+    // It can be chosen again (the backend takes the category a movement already has), in its place.
+    expect(kept?.choosable).toBeUndefined();
+    expect(tree.map((branch) => branch.principal.name)).toEqual(["Comida", "Transporte", "Ropa"]);
+    expect(comida.archived_at).toBeNull();
+  });
+
+  it("keeps an archived subcategory with its active principal, and no other archived one", () => {
+    const { all, taxi, combustible, transporte } = sample();
+    const list = all.map((c) =>
+      c.id === taxi.id || c.id === combustible.id ? { ...c, archived_at: ARCHIVED_AT } : c,
+    );
+    const tree = buildCategoryTree(list, "expense", { keep: taxi.id });
+    const branch = tree.find((b) => b.principal.id === transporte.id);
+    expect(branch?.subs.map((sub) => sub.id)).toEqual([taxi.id]);
+    expect(branch?.choosable).toBeUndefined();
+  });
+
+  it("brings an archived principal as the place of its archived subcategory, not choosable itself", () => {
+    const { all, transporte, taxi, combustible } = sample();
+    const list = all.map((c) =>
+      [transporte.id, taxi.id, combustible.id].includes(c.id)
+        ? { ...c, archived_at: ARCHIVED_AT }
+        : c,
+    );
+    // Without keep the whole branch is gone (an archived principal takes its subcategories with it).
+    expect(buildCategoryTree(list, "expense").some((b) => b.principal.id === transporte.id)).toBe(
+      false,
+    );
+    const tree = buildCategoryTree(list, "expense", { keep: taxi.id });
+    const branch = tree.find((b) => b.principal.id === transporte.id);
+    expect(branch?.choosable).toBe(false);
+    expect(branch?.subs.map((sub) => sub.id)).toEqual([taxi.id]);
+  });
+
+  it("finds the kept category in the tree and names it", () => {
+    const { all, taxi, transporte } = sample();
+    const list = all.map((c) => (c.id === taxi.id ? { ...c, archived_at: ARCHIVED_AT } : c));
+    const tree = buildCategoryTree(list, "expense", { keep: taxi.id });
+    expect(findCategoryPlace(tree, taxi.id)).toMatchObject({
+      principal: { id: transporte.id },
+      sub: { id: taxi.id },
+    });
+    expect(categoryNameOf(tree, taxi.id)).toBe("Taxi y apps");
+  });
+});
+
+describe("categoryOptionLabel", () => {
+  it("is the name, and 'name (archivada)' for an archived category", () => {
+    expect(categoryOptionLabel({ name: "Ropa", archived_at: null })).toBe("Ropa");
+    expect(categoryOptionLabel({ name: "Ropa", archived_at: "2026-10-01T10:00:00Z" })).toBe(
+      "Ropa (archivada)",
+    );
+  });
+});
+
+describe("the kept archived category in what the person reads (FE-34)", () => {
+  const ARCHIVED_AT = "2026-10-01T10:00:00Z";
+
+  it("says '(archivada)' in the line under the grid, for a subcategory and for 'Solo X'", () => {
+    const { all, taxi, combustible, transporte } = sample();
+    const archivedSub = all.map((c) => (c.id === taxi.id ? { ...c, archived_at: ARCHIVED_AT } : c));
+    const withSub = buildCategoryTree(archivedSub, "expense", { keep: taxi.id });
+    expect(describeCategoryChoice(withSub, taxi.id)).toBe("Transporte › Taxi y apps (archivada)");
+    // The principal itself kept (and archived), with its kept subcategory: "Solo Transporte (archivada)".
+    // (The backend archives every active subcategory with its principal.)
+    const everything = all.map((c) =>
+      [transporte.id, taxi.id, combustible.id].includes(c.id)
+        ? { ...c, archived_at: ARCHIVED_AT }
+        : c,
+    );
+    const both = buildCategoryTree(everything, "expense", { keep: transporte.id });
+    expect(both.find((b) => b.principal.id === transporte.id)?.subs).toEqual([]);
+    expect(describeCategoryChoice(both, transporte.id)).toBe("Transporte (archivada)");
+  });
+
+  it("groups for the select with the archived option marked, and leaves out a principal that is only a place", () => {
+    const { all, transporte, taxi, combustible } = sample();
+    const archived = all.map((c) =>
+      [transporte.id, taxi.id, combustible.id].includes(c.id)
+        ? { ...c, archived_at: ARCHIVED_AT }
+        : c,
+    );
+    const tree = buildCategoryTree(archived, "expense", { keep: taxi.id });
+    const group = groupCategoriesForSelect(tree).find((g) => g.label === "Transporte (archivada)");
+    // The group is named after the archived principal; it is not an option of its own.
+    expect(group?.categories.map((c) => c.id)).toEqual([taxi.id]);
   });
 });

@@ -3,9 +3,11 @@ import {
   CATEGORY_PANEL,
   CATEGORY_PANEL_COMPANIONS,
   MOVEMENT_PANEL,
+  MOVEMENT_PANEL_COMPANIONS,
   NEW_ACCOUNT_PANEL,
   categoryEditPanel,
   closePanelInUrl,
+  movementEditPanel,
   openPanelInUrl,
   replacePanelInUrl,
 } from "./panel-url";
@@ -155,5 +157,33 @@ describe("the panel of a category (KAN-77)", () => {
     window.history.replaceState(null, "", "/categorias?categoria=editar&id=abc");
     closePanelInUrl("categoria", ...CATEGORY_PANEL_COMPANIONS);
     expect(window.location.pathname + window.location.search).toBe("/categorias");
+  });
+});
+
+describe("the panel of an existing movement (KAN-99)", () => {
+  const ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020";
+
+  it("is ?movimiento=editar with the id, over the same param as the new one", () => {
+    expect(movementEditPanel(ID)).toEqual({
+      param: "movimiento",
+      value: "editar",
+      extra: { id: ID },
+    });
+    expect(movementEditPanel(ID).param).toBe(MOVEMENT_PANEL.param);
+  });
+
+  it("opens in one write, keeping the filters of the screen", () => {
+    window.history.replaceState(null, "", "/movimientos?mes=2026-09&tipo=gastos#lista");
+    openPanelInUrl(movementEditPanel(ID));
+    expect(window.location.search).toBe(`?mes=2026-09&tipo=gastos&movimiento=editar&id=${ID}`);
+    expect(window.location.hash).toBe("#lista");
+  });
+
+  it("closes taking out the param and the id, and nothing else, with no history entry", () => {
+    window.history.replaceState(null, "", `/movimientos?mes=2026-09&movimiento=editar&id=${ID}`);
+    const before = window.history.length;
+    closePanelInUrl(MOVEMENT_PANEL.param, ...MOVEMENT_PANEL_COMPANIONS);
+    expect(window.location.search).toBe("?mes=2026-09");
+    expect(window.history.length).toBe(before);
   });
 });

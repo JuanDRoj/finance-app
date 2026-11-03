@@ -15,7 +15,18 @@ export type CategoryBranch = {
   principal: CategoryRead;
   /** Its active subcategories, in the order the API sent them. Empty for a principal with none. */
   subs: CategoryRead[];
+  /**
+   * `false` when the principal itself cannot be chosen: it is archived and is in the tree only as the
+   * place of the archived subcategory a movement already has (`buildCategoryTree` with `keep`). The
+   * backend would answer `category_archived`. Absent (the usual case) means it can.
+   */
+  choosable?: false;
 };
+
+/** What a category is called where it is picked: its name, and "(archivada)" if it is archived. */
+export function categoryOptionLabel(category: Pick<CategoryRead, "name" | "archived_at">): string {
+  return category.archived_at === null ? category.name : `${category.name} (archivada)`;
+}
 
 /**
  * The active categories of one kind as a two-level tree, in the order of the API (creation order):
@@ -24,20 +35,37 @@ export type CategoryBranch = {
  * with it, so one without its principal cannot be chosen: the backend would answer
  * `category_archived`). The kind of a subcategory is its principal's, so only the principals are
  * filtered by `kind`.
+ *
+ * `keep` is the id of the category an **existing movement** already has (editing one, docs/diseno.md
+ * D19): the backend lets an edit send again the archived category the movement has, because old
+ * movements keep theirs. So that one stays in the tree even if it is archived, and the form can show
+ * it ("Ropa (archivada)") and keep it, while no other archived category becomes choosable. When it is
+ * an archived subcategory, its principal comes along as its place, and if the principal is archived
+ * too it is marked `choosable: false`. A `keep` the list does not have, or of another kind, changes
+ * nothing.
  */
 export function buildCategoryTree(
   categories: readonly CategoryRead[],
   kind: CategoryKind,
+  { keep }: { keep?: string } = {},
 ): CategoryBranch[] {
+  const kept = keep ? categories.find((category) => category.id === keep) : undefined;
+  const keptPrincipalId = kept ? (kept.parent_id ?? kept.id) : undefined;
   const branches = new Map<string, CategoryBranch>();
   for (const category of categories) {
-    if (category.archived_at !== null || category.parent_id !== null || category.kind !== kind) {
-      continue;
-    }
-    branches.set(category.id, { principal: category, subs: [] });
+    if (category.parent_id !== null || category.kind !== kind) continue;
+    if (category.archived_at !== null && category.id !== keptPrincipalId) continue;
+    const choosable = category.archived_at === null || category.id === keep;
+    branches.set(
+      category.id,
+      choosable
+        ? { principal: category, subs: [] }
+        : { principal: category, subs: [], choosable: false },
+    );
   }
   for (const category of categories) {
-    if (category.archived_at !== null || category.parent_id === null) continue;
+    if (category.parent_id === null) continue;
+    if (category.archived_at !== null && category.id !== keep) continue;
     branches.get(category.parent_id)?.subs.push(category);
   }
   return [...branches.values()];
@@ -78,9 +106,11 @@ export function describeCategoryChoice(
 ): string | null {
   const place = findCategoryPlace(tree, categoryId);
   if (!place) return null;
-  if (place.sub) return `${place.principal.name} › ${place.sub.name}`;
+  if (place.sub) return `${place.principal.name} › ${categoryOptionLabel(place.sub)}`;
   const branch = tree.find((candidate) => candidate.principal.id === place.principal.id);
-  return branch && branch.subs.length > 0 ? `Solo ${place.principal.name}` : place.principal.name;
+  return branch && branch.subs.length > 0
+    ? `Solo ${categoryOptionLabel(place.principal)}`
+    : categoryOptionLabel(place.principal);
 }
 
 /** The `optgroup` that gathers the principals with no subcategories (the canvas calls it "Otras"). */
@@ -99,9 +129,14 @@ export type CategorySelectGroup = { label: string; categories: CategoryRead[] };
 export function groupCategoriesForSelect(tree: readonly CategoryBranch[]): CategorySelectGroup[] {
   const groups: CategorySelectGroup[] = [];
   const alone: CategoryRead[] = [];
-  for (const { principal, subs } of tree) {
+  for (const { principal, subs, choosable } of tree) {
     if (subs.length === 0) alone.push(principal);
-    else groups.push({ label: principal.name, categories: [principal, ...subs] });
+    // An archived principal that is only the place of a kept subcategory is not an option itself.
+    else
+      groups.push({
+        label: categoryOptionLabel(principal),
+        categories: choosable === false ? subs : [principal, ...subs],
+      });
   }
   if (alone.length > 0) groups.push({ label: OTHER_CATEGORIES_LABEL, categories: alone });
   return groups;

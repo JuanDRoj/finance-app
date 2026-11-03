@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 import { CategoryIcon } from "@/components/category-icon";
 import { SheetBody } from "@/components/ui/sheet";
-import type { CategoryBranch } from "@/lib/core/categories";
+import { categoryOptionLabel, type CategoryBranch } from "@/lib/core/categories";
 import { cn } from "@/lib/utils";
 
 type SubcategoryStepProps = {
@@ -28,6 +28,9 @@ export function SubcategoryStep({ branch, value, onChoose }: SubcategoryStepProp
   const name = `${useId()}-subcategory`;
   const list = useRef<HTMLFieldSetElement>(null);
   const { principal, subs } = branch;
+  // An archived principal that is only the place of the archived subcategory a movement has cannot
+  // be chosen itself: no "Solo X" row.
+  const principalChoosable = branch.choosable !== false;
 
   // The pressed cell of the grid is hidden while this step shows, so the focus comes here: to the row
   // that is chosen (or the first), where the arrow keys already work.
@@ -36,8 +39,16 @@ export function SubcategoryStep({ branch, value, onChoose }: SubcategoryStepProp
     (list.current?.querySelector<HTMLInputElement>("input:checked") ?? radios?.[0])?.focus();
   }, []);
   const rows = [
-    { id: principal.id, label: `Solo ${principal.name}`, icon: principal.icon },
-    ...subs.map((sub) => ({ id: sub.id, label: sub.name, icon: sub.icon })),
+    ...(principalChoosable
+      ? [
+          {
+            id: principal.id,
+            label: `Solo ${categoryOptionLabel(principal)}`,
+            icon: principal.icon,
+          },
+        ]
+      : []),
+    ...subs.map((sub) => ({ id: sub.id, label: categoryOptionLabel(sub), icon: sub.icon })),
   ];
 
   /**
@@ -67,7 +78,9 @@ export function SubcategoryStep({ branch, value, onChoose }: SubcategoryStepProp
   return (
     <SheetBody>
       <p className="text-item leading-snug text-muted-foreground">
-        {`Elige una subcategoría o deja solo ${principal.name}.`}
+        {principalChoosable
+          ? `Elige una subcategoría o deja solo ${principal.name}.`
+          : `Elige una subcategoría de ${principal.name}.`}
       </p>
       <fieldset ref={list} onKeyDown={onKeyDown} className="min-w-0">
         <legend className="sr-only">{`Subcategoría de ${principal.name}`}</legend>

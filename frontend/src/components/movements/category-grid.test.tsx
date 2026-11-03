@@ -328,3 +328,121 @@ describe("CategorySelect", () => {
     expect(within(select).getAllByRole("option")).toHaveLength(1);
   });
 });
+
+// --- The category a movement has, archived since (editing one, FE-34, KAN-99) ---------------------
+
+describe("a kept archived category (buildCategoryTree with keep)", () => {
+  const ARCHIVED_AT = "2026-10-01T10:00:00Z";
+  const archived = (c: CategoryRead): CategoryRead => ({ ...c, archived_at: ARCHIVED_AT });
+  const ALL = [COMIDA, TRANSPORTE, ROPA, TAXI, COMBUSTIBLE, SUPERMERCADO];
+
+  it("the grid shows an archived principal the movement has as '(archivada)', pressed", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => (c.id === ROPA.id ? archived(c) : c)),
+      "expense",
+      { keep: ROPA.id },
+    );
+    renderGrid({ tree, value: ROPA.id });
+    const ropa = cell("Ropa (archivada)");
+    expect(ropa.getAttribute("aria-pressed")).toBe("true");
+    expect(ropa.getAttribute("title")).toBe("Ropa (archivada)");
+    expect(screen.getByRole("button", { name: "Comida" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("the line under the grid names an archived subcategory, and 'Cambiar' opens the second step", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => (c.id === TAXI.id ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    const { onOpenSubcategories } = renderGrid({ tree, value: TAXI.id });
+    expect(screen.getByText("Transporte › Taxi y apps (archivada)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar" }));
+    expect(onOpenSubcategories).toHaveBeenCalledWith(TRANSPORTE.id);
+  });
+
+  it("an archived principal that is only the place of its subcategory opens the step without choosing itself", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => ([TRANSPORTE.id, TAXI.id, COMBUSTIBLE.id].includes(c.id) ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    const { onSelect, onOpenSubcategories } = renderGrid({ tree, value: TAXI.id });
+    const place = cell("Transporte (archivada)");
+    expect(place.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(place);
+    // The chosen subcategory stays; the archived principal is never chosen (the backend refuses it).
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onOpenSubcategories).toHaveBeenCalledWith(TRANSPORTE.id);
+  });
+
+  it("pressing it with another category chosen opens the step and still does not choose the principal", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => ([TRANSPORTE.id, TAXI.id, COMBUSTIBLE.id].includes(c.id) ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    const { onSelect, onOpenSubcategories } = renderGrid({ tree, value: COMIDA.id });
+    fireEvent.click(cell("Transporte (archivada)"));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onOpenSubcategories).toHaveBeenCalledWith(TRANSPORTE.id);
+  });
+
+  it("the second step offers the archived subcategory marked, and no 'Solo X' for a principal that is only a place", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => ([TRANSPORTE.id, TAXI.id, COMBUSTIBLE.id].includes(c.id) ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    const onChoose = vi.fn();
+    render(<SubcategoryStep branch={tree[1]!} value={TAXI.id} onChoose={onChoose} />);
+    expect(screen.getByText("Elige una subcategoría de Transporte.")).toBeTruthy();
+    const rows = screen.getAllByRole("radio");
+    expect(rows.map((row) => row.closest("label")?.textContent)).toEqual([
+      "Taxi y apps (archivada)",
+    ]);
+    expect(screen.queryByRole("radio", { name: /Solo/ })).toBeNull();
+    fireEvent.click(rows[0]!);
+    expect(onChoose).toHaveBeenCalledWith(TAXI.id);
+  });
+
+  it("the second step of an active principal with a kept archived subcategory keeps 'Solo X'", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => (c.id === TAXI.id ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    render(<SubcategoryStep branch={tree[1]!} value={TAXI.id} onChoose={() => {}} />);
+    expect(screen.getByText("Elige una subcategoría o deja solo Transporte.")).toBeTruthy();
+    expect(screen.getAllByRole("radio").map((row) => row.closest("label")?.textContent)).toEqual([
+      "Solo Transporte",
+      "Taxi y apps (archivada)",
+      "Combustible",
+    ]);
+  });
+
+  it("the select marks the archived option, and an archived principal that is only a place is a group, not an option", () => {
+    const tree = buildCategoryTree(
+      ALL.map((c) => ([TRANSPORTE.id, TAXI.id, COMBUSTIBLE.id].includes(c.id) ? archived(c) : c)),
+      "expense",
+      { keep: TAXI.id },
+    );
+    render(<CategorySelect tree={tree} value={TAXI.id} onChange={() => {}} />);
+    const select = screen.getByLabelText("Categoría") as HTMLSelectElement;
+    expect(select.value).toBe(TAXI.id);
+    const group = within(select).getByRole("group", { name: "Transporte (archivada)" });
+    expect(
+      within(group)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Taxi y apps (archivada)"]);
+    // No other archived option is offered.
+    expect(
+      within(select)
+        .getAllByRole("option")
+        .filter((o) => o.textContent?.includes("archivada")),
+    ).toHaveLength(1);
+  });
+});

@@ -106,7 +106,7 @@ beforeEach(() => {
   vi.stubGlobal("location", { ...window.location, replace: mocks.replace });
 });
 
-type Props = Partial<MovementFormProps>;
+type Props = Partial<Extract<MovementFormProps, { mode?: "create" }>>;
 
 /** The container of the second step, which keeps `picking` for the form. */
 function Harness(props: Props) {

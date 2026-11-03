@@ -2,7 +2,11 @@
 
 import type { ComponentProps } from "react";
 import { SelectField } from "@/components/select-field";
-import { groupCategoriesForSelect, type CategoryBranch } from "@/lib/core/categories";
+import {
+  categoryOptionLabel,
+  groupCategoriesForSelect,
+  type CategoryBranch,
+} from "@/lib/core/categories";
 
 type CategorySelectProps = Omit<ComponentProps<typeof SelectField>, "children" | "label"> & {
   /** The principals of the kind of the movement with their subcategories (`buildCategoryTree`). */
@@ -16,6 +20,10 @@ type CategorySelectProps = Omit<ComponentProps<typeof SelectField>, "children" |
  * subcategories; the principals with none go together in a last group, "Otras". Nothing is chosen
  * at first ("Elige una"), so the person picks. A `SelectField`: label, error and `aria-invalid` are
  * wired, and it takes the props of the controller of a form (`value`, `onChange`, `onBlur`, `ref`).
+ *
+ * Editing a movement whose category was archived since (`buildCategoryTree` with `keep`): that one
+ * stays in the list as "Ropa (archivada)", the only archived option, and an archived principal that
+ * is only its place is the name of the group, not an option.
  */
 export function CategorySelect({ tree, placeholder = "Elige una", ...props }: CategorySelectProps) {
   return (
@@ -24,7 +32,7 @@ export function CategorySelect({ tree, placeholder = "Elige una", ...props }: Ca
         <optgroup key={group.label} label={group.label}>
           {group.categories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {categoryOptionLabel(category)}
             </option>
           ))}
         </optgroup>
