@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { MovementCreate } from "./data/transactions";
+import type { MovementCreate, MovementListItem } from "./data/transactions";
 import {
   TOAST_LABEL_MAX_LENGTH,
+  describeMovementLabel,
+  describeMovementRowActions,
   describeRegisteredMovement,
   truncateLabel,
 } from "./movement-label";
@@ -120,5 +122,87 @@ describe("describeRegisteredMovement", () => {
       ]),
     });
     expect([...transfer].length).toBeLessThanOrEqual(40);
+  });
+});
+
+// --- Saved movements (FE-34, KAN-99) ---------------------------------------------------------------
+
+function saved(overrides: Partial<MovementListItem> = {}): MovementListItem {
+  return {
+    id: "m1",
+    type: "expense",
+    status: "confirmed",
+    date: "2026-10-19",
+    description: "Uber",
+    amount_minor: -38000,
+    category: { id: "c1", name: "Taxi y apps", icon: "taxi", parent: null },
+    account: { id: "a1", name: "Itaú", type: "bank" },
+    from_account: null,
+    to_account: null,
+    balance_after_minor: null,
+    ...overrides,
+  };
+}
+
+describe("describeMovementLabel", () => {
+  it("is the description, or the category, or the accounts of a transfer, or the type", () => {
+    expect(describeMovementLabel(saved())).toBe("Uber");
+    expect(describeMovementLabel(saved({ description: null }))).toBe("Taxi y apps");
+    expect(
+      describeMovementLabel(
+        saved({
+          type: "transfer",
+          description: null,
+          category: null,
+          account: null,
+          from_account: { id: "a1", name: "Itaú", type: "bank" },
+          to_account: { id: "a2", name: "Visa Itaú", type: "credit_card" },
+        }),
+      ),
+    ).toBe("Itaú → Visa Itaú");
+    expect(describeMovementLabel(saved({ description: null, category: null }))).toBe("Gasto");
+  });
+
+  it("is cut to 40 code points like every toast, an emoji counting one", () => {
+    const label = describeMovementLabel(saved({ description: "😀".repeat(100) }));
+    expect([...label]).toHaveLength(TOAST_LABEL_MAX_LENGTH);
+    expect(label.endsWith("…")).toBe(true);
+    expect(describeMovementLabel(saved({ description: "a".repeat(200) }))).toBe(
+      `${"a".repeat(39)}…`,
+    );
+  });
+});
+
+describe("describeMovementRowActions", () => {
+  it("names 'Editar X' and 'Eliminar X' for a movement the API lets change", () => {
+    const actions = describeMovementRowActions(saved());
+    expect(actions.open).toEqual({ kind: "edit", label: "Editar Uber" });
+    expect(actions.remove).toEqual({ label: "Eliminar Uber" });
+  });
+
+  it("names 'Ver X' and has no delete for an adjustment, a pending or a skipped movement", () => {
+    const adjustment = describeMovementRowActions(
+      saved({ type: "adjustment", description: "Ajuste de saldo", category: null }),
+    );
+    expect(adjustment.open).toEqual({ kind: "view", label: "Ver Ajuste de saldo" });
+    expect(adjustment.remove).toBeNull();
+    for (const status of ["pending", "skipped"] as const) {
+      const actions = describeMovementRowActions(saved({ status }));
+      expect(actions.open.kind).toBe("view");
+      expect(actions.remove).toBeNull();
+    }
+  });
+
+  it("cuts a long description like a toast does, so the name of the button stays short", () => {
+    const { open, remove } = describeMovementRowActions(saved({ description: "a".repeat(200) }));
+    expect(open.label).toBe(`Editar ${"a".repeat(39)}…`);
+    expect(remove?.label).toBe(`Eliminar ${"a".repeat(39)}…`);
+  });
+
+  it("never names a row 'Editar ' with nothing after it", () => {
+    const { open } = describeMovementRowActions(
+      saved({ description: "   ", category: null, type: "income" }),
+    );
+    expect(open.label).toBe("Editar Ingreso");
   });
 });

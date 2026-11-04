@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowsLeftRight } from "@phosphor-icons/react/ssr";
+import { ArrowsLeftRight, Trash } from "@phosphor-icons/react/ssr";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
@@ -24,26 +24,31 @@ import { buildCategoryTree, categoryNameOf } from "@/lib/core/categories";
 import { apiErrorCode, type AccountWithBalance } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import type { CategoryKind, CategoryRead } from "@/lib/core/data/categories";
-import { isUnauthorized } from "@/lib/core/data/errors";
+import { ApiError, isUnauthorized } from "@/lib/core/data/errors";
 import { spaceQueryKey } from "@/lib/core/data/spaces";
 import {
   IDEMPOTENCY_KEY_REUSED,
   createTransaction,
   transactionsQueryKey,
+  updateTransaction,
   type MovementCreate,
+  type MovementRead,
 } from "@/lib/core/data/transactions";
 import { todayInTimezone } from "@/lib/core/dates";
 import { pickDefaultAccountId } from "@/lib/core/default-account";
 import {
+  MOVEMENT_EDIT_SAVE_LABEL,
   MOVEMENT_SAVE_LABEL,
   NETWORK_ERROR,
   TRANSACTION_TYPE_NAMES,
   describeApiError,
+  describeMovementError,
   validationIssuesOf,
   type ErrorDescription,
 } from "@/lib/core/i18n";
 import type { Currency } from "@/lib/core/money";
-import { describeRegisteredMovement } from "@/lib/core/movement-label";
+import { describeMovementLabel, describeRegisteredMovement } from "@/lib/core/movement-label";
+import { movementBodyOf, movementFormValuesOf, sameMovementBody } from "@/lib/core/movements";
 import {
   MOVEMENT_TYPES,
   movementFormFieldOf,
@@ -77,12 +82,16 @@ function zeroAmount(exponent: number): string {
   return exponent === 0 ? "0" : `0,${"0".repeat(exponent)}`;
 }
 
-export type MovementFormProps = {
+type MovementFormBaseProps = {
   /** The space the movement is registered in: its id, its currency and its time zone ("hoy" is the space's). */
   space: { id: string; currency: Currency; timezone: string };
   /** The **active** accounts of the space, in the order of the API. At least one: with none the sheet sends the person to "Nueva cuenta". */
   accounts: readonly AccountWithBalance[];
-  /** The active categories of the space, principal and sub, flat, as the API sends them. */
+  /**
+   * The categories of the space, principal and sub, flat, as the API sends them. To register: the
+   * active ones. To edit: the list **with** the archived ones, so the category the movement has keeps
+   * showing if it was archived since ("Ropa (archivada)"); no other archived one is offered.
+   */
   categories: readonly CategoryRead[];
   /**
    * `sheet`: the bottom sheet of a phone (the grid of categories with a second step, the date as
@@ -97,7 +106,7 @@ export type MovementFormProps = {
    */
   picking: string | null;
   onPickingChange: (principalId: string | null) => void;
-  /** The movement was registered (the toast is shown): the container closes and refreshes the server data. */
+  /** The movement was saved (the toast is shown): the container closes and refreshes the server data. */
   onDone: () => void;
   /** The "Cancelar" of the panel. */
   onCancel?: () => void;
@@ -106,6 +115,27 @@ export type MovementFormProps = {
   /** The API client; the browser's by default. The catalog passes a scripted one to show every state. */
   api?: ApiClient;
 };
+
+/** To register a movement (`mode` left out, as it always was). */
+type MovementFormCreateProps = { mode?: "create" };
+
+/**
+ * To edit one that is saved (docs/diseno.md D19, FE-34): the same form with the movement's own values.
+ * Never for an adjustment, a pending or a skipped movement, which are read only (`MovementDetail`).
+ */
+type MovementFormEditProps = {
+  mode: "edit";
+  movement: MovementRead;
+  /** "Guardar cambios" with nothing changed: nothing is sent, the container just closes. */
+  onUnchanged: () => void;
+  /** "Eliminar": the container deletes the movement (`useDeleteMovement`), because the toast outlives the form. */
+  onDelete: () => void;
+  /** The container is deleting it: both buttons wait. */
+  deleting?: boolean;
+};
+
+export type MovementFormProps = MovementFormBaseProps &
+  (MovementFormCreateProps | MovementFormEditProps);
 
 /**
  * The form of "Registrar movimiento" (docs/diseno.md D17 › Escritorio v2, D19), one component in two
@@ -132,30 +162,49 @@ export type MovementFormProps = {
  *   the form says so.
  * - On success: the account used is remembered, the accounts and the movements of the space are
  *   invalidated, a toast says "Registraste «…»" (no "Deshacer") and `onDone` runs.
+ *
+ * **Editing (`mode="edit"`, FE-34).** Same fields and same schema, started on the movement's own values
+ * (`movementFormValuesOf`). The type does not change: a note takes the place of the segmented control
+ * ("El tipo no se cambia. Para cambiarlo, elimínalo y regístralo de nuevo."). "Guardar cambios" sends
+ * the **whole** movement with `PUT` (no `Idempotency-Key`: a replace is idempotent; no "last account
+ * used"), and with nothing changed it sends nothing (`onUnchanged`). A 422 marks the fields as when
+ * registering; a 404 or a 409 (`transaction_not_editable`, `account_archived`) goes to the `Alert`
+ * and asks the lists again. On success the accounts and the movements are invalidated, a toast says
+ * "Guardaste los cambios de «…»" and `onDone` runs. "Eliminar" is the container's `onDelete`: on a
+ * phone at the left of the footer, on desktop at the end of the body ("Eliminar movimiento").
  */
-export function MovementForm({
-  space,
-  accounts,
-  categories,
-  variant,
-  picking,
-  onPickingChange,
-  onDone,
-  onCancel,
-  onNeedAccount,
-  api = browserApi,
-}: MovementFormProps) {
+export function MovementForm(props: MovementFormProps) {
+  const {
+    space,
+    accounts,
+    categories,
+    variant,
+    picking,
+    onPickingChange,
+    onDone,
+    onCancel,
+    onNeedAccount,
+    api = browserApi,
+  } = props;
+  const edit = props.mode === "edit" ? props : undefined;
+  const movement = edit?.movement;
   const queryClient = useQueryClient();
   const { exponent } = space.currency;
   const schema = useMemo(() => movementFormSchema(exponent), [exponent]);
   const [formError, setFormError] = useState<ErrorDescription | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Read once, when the form appears: today in the space's zone and the account to start on.
-  const [initial] = useState(() => ({
-    today: todayInTimezone(space.timezone),
-    accountId: pickDefaultAccountId(accounts, readLastAccountId(space.id)),
-  }));
+  // Read once, when the form appears: today in the space's zone and the values to start on: the
+  // movement's own when editing (`null` for an adjustment, which has no form), otherwise the account
+  // to start on (the last one used, or the first) and nothing else.
+  const [initial] = useState(() => {
+    const values = movement ? movementFormValuesOf(movement, exponent) : null;
+    return {
+      today: todayInTimezone(space.timezone),
+      values,
+      accountId: values?.accountId ?? pickDefaultAccountId(accounts, readLastAccountId(space.id)),
+    };
+  });
 
   const {
     register,
@@ -169,7 +218,7 @@ export function MovementForm({
     formState: { errors },
   } = useForm<MovementFormValues, unknown, MovementCreate>({
     resolver: zodResolver(schema),
-    defaultValues: {
+    defaultValues: initial.values ?? {
       type: "expense",
       amount: "",
       accountId: initial.accountId,
@@ -185,7 +234,12 @@ export function MovementForm({
   const categoryId = useWatch({ control, name: "categoryId" });
   const isTransfer = type === "transfer";
   const kind: CategoryKind = type === "income" ? "income" : "expense";
-  const tree = useMemo(() => buildCategoryTree(categories, kind), [categories, kind]);
+  // Editing keeps the category the movement has even if it was archived since (`keep`).
+  const keptCategoryId = movement?.category?.id;
+  const tree = useMemo(
+    () => buildCategoryTree(categories, kind, { keep: keptCategoryId }),
+    [categories, kind, keptCategoryId],
+  );
 
   const canTransfer = accounts.length >= 2;
   const noCategories = !isTransfer && tree.length === 0;
@@ -237,7 +291,71 @@ export function MovementForm({
   // saved, the 409 is the true warning of a duplicate. The form mounts again on every opening.
   const idempotencyKey = useRef<string | null>(null);
 
-  const mutation = useMutation({
+  // A failed save, creating or editing: a 401, the warning of a key already used, the fields a 422 names
+  // and, for what no field can show, an `Alert` in Spanish.
+  function onFailure(error: unknown) {
+    sending.current = false;
+    // An expired session is not a form problem: the API client's 401 rule is for queries only.
+    if (isUnauthorized(error)) {
+      window.location.replace("/login");
+      return;
+    }
+    // An earlier attempt with this key was saved, with other data: a movement exists now. The
+    // sheet stays open with the warning; a new save from here is a deliberate new movement, so it
+    // gets a new key. The balances and the movements are stale until they are asked again.
+    if (!movement && apiErrorCode(error) === IDEMPOTENCY_KEY_REUSED) {
+      idempotencyKey.current = null;
+      void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
+      void queryClient.invalidateQueries({ queryKey: transactionsQueryKey(space.id) });
+      setFormError(describeApiError(error));
+      return;
+    }
+    // Editing: the movement is gone (404) or can no longer change (409). The list on screen is stale,
+    // and so may be the archived accounts: ask them again.
+    if (movement && error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+      void queryClient.invalidateQueries({ queryKey: transactionsQueryKey(space.id) });
+      if (error.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
+      }
+    }
+    const issues = validationIssuesOf(error);
+    let focused = false;
+    let unplaced = issues.length === 0;
+    let staleAccounts = false;
+    let staleCategories = false;
+    for (const issue of issues) {
+      const field = movementFormFieldOf(issue.path);
+      if (!field) {
+        unplaced = true;
+        continue;
+      }
+      // The account or the category the backend refuses is gone or archived: forget it and ask
+      // the list again, so the person picks another from what exists now.
+      if (field === "categoryId") {
+        staleCategories = true;
+        setValue("categoryId", "");
+      }
+      if (field === "accountId" || field === "toAccountId") {
+        staleAccounts = true;
+        setValue(field, "");
+      }
+      setError(field, { type: "server", message: issue.message }, { shouldFocus: !focused });
+      focused = true;
+    }
+    if (staleAccounts) {
+      void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
+    }
+    if (staleCategories) {
+      void queryClient.invalidateQueries({
+        queryKey: [...spaceQueryKey(space.id), "categories"],
+      });
+    }
+    if (unplaced) {
+      setFormError(movement ? describeMovementError(error, "update") : describeApiError(error));
+    }
+  }
+
+  const createMutation = useMutation({
     mutationFn: ({
       body,
       key,
@@ -260,58 +378,27 @@ export function MovementForm({
       toast.success(`Registraste «${label}»`);
       onDone();
     },
-    onError: (error) => {
-      sending.current = false;
-      // An expired session is not a form problem: the API client's 401 rule is for queries only.
-      if (isUnauthorized(error)) {
-        window.location.replace("/login");
-        return;
-      }
-      // An earlier attempt with this key was saved, with other data: a movement exists now. The
-      // sheet stays open with the warning; a new save from here is a deliberate new movement, so it
-      // gets a new key. The balances and the movements are stale until they are asked again.
-      if (apiErrorCode(error) === IDEMPOTENCY_KEY_REUSED) {
-        idempotencyKey.current = null;
-        void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
-        void queryClient.invalidateQueries({ queryKey: transactionsQueryKey(space.id) });
-        setFormError(describeApiError(error));
-        return;
-      }
-      const issues = validationIssuesOf(error);
-      let focused = false;
-      let unplaced = issues.length === 0;
-      let staleAccounts = false;
-      let staleCategories = false;
-      for (const issue of issues) {
-        const field = movementFormFieldOf(issue.path);
-        if (!field) {
-          unplaced = true;
-          continue;
-        }
-        // The account or the category the backend refuses is gone or archived: forget it and ask
-        // the list again, so the person picks another from what exists now.
-        if (field === "categoryId") {
-          staleCategories = true;
-          setValue("categoryId", "");
-        }
-        if (field === "accountId" || field === "toAccountId") {
-          staleAccounts = true;
-          setValue(field, "");
-        }
-        setError(field, { type: "server", message: issue.message }, { shouldFocus: !focused });
-        focused = true;
-      }
-      if (staleAccounts) {
-        void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
-      }
-      if (staleCategories) {
-        void queryClient.invalidateQueries({
-          queryKey: [...spaceQueryKey(space.id), "categories"],
-        });
-      }
-      if (unplaced) setFormError(describeApiError(error));
-    },
+    onError: onFailure,
   });
+
+  // `PUT` replaces the whole movement. It needs no `Idempotency-Key`: sending it twice leaves the
+  // same movement.
+  const updateMutation = useMutation({
+    mutationFn: (body: MovementCreate) => {
+      if (!movement) throw new Error("Editing a movement needs the movement");
+      return updateTransaction(api, space.id, movement.id, body);
+    },
+    onSuccess: (saved) => {
+      // The balances (Inicio and Cuentas) and the movements, the detail included.
+      void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(space.id), "accounts"] });
+      void queryClient.invalidateQueries({ queryKey: transactionsQueryKey(space.id) });
+      toast.success(`Guardaste los cambios de «${describeMovementLabel(saved)}»`);
+      onDone();
+    },
+    onError: onFailure,
+  });
+
+  const mutation = edit ? updateMutation : createMutation;
 
   // Without a connection TanStack Query does not fail: it pauses the request and sends it when the
   // network is back, so the button would stay busy for good with no word of why. Say it.
@@ -322,11 +409,23 @@ export function MovementForm({
   const busy = mutation.isPending || mutation.isSuccess;
 
   function send(body: MovementCreate) {
-    if (sending.current || busy) return;
+    if (sending.current || busy || edit?.deleting) return;
+    if (edit && movement) {
+      // Nothing changed: nothing to send. Saving the same movement again would still be a request.
+      const original = movementBodyOf(movement);
+      if (original && sameMovementBody(body, original)) {
+        edit.onUnchanged();
+        return;
+      }
+      sending.current = true;
+      setFormError(null);
+      updateMutation.mutate(body);
+      return;
+    }
     sending.current = true;
     setFormError(null);
     idempotencyKey.current ??= crypto.randomUUID();
-    mutation.mutate({
+    createMutation.mutate({
       body,
       categoryName: body.type === "transfer" ? null : categoryNameOf(tree, body.category_id),
       key: idempotencyKey.current,
@@ -346,7 +445,20 @@ export function MovementForm({
     ? tree.find((branch) => branch.principal.id === picking)
     : undefined;
 
-  const typeField = (
+  // Editing: the type is fixed, so the segmented control gives way to a note (K-H1-Movimientos and
+  // K-V2-Escritorio, "El tipo no se cambia…"). The canvas tints the box; this one is the solid card,
+  // whose `muted-foreground` text has its contrast checked.
+  const typeField = edit ? (
+    <div
+      data-slot="movement-type-note"
+      className="flex flex-col gap-0.5 rounded-field border border-border bg-card-solid px-3.5 py-3 lg:gap-1 lg:px-4 lg:py-3.5"
+    >
+      <span className="text-item font-bold">{TRANSACTION_TYPE_NAMES[type]}</span>
+      <span className="text-caption leading-snug text-muted-foreground">
+        El tipo no se cambia. Para cambiarlo, elimínalo y regístralo de nuevo.
+      </span>
+    </div>
+  ) : (
     <SegmentedControl
       legend={panel ? "Tipo" : <span className="sr-only">Tipo</span>}
       options={TYPE_OPTIONS}
@@ -493,6 +605,27 @@ export function MovementForm({
     </Alert>
   );
 
+  // "Eliminar" (K-H1-Movimientos: at the left of the footer, "Eliminar"; K-V2-Escritorio: at the end of
+  // the body, "Eliminar movimiento"). No confirmation: the toast with "Deshacer" is the way back. On a
+  // phone the visible word is "Eliminar" and the name is "Eliminar movimiento", as on desktop: an
+  // `aria-label` that contains the visible text (WCAG 2.5.3), not a hidden span, because a leading
+  // space inside a span is dropped by some of the algorithms that compute the name.
+  const deleteButton = edit ? (
+    <Button
+      type="button"
+      variant="outline"
+      size={panel ? "sm" : "default"}
+      loading={edit.deleting}
+      disabled={busy}
+      onClick={edit.onDelete}
+      aria-label={panel ? undefined : "Eliminar movimiento"}
+      className={cn("text-destructive", panel && "self-start")}
+    >
+      {edit.deleting ? null : <Trash aria-hidden />}
+      {panel ? "Eliminar movimiento" : "Eliminar"}
+    </Button>
+  ) : null;
+
   const fields = (
     <>
       {typeField}
@@ -541,10 +674,15 @@ export function MovementForm({
       />
       {offline ? <Alert title={NETWORK_ERROR.title}>{NETWORK_ERROR.message}</Alert> : null}
       {formError && !offline ? <Alert title={formError.title}>{formError.message}</Alert> : null}
+      {edit && panel ? deleteButton : null}
     </>
   );
 
-  const saveLabel = MOVEMENT_SAVE_LABEL[type];
+  const saveLabel = edit ? MOVEMENT_EDIT_SAVE_LABEL : MOVEMENT_SAVE_LABEL[type];
+  const deleting = edit?.deleting === true;
+
+  // An adjustment has no form (`MovementDetail`): the container never gives it one.
+  if (edit && initial.values === null) return null;
 
   return (
     <>
@@ -561,13 +699,19 @@ export function MovementForm({
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>
               Cancelar
             </Button>
-            <Button type="submit" size="sm" loading={busy} disabled={blocked}>
+            <Button type="submit" size="sm" loading={busy} disabled={blocked || deleting}>
               {saveLabel}
             </Button>
           </SheetFooter>
         ) : (
-          <SheetFooter className="border-t border-border pt-3">
-            <Button type="submit" loading={busy} disabled={blocked} className="w-full">
+          <SheetFooter className="flex-nowrap border-t border-border pt-3">
+            {deleteButton}
+            <Button
+              type="submit"
+              loading={busy}
+              disabled={blocked || deleting}
+              className={edit ? "min-w-0 flex-1" : "w-full"}
+            >
               {saveLabel}
             </Button>
           </SheetFooter>

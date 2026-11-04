@@ -1,7 +1,12 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  type InfiniteData,
+  type QueryClient,
+} from "@tanstack/react-query";
 import type { components, paths } from "@/lib/api/schema";
 import type { ApiClient } from "./api-client";
-import { unwrap } from "./errors";
+import { ApiError, unwrap } from "./errors";
 import { spaceQueryKey } from "./spaces";
 
 /** A movement as the backend answers it: its entries are built by the backend, never sent. */
@@ -24,13 +29,19 @@ export type MovementType = MovementCreate["type"];
 
 // Contract check, in both directions: the alias above must be exactly the body of the endpoint. If
 // the backend adds a type to the union (or drops one), `npm run typecheck` fails here instead of
-// the form quietly drifting from the API.
+// the form quietly drifting from the API. `PUT .../transactions/{id}` takes the same body (an edit
+// replaces the whole movement), so it is checked too.
 type MovementBodyOfApi = NonNullable<
   paths["/spaces/{space_id}/transactions"]["post"]["requestBody"]
 >["content"]["application/json"];
 const _alias: MovementBodyOfApi = {} as MovementCreate;
 const _api: MovementCreate = {} as MovementBodyOfApi;
-void [_alias, _api];
+type MovementBodyOfUpdate = NonNullable<
+  paths["/spaces/{space_id}/transactions/{transaction_id}"]["put"]["requestBody"]
+>["content"]["application/json"];
+const _updateAlias: MovementBodyOfUpdate = {} as MovementCreate;
+const _updateApi: MovementCreate = {} as MovementBodyOfUpdate;
+void [_alias, _api, _updateAlias, _updateApi];
 
 /**
  * `code` of the 409 of `POST /spaces/{space_id}/transactions` when the `Idempotency-Key` was already
@@ -215,4 +226,159 @@ export function transactionsSummaryQueryOptions(
     queryKey: transactionsSummaryKey(spaceId, filters),
     queryFn: () => getTransactionsSummary(api, spaceId, filters),
   });
+}
+
+// --- One movement: the detail, the edit, the delete and the restore (FE-34, KAN-99) ----------------
+
+/**
+ * One movement as the detail shows it (`GET /spaces/{space_id}/transactions/{id}`, and what `PUT` and
+ * `POST .../restore` answer): the same shape as an item of the list without `balance_after_minor`.
+ * `amount_minor` has a sign by type (an expense is negative) and a transfer is the unsigned amount.
+ */
+export type MovementRead = components["schemas"]["MovementRead"];
+
+/** `code` of the 404 of `/transactions/{id}`: it does not exist, is deleted, or belongs to another space. */
+export const TRANSACTION_NOT_FOUND = "transaction_not_found";
+
+/**
+ * `code` of the 409 of editing, deleting or restoring an adjustment, a pending or a skipped movement:
+ * only a confirmed expense, income or transfer changes through the API.
+ */
+export const TRANSACTION_NOT_EDITABLE = "transaction_not_editable";
+
+/** Key of the detail of one movement, under the same root as the list and the summary. */
+export function transactionDetailKey(spaceId: string, transactionId: string) {
+  return [...transactionsQueryKey(spaceId), "detail", transactionId] as const;
+}
+
+/**
+ * One movement of the space. A deleted one, one of another space and one that does not exist are the
+ * same 404 `transaction_not_found`. Throws an `ApiError`: that 404, a 401, or a 422 for an id that is
+ * not a UUID.
+ */
+export async function getTransaction(
+  api: ApiClient,
+  spaceId: string,
+  transactionId: string,
+): Promise<MovementRead> {
+  return unwrap(
+    api.GET("/spaces/{space_id}/transactions/{transaction_id}", {
+      params: { path: { space_id: spaceId, transaction_id: transactionId } },
+    }),
+  );
+}
+
+/**
+ * Replaces a movement (`PUT .../transactions/{id}`, 200). The body is the **whole** movement, as when
+ * registering it: what is not sent is not kept (leaving `description` out clears the note). The
+ * backend would take a change of `type`, but the product does not offer it, so the form always sends
+ * the movement's own. Balances, the list and the summary follow. A replace is idempotent: there is no
+ * `Idempotency-Key`. Throws an `ApiError`: 404 `transaction_not_found`, 401, 409
+ * `transaction_not_editable` or `account_archived` (an account the movement moves out of is
+ * archived), or a 422 whose `loc` is `["body", "<type>", "<field>"]` (an account of the body archived
+ * is a 422; the archived category the movement already has may be sent again).
+ */
+export async function updateTransaction(
+  api: ApiClient,
+  spaceId: string,
+  transactionId: string,
+  body: MovementCreate,
+): Promise<MovementRead> {
+  return unwrap(
+    api.PUT("/spaces/{space_id}/transactions/{transaction_id}", {
+      params: { path: { space_id: spaceId, transaction_id: transactionId } },
+      body,
+    }),
+  );
+}
+
+/**
+ * Deletes a movement without confirmation (`DELETE .../transactions/{id}`, 204): a soft delete, so it
+ * stops counting in balances, lists and totals and `restoreTransaction` brings it back. Deleting one
+ * that is already deleted is a 204 that changes nothing. Throws an `ApiError`: 404, 401, 409
+ * `transaction_not_editable` (an adjustment, a pending or a skipped movement: **an adjustment cannot
+ * be deleted**) or 409 `account_archived` (one of its accounts is archived).
+ */
+export async function deleteTransaction(
+  api: ApiClient,
+  spaceId: string,
+  transactionId: string,
+): Promise<void> {
+  await unwrap(
+    api.DELETE("/spaces/{space_id}/transactions/{transaction_id}", {
+      params: { path: { space_id: spaceId, transaction_id: transactionId } },
+    }),
+  );
+}
+
+/**
+ * Undoes a delete (`POST .../transactions/{id}/restore`, 200): the movement comes back identical and
+ * counts again. Restoring one that is not deleted is a 200 that changes nothing. Throws an
+ * `ApiError`: 404, 401, 409 `account_archived` (an account was archived meanwhile: unarchive it
+ * first) or 409 `transaction_not_editable`.
+ */
+export async function restoreTransaction(
+  api: ApiClient,
+  spaceId: string,
+  transactionId: string,
+): Promise<MovementRead> {
+  return unwrap(
+    api.POST("/spaces/{space_id}/transactions/{transaction_id}/restore", {
+      params: { path: { space_id: spaceId, transaction_id: transactionId } },
+    }),
+  );
+}
+
+const DETAIL_MAX_RETRIES = 3;
+
+/**
+ * Query options of the detail of one movement, which the edit sheet asks for when it opens.
+ *
+ * - **Always fresh.** `staleTime: 0` and `gcTime: 0`: nothing of an earlier opening is kept, so the form
+ *   always starts from what the server says now (it reads its values once, so a cached copy could be
+ *   an older edit of the same movement). Its key hangs from `transactionsQueryKey`, so a change to the
+ *   movements invalidates it, and a sheet that is open refetches without resetting the form.
+ * - **No retries for an answer.** A 404 (gone, deleted, another space), a 422 (not a UUID) and a 401
+ *   are not going to change: they are shown at once. Anything else retries like the rest of the app.
+ */
+export function transactionDetailQueryOptions(
+  api: ApiClient,
+  spaceId: string,
+  transactionId: string,
+) {
+  return queryOptions({
+    queryKey: transactionDetailKey(spaceId, transactionId),
+    queryFn: () => getTransaction(api, spaceId, transactionId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: (count, error) =>
+      !(error instanceof ApiError && [401, 404, 422].includes(error.status)) &&
+      count < DETAIL_MAX_RETRIES,
+  });
+}
+
+/**
+ * Takes a movement out of every list of the space that is in the cache (every filter, every loaded
+ * page), so a row that was deleted leaves the screen at once, without waiting for the lists to be
+ * asked again. The caller still invalidates them: the cache is only a head start, and the summary and
+ * the counts come from the server. A list that is not in the cache is left alone.
+ */
+export function removeMovementFromListCache(
+  queryClient: QueryClient,
+  spaceId: string,
+  transactionId: string,
+): void {
+  queryClient.setQueriesData<InfiniteData<MovementPage, string | null>>(
+    { queryKey: [...transactionsQueryKey(spaceId), "list"] },
+    (data) => {
+      if (!data) return data;
+      return {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          items: page.items.filter((item) => item.id !== transactionId),
+        })),
+      };
+    },
+  );
 }

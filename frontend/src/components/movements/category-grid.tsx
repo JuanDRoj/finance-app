@@ -5,6 +5,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import { FieldError } from "@/components/ui/field";
 import { focusRing } from "@/components/ui/focus";
 import {
+  categoryOptionLabel,
   describeCategoryChoice,
   findCategoryPlace,
   type CategoryBranch,
@@ -41,6 +42,10 @@ type CategoryGridProps = {
  *   apps", or "Solo Transporte") with "Cambiar", which opens the second step again.
  *
  * The chosen principal (or the one the chosen subcategory belongs to) is the pressed cell.
+ *
+ * Editing a movement whose category was archived since (`buildCategoryTree` with `keep`): its cell
+ * (or its principal's) says "(archivada)"; pressing a principal that is archived and only the place of
+ * the archived subcategory opens the second step without choosing the principal itself.
  */
 export function CategoryGrid({
   tree,
@@ -62,8 +67,11 @@ export function CategoryGrid({
 
   function press(branch: CategoryBranch) {
     if (branch.subs.length > 0) {
-      // Keep a subcategory of this principal if one is chosen; otherwise the principal itself.
-      if (place?.principal.id !== branch.principal.id) onSelect(branch.principal.id);
+      // Keep a subcategory of this principal if one is chosen; otherwise the principal itself (not an
+      // archived one that is only the place of the archived subcategory a movement has).
+      if (place?.principal.id !== branch.principal.id && branch.choosable !== false) {
+        onSelect(branch.principal.id);
+      }
       onOpenSubcategories(branch.principal.id);
       return;
     }
@@ -91,7 +99,7 @@ export function CategoryGrid({
               key={branch.principal.id}
               type="button"
               aria-pressed={selected}
-              title={branch.principal.name}
+              title={categoryOptionLabel(branch.principal)}
               onClick={() => press(branch)}
               className={cn(
                 "flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-field px-0.5 py-1.5 text-foreground select-none",
@@ -115,7 +123,7 @@ export function CategoryGrid({
                   selected ? "font-bold" : "font-semibold",
                 )}
               >
-                {branch.principal.name}
+                {categoryOptionLabel(branch.principal)}
               </span>
             </button>
           );
