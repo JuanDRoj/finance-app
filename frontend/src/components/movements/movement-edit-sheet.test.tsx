@@ -126,12 +126,16 @@ const MOVEMENTS = [
   }),
 ];
 
-function makeApi(fault?: (call: ScriptedCall) => Fault | undefined) {
+function makeApi(
+  fault?: (call: ScriptedCall) => Fault | undefined,
+  delay?: (call: ScriptedCall) => number,
+) {
   return scriptedMovementsApi({
     items: () => MOVEMENTS,
     accounts: () => ACCOUNTS,
     categories: () => CATEGORIES,
     fault,
+    delay,
   });
 }
 
@@ -275,6 +279,62 @@ describe("what it shows once it has the movement", () => {
     expect(detail[0]).toMatchObject({ kind: "detail", id: UBER_ID });
     expect(api.calls.find((call) => call.kind === "accounts")?.query.include_archived).toBe(true);
     expect(api.calls.find((call) => call.kind === "categories")?.query.include_archived).toBe(true);
+  });
+});
+
+describe("a copy of the movement that an earlier opening left in the cache (FE-23)", () => {
+  // With `gcTime: 0` the query of the last opening can still be there for a moment when the same
+  // movement is opened again; the form reads its values once, so starting on that copy would show the
+  // old values, and the next "Guardar cambios" would undo the edit made in between.
+  const OLD: MovementListItem = movement({ amount_minor: -10000, description: "Uber viejo" });
+  const cachedClient = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(transactionDetailKey(SPACE.id, UBER_ID), OLD);
+    return queryClient;
+  };
+
+  it("waits for the GET of this opening (a skeleton) and starts the form on what the server says now", async () => {
+    const api = makeApi(undefined, (call) => (call.kind === "detail" ? 300 : 0));
+    renderSheet({ api, queryClient: cachedClient() });
+    // The lists answer at once and the old copy is in the cache, but the form is not drawn from it.
+    expect(await screen.findByRole("status", { name: "Cargando el movimiento" })).toBeTruthy();
+    await waitFor(() => expect(api.calls.some((call) => call.kind === "accounts")).toBe(true));
+    await act(async () => {});
+    expect(screen.queryByLabelText("Monto")).toBeNull();
+    expect(screen.queryByDisplayValue("Uber viejo")).toBeNull();
+    // Then the form, on the values of the server.
+    const amount = (await screen.findByLabelText("Monto")) as HTMLInputElement;
+    expect(amount.value).toBe("380,00");
+    expect((screen.getByLabelText(/^Descripción/) as HTMLInputElement).value).toBe("Uber");
+    expect(detailCalls(api)).toHaveLength(1);
+  });
+
+  it("does not let the old copy be saved over the edit made in between: what is saved is the new one", async () => {
+    const api = makeApi(undefined, (call) => (call.kind === "detail" ? 100 : 0));
+    const onSaved = vi.fn();
+    renderSheet({ api, queryClient: cachedClient(), onSaved });
+    fireEvent.change(await screen.findByLabelText("Monto"), { target: { value: "380,00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    // Nothing changed against the server's movement: no PUT, whatever the old copy said.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.calls.filter((call) => call.kind === "update")).toHaveLength(0);
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("once the form is there, asking the movement again (an invalidation) neither hides it nor resets what was typed", async () => {
+    const api = makeApi();
+    const view = renderSheet({ api });
+    fireEvent.change(await screen.findByLabelText("Monto"), { target: { value: "500" } });
+    await act(async () => {
+      await view.queryClient.invalidateQueries({
+        queryKey: transactionDetailKey(SPACE.id, UBER_ID),
+      });
+    });
+    await waitFor(() => expect(detailCalls(api)).toHaveLength(2));
+    expect((screen.getByLabelText("Monto") as HTMLInputElement).value).toBe("500");
+    expect(screen.queryByRole("status", { name: "Cargando el movimiento" })).toBeNull();
   });
 });
 

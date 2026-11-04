@@ -326,6 +326,78 @@ describe("opening a row (FE-23, KAN-83)", () => {
   });
 });
 
+describe("movements of an archived account (FE-23, KAN-83)", () => {
+  // The Visa (a2) is archived: its movements open read only and cannot be deleted (409 account_archived),
+  // as the sheet decides, so the table says "Ver X" and gives no trash can for them.
+  const ARCHIVED_VISA = ACCOUNT({
+    id: "a2",
+    name: "Visa Itaú",
+    type: "credit_card",
+    archived_at: "2026-10-01T10:00:00Z",
+  });
+
+  it("says 'Ver X' with no delete for the movements of the archived account, and 'Editar X' for the rest", async () => {
+    setup({
+      items: [
+        movementItem({ id: "v1", description: "Compra con la Visa", date: "2026-10-29" }),
+        movementItem({
+          id: "i1",
+          description: "Compra en Itaú",
+          date: "2026-10-28",
+          account: ITAU,
+        }),
+        transferItem({ id: "p1", description: "Pago de la Visa", date: "2026-10-27" }),
+      ],
+      accounts: [ACCOUNT(), ARCHIVED_VISA],
+    });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    // The list of accounts arrives apart from the movements.
+    await waitFor(() =>
+      expect(table.getByRole("link", { name: "Ver Compra con la Visa" })).toBeTruthy(),
+    );
+    expect(table.getByRole("link", { name: "Ver Pago de la Visa" })).toBeTruthy();
+    expect(table.queryByRole("button", { name: /Eliminar Compra con la Visa/ })).toBeNull();
+    expect(table.queryByRole("button", { name: /Eliminar Pago de la Visa/ })).toBeNull();
+    expect(table.getByRole("link", { name: "Editar Compra en Itaú" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Eliminar Compra en Itaú" })).toBeTruthy();
+  });
+
+  it("offers 'Editar X' and 'Eliminar X' while the list of accounts has not answered, or if it fails (the backend decides)", async () => {
+    setup({
+      items: [movementItem({ id: "v1", description: "Compra con la Visa", date: "2026-10-29" })],
+      accounts: [ACCOUNT(), ARCHIVED_VISA],
+      fault: (call) => (call.kind === "accounts" ? "server" : undefined),
+    });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByRole("link", { name: "Editar Compra con la Visa" })).toBeTruthy();
+    expect(table.getByRole("button", { name: "Eliminar Compra con la Visa" })).toBeTruthy();
+  });
+
+  it("the sheet and the table agree: the row that says 'Ver X' is the one the sheet shows read only", async () => {
+    const { api } = setup({
+      items: [movementItem({ id: "v1", description: "Compra con la Visa", date: "2026-10-29" })],
+      accounts: [ACCOUNT(), ARCHIVED_VISA],
+    });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    await waitFor(() =>
+      expect(table.getByRole("link", { name: "Ver Compra con la Visa" })).toBeTruthy(),
+    );
+    // And the server would have refused the delete the row no longer offers.
+    await expect(
+      (
+        api as unknown as {
+          DELETE: (p: string, i: unknown) => Promise<{ error?: { code?: string } }>;
+        }
+      ).DELETE("/spaces/{space_id}/transactions/{transaction_id}", {
+        params: { path: { transaction_id: "v1" } },
+      }),
+    ).resolves.toMatchObject({ error: { code: "account_archived" } });
+  });
+});
+
 describe("deleting from the table (FE-23, KAN-83)", () => {
   const remove = (name: string) =>
     fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name }));

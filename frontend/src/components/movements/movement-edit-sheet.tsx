@@ -82,7 +82,9 @@ function EditSkeleton() {
  * (with `next/dynamic`) and unmounts it when it has left, so every opening starts from a fresh `GET`
  * and a form that starts afresh.
  *
- * - **Data.** The movement by its id (`GET`: always fresh, see `transactionDetailQueryOptions`) and the
+ * - **Data.** The movement by its id (`GET`: always fresh, see `transactionDetailQueryOptions`; the form
+ *   is drawn only from an answer of **this** opening, `isFetchedAfterMount`, never from a copy that an
+ *   earlier opening left in the cache) and the
  *   accounts and the categories of the space with their archived ones (the lists Movimientos hydrates,
  *   so it usually opens without waiting). Its kind (`movementDetailKind`) says what it shows: the form
  *   `MovementForm mode="edit"`, or the read-only `MovementDetail` of an adjustment, a pending or a
@@ -133,16 +135,23 @@ export function MovementEditSheet({
     enabled: !frozen,
   });
 
+  // What this opening got from the server. `detail.data` alone is not enough: with `gcTime: 0` the query
+  // of an earlier opening of the same movement can still be in the cache for a moment (the host
+  // unmounted the last sheet an instant ago), and the form reads its values **once**: it would start on
+  // the old ones, and the next "Guardar cambios" would silently undo the edit made in between.
+  // `isFetchedAfterMount` is true only once a `GET` of **this** sheet has answered; until then it is
+  // the skeleton, as for a movement never asked for.
+  const fresh = detail.isFetchedAfterMount;
   const live = useMemo<Snapshot | null>(
     () =>
-      detail.data && accountsQuery.data && categoriesQuery.data
+      detail.data && fresh && accountsQuery.data && categoriesQuery.data
         ? {
             movement: detail.data,
             accounts: accountsQuery.data,
             categories: categoriesQuery.data,
           }
         : null,
-    [detail.data, accountsQuery.data, categoriesQuery.data],
+    [detail.data, fresh, accountsQuery.data, categoriesQuery.data],
   );
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   if (!frozen && snapshot !== live) setSnapshot(live);

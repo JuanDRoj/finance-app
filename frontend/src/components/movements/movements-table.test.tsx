@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MovementsTable } from "./movements-table";
 import {
   COMIDA,
+  ITAU,
   adjustmentItem,
   incomeItem,
   movementItem,
@@ -99,6 +100,48 @@ describe("MovementsTable", () => {
       expect(names[1]).toEqual(["Alquiler", "Ver Alquiler"]);
       expect(names[2]).toEqual(["Gimnasio", "Ver Gimnasio"]);
       expect(screen.queryByRole("button")).toBeNull();
+    });
+
+    it("a movement of an archived account has 'Ver X' and no delete, as the sheet opens it read only", () => {
+      const archived = new Set(["a2"]);
+      render(
+        <MovementsTable
+          items={[
+            movementItem({ id: "v-1", description: "Compra con la Visa" }),
+            movementItem({ id: "i-1", description: "Compra en Itaú", account: ITAU }),
+            transferItem({ id: "t-1", description: "Pago de la Visa" }),
+          ]}
+          currency={UYU}
+          onRemove={() => {}}
+          archivedAccountIds={archived}
+        />,
+      );
+      const names = bodyRows().map((row) => controls(row).map((control) => control.name));
+      // The Visa (a2) is archived: the expense on it and the transfer that ends in it are read only.
+      expect(names[0]).toEqual(["Compra con la Visa", "Ver Compra con la Visa"]);
+      expect(names[1]).toEqual([
+        "Compra en Itaú",
+        "Editar Compra en Itaú",
+        "Eliminar Compra en Itaú",
+      ]);
+      expect(names[2]).toEqual(["Pago de la Visa", "Ver Pago de la Visa"]);
+      expect(screen.getAllByRole("button")).toHaveLength(1);
+    });
+
+    it("offers both when the archived accounts are other ones or the list is not there", () => {
+      for (const archivedAccountIds of [new Set(["otra"]), new Set<string>(), undefined]) {
+        render(
+          <MovementsTable
+            items={[movementItem({ description: "Compra" })]}
+            currency={UYU}
+            onRemove={() => {}}
+            archivedAccountIds={archivedAccountIds}
+          />,
+        );
+        expect(screen.getByRole("link", { name: "Editar Compra" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Eliminar Compra" })).toBeTruthy();
+        cleanup();
+      }
     });
 
     it("without onRemove there is no delete at all, for any row (a table that only shows)", () => {

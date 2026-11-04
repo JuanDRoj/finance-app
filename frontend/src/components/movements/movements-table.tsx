@@ -38,6 +38,13 @@ type MovementsTableProps = {
   onRemove?: (item: MovementListItem) => void;
   /** The ids being deleted now: their "Eliminar" is busy. A new `Set` re-renders the rows, which is what a delete needs. */
   pendingIds?: ReadonlySet<string>;
+  /**
+   * The ids of the archived accounts of the space (`archivedAccountIdsOf` of the list with its archived
+   * ones). A movement of one of them opens read only and cannot be deleted, as the sheet decides, so its
+   * row says "Ver X" and has no "Eliminar X". Memoize it: it is a prop of a `memo`. Without it (the
+   * list did not load) every confirmed expense, income and transfer offers both.
+   */
+  archivedAccountIds?: ReadonlySet<string>;
 };
 
 const HEAD = "px-2 py-2.5 text-left font-bold";
@@ -67,8 +74,9 @@ const STICKY_END = "sticky right-0 w-21 bg-surface";
  * - **Open and delete** (FE-23, KAN-83). The description is a `MovementLink` (bold, as the canvas has
  *   it); the last column, "Acciones" (named for assistive technology only, 84 px), has "Editar X" (a
  *   pencil) or "Ver X" (an eye, for an adjustment, a pending or a skipped movement, which cannot be
- *   edited) and, if the movement can be deleted and `onRemove` is given, "Eliminar X" (a trash can,
- *   busy while it deletes). The names come from `describeMovementRowActions`. The row is tinted under
+ *   edited, or one of an archived account: the same rule as the sheet, `movementDetailKindIn`) and, if
+ *   the movement can be deleted and `onRemove` is given, "Eliminar X" (a trash can, busy while it
+ *   deletes). The names come from `describeMovementRowActions`. The row is tinted under
  *   a mouse (the `sel` of the canvas). The whole text of the table is still the same: the column only
  *   adds 84 px to it.
  * - **Width.** The table lets each column size to its content with a floor of 760 px, inside a
@@ -86,6 +94,7 @@ export const MovementsTable = memo(function MovementsTable({
   className,
   onRemove,
   pendingIds,
+  archivedAccountIds,
 }: MovementsTableProps) {
   return (
     <div data-slot="movements-table" className={cn("overflow-x-auto", className)}>
@@ -125,6 +134,7 @@ export const MovementsTable = memo(function MovementsTable({
               today={today}
               onRemove={onRemove}
               pending={pendingIds?.has(item.id) === true}
+              archivedAccountIds={archivedAccountIds}
             />
           ))}
         </tbody>
@@ -139,19 +149,21 @@ function MovementTableRow({
   today,
   onRemove,
   pending,
+  archivedAccountIds,
 }: Readonly<{
   item: MovementListItem;
   currency: Currency;
   today?: string;
   onRemove?: (item: MovementListItem) => void;
   pending: boolean;
+  archivedAccountIds?: ReadonlySet<string>;
 }>) {
   const title = describeMovementTitle(item);
   const category = describeMovementCategory(item);
   const account = describeMovementAccount(item);
   const amount = movementAmountView(item, currency);
   const status = describeMovementStatusNote(item);
-  const actions = describeMovementRowActions(item);
+  const actions = describeMovementRowActions(item, archivedAccountIds);
   return (
     <tr
       data-slot="movement-row"

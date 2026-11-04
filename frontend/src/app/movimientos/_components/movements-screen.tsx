@@ -39,6 +39,7 @@ import {
   describeShown,
   flattenMovementPages,
   groupMovementsByDay,
+  archivedAccountIdsOf,
   hasActiveFilters,
   isCursorInvalid,
   showsSummary,
@@ -130,6 +131,12 @@ export function MovementsScreen({
   const categories = useQuery(categoriesQueryOptions(api, space.id, { includeArchived: true }));
 
   const rows = useMemo(() => flattenMovementPages(list.data), [list.data]);
+  // The archived accounts, for the actions of the table: a movement of one opens read only and cannot
+  // be deleted. A `Set` that changes only when the list of accounts does, because the table is a `memo`.
+  const archivedAccountIds = useMemo(
+    () => archivedAccountIdsOf(accounts.data ?? []),
+    [accounts.data],
+  );
 
   // Deleting a row: the hook takes it out of the cache and then calls `onDeleted`, in the same turn, so
   // `rowsRef` still has it and tells who the neighbour is. The focus moves in the effect below, once
@@ -306,6 +313,7 @@ export function MovementsScreen({
             className="mb-1"
             onRemove={remove}
             pendingIds={pendingIds}
+            archivedAccountIds={archivedAccountIds}
           />
           <MoreFooter
             text={shown}

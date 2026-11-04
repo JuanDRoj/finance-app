@@ -1,6 +1,6 @@
 import type { MovementCreate } from "./data/transactions";
 import { TRANSACTION_TYPE_NAMES } from "./i18n";
-import { describeMovementTitle, isMovementEditable, type MovementLike } from "./movements";
+import { describeMovementTitle, movementDetailKindIn, type MovementLike } from "./movements";
 
 /**
  * The most a toast says of a movement: a description may be 200 characters, and a toast that long
@@ -64,10 +64,22 @@ export type MovementRowActions = {
   remove: { label: string } | null;
 };
 
-/** The names of the actions of the row of a movement (K-V2-Escritorio: `editarLabel` and "Eliminar {desc}"). */
-export function describeMovementRowActions(movement: MovementLike): MovementRowActions {
+const NO_ACCOUNTS: ReadonlySet<string> = new Set();
+
+/**
+ * The names of the actions of the row of a movement (K-V2-Escritorio: `editarLabel` and "Eliminar
+ * {desc}"). `archivedIds` are the archived accounts of the space (`archivedAccountIdsOf`): a movement
+ * of one of them opens read only and cannot be deleted (409 `account_archived`), exactly as the sheet
+ * decides (`movementDetailKindIn`), so the row says "Ver X" and has no "Eliminar X" for it. Without them
+ * (the list of accounts did not load) the backend decides, and the row offers what it would for any
+ * confirmed expense, income or transfer.
+ */
+export function describeMovementRowActions(
+  movement: MovementLike,
+  archivedIds: ReadonlySet<string> = NO_ACCOUNTS,
+): MovementRowActions {
   const label = describeMovementLabel(movement);
-  const editable = isMovementEditable(movement);
+  const editable = movementDetailKindIn(movement, archivedIds) === "editable";
   return {
     open: editable
       ? { kind: "edit", label: `Editar ${label}` }
