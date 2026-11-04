@@ -1,6 +1,7 @@
 import {
   QueryClient,
   QueryClientProvider,
+  QueryObserver,
   onlineManager,
   type InfiniteData,
 } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import {
+  transactionDetailKey,
   transactionsListKey,
   transactionsSummaryKey,
   type MovementListItem,
@@ -234,6 +236,119 @@ describe("deleting a movement", () => {
       description: expect.stringContaining("Revisa tu conexión"),
     });
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("several deletes at once (pendingId)", () => {
+  /** A DELETE that stays on its way until the test lets it finish. */
+  function held() {
+    let finish: (value: unknown) => void = () => {};
+    const promise = new Promise((resolve) => (finish = resolve));
+    return { promise, finish: (value: unknown) => act(async () => finish(value)) };
+  }
+
+  it("keeps the later movement busy when the earlier one finishes first", async () => {
+    const a = held();
+    const b = held();
+    const del = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const context = setup({ del });
+    act(() => context.result.current.remove(UBER));
+    act(() => context.result.current.remove(CAFE));
+    expect(context.result.current.pendingId).toBe("mov-cafe");
+    await a.finish(noContent());
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    // A is done; B is still on its way, and its button must keep saying so.
+    expect(context.result.current.pendingId).toBe("mov-cafe");
+    await b.finish(noContent());
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(2));
+    expect(context.result.current.pendingId).toBeNull();
+  });
+
+  it("keeps the later movement busy when the earlier one fails first", async () => {
+    const a = held();
+    const b = held();
+    const del = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const context = setup({ del });
+    act(() => context.result.current.remove(UBER));
+    act(() => context.result.current.remove(CAFE));
+    await a.finish(failure(500));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
+    expect(context.result.current.pendingId).toBe("mov-cafe");
+    await b.finish(failure(500));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2));
+    expect(context.result.current.pendingId).toBeNull();
+  });
+
+  it("clears it when the last one asked for is the one that ends", async () => {
+    const a = held();
+    const b = held();
+    const del = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const context = setup({ del });
+    act(() => context.result.current.remove(UBER));
+    act(() => context.result.current.remove(CAFE));
+    await b.finish(noContent());
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    expect(context.result.current.pendingId).toBeNull();
+    await a.finish(noContent());
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(2));
+    expect(context.result.current.pendingId).toBeNull();
+  });
+});
+
+describe("the detail of a movement that was deleted", () => {
+  const detailKey = transactionDetailKey(SPACE, "mov-uber");
+
+  it("is taken out of the cache, and the one of another movement stays", async () => {
+    const context = setup();
+    const other = transactionDetailKey(SPACE, "mov-cafe");
+    context.queryClient.setQueryData(detailKey, UBER);
+    context.queryClient.setQueryData(other, CAFE);
+    await deleted(context);
+    expect(context.queryClient.getQueryData(detailKey)).toBeUndefined();
+    expect(context.queryClient.getQueryState(detailKey)).toBeUndefined();
+    expect(context.queryClient.getQueryData(other)).toEqual(CAFE);
+    // The other movement's detail is invalidated with the rest, as before.
+    expect(context.queryClient.getQueryState(other)?.isInvalidated).toBe(true);
+  });
+
+  it("is not asked again by a sheet that is still mounted on it (it would be a 404)", async () => {
+    const context = setup();
+    const queryFn = vi.fn().mockResolvedValue(UBER);
+    const observer = new QueryObserver(context.queryClient, {
+      queryKey: detailKey,
+      queryFn,
+      staleTime: Infinity,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+    await deleted(context);
+    await act(async () => {});
+    expect(queryFn).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("is still asked again when what changed is not a delete: another movement's invalidation reaches it", async () => {
+    // The root of the movements is invalidated (a save, an undo): a sheet on the detail refetches.
+    const context = setup();
+    const queryFn = vi.fn().mockResolvedValue(UBER);
+    const unsubscribe = new QueryObserver(context.queryClient, {
+      queryKey: detailKey,
+      queryFn,
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+    await deleted(context, CAFE);
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+    unsubscribe();
+  });
+
+  it("stays in the cache when the delete fails: the movement is still there", async () => {
+    const del = vi.fn().mockResolvedValue(failure(500));
+    const context = setup({ del });
+    context.queryClient.setQueryData(detailKey, UBER);
+    act(() => context.result.current.remove(UBER));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+    expect(context.queryClient.getQueryData(detailKey)).toEqual(UBER);
   });
 });
 

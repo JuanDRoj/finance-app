@@ -12,6 +12,7 @@ import {
   deleteTransaction,
   removeMovementFromListCache,
   restoreTransaction,
+  transactionDetailKey,
   transactionsQueryKey,
 } from "@/lib/core/data/transactions";
 import { describeMovementError } from "@/lib/core/i18n";
@@ -44,9 +45,13 @@ type UseDeleteMovementOptions = {
  * with **no confirmation**. The toast "Eliminaste «Café»" with **Deshacer** is the way back.
  *
  * - **Deleted.** The movement leaves the lists in the cache at once (`removeMovementFromListCache`),
- *   the balances (`["spaces", id, "accounts"]`) and the movements (`transactionsQueryKey`: list,
- *   summary, detail) are asked again, the toast is shown, `onDeleted` runs and the server data of the
- *   page (the Inicio, the page of an account) is refreshed.
+ *   and its detail is taken out of it (`removeQueries`) before the lists are asked again: the
+ *   invalidation reaches the detail too (its key hangs from the root of the movements), and a sheet
+ *   that is still mounted would ask the server for a movement that is deleted and get a 404. (Saving
+ *   with `PUT` is different: asking for the detail again is right there.) The balances
+ *   (`["spaces", id, "accounts"]`) and the movements (`transactionsQueryKey`: list, summary) are asked
+ *   again, the toast is shown, `onDeleted` runs and the server data of the page (the Inicio, the page
+ *   of an account) is refreshed.
  * - **Deshacer** is `POST .../restore`. It is a closure over the client and the router, so it works
  *   after the sheet or the row that deleted is gone (the toast outlives them), and a toast undoes once
  *   (a quick double tap restores once). On success it asks the lists and the balances again and
@@ -60,7 +65,8 @@ type UseDeleteMovementOptions = {
  * - **One at a time per movement.** A movement already being deleted (or deleted and not undone) is
  *   not sent again; another movement is. The hook can be shared by every row of a list.
  *
- * `pendingId` is the movement being deleted now, to put a busy state on its button.
+ * `pendingId` is the movement being deleted now, to put a busy state on its button. With several in
+ * flight it is the last one asked for, and a delete that ends clears it only if it is still its own.
  */
 export function useDeleteMovement({
   spaceId,
@@ -112,8 +118,13 @@ export function useDeleteMovement({
     networkMode: "always",
     mutationFn: (movement: DeletableMovement) => deleteTransaction(api, spaceId, movement.id),
     onSuccess: (_result, movement) => {
-      setPendingId(null);
+      // Only this movement stops being busy: another one may still be on its way.
+      setPendingId((current) => (current === movement.id ? null : current));
       removeMovementFromListCache(queryClient, spaceId, movement.id);
+      // The detail of a movement that no longer exists would be a 404 (`GET` of a deleted one): take
+      // it out before the invalidation below, which reaches it (its key hangs from the movements' root)
+      // and would make a sheet that is still mounted ask for it again.
+      queryClient.removeQueries({ queryKey: transactionDetailKey(spaceId, movement.id) });
       refreshLists();
       // "Deshacer" of this toast only: a flag of its own, because the toast outlives the sheet and a
       // quick double tap must restore once. Released if the restore fails, so "Reintentar" works.
@@ -135,7 +146,7 @@ export function useDeleteMovement({
       router.refresh();
     },
     onError: (failure, movement) => {
-      setPendingId(null);
+      setPendingId((current) => (current === movement.id ? null : current));
       deleted.current.delete(movement.id);
       if (isUnauthorized(failure)) {
         window.location.replace("/login");
