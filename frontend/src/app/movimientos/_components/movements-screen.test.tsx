@@ -6,6 +6,7 @@ import {
   EFECTIVO,
   ITAU,
   VISA,
+  adjustmentItem,
   incomeItem,
   movementItem,
   transferItem,
@@ -27,7 +28,18 @@ import { SearchToggle } from "./search-toggle";
 // scripted backend that filters, pages by cursor and adds up the summary like the real one. CSS is
 // not applied in jsdom, so the phone's list and the table are both in the page, and so are the
 // filters' card and the phone's controls: a test picks the one it means by its place.
+const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { success: mocks.toastSuccess, error: mocks.toastError }),
+}));
+
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: mocks.refresh }),
   // The address bar, as Next sees it: a write with `replaceState` re-renders who reads it.
   useSearchParams: () => {
     const search = useSyncExternalStore(
@@ -64,6 +76,9 @@ const replaceState = window.history.replaceState.bind(window.history);
 let desktop = false;
 
 beforeEach(() => {
+  mocks.refresh.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
   desktop = false;
   FakeObserver.all = [];
   vi.stubGlobal("IntersectionObserver", FakeObserver);
@@ -156,6 +171,7 @@ function setup({
   const view = render(
     <QueryClientProvider client={client}>
       {/* The magnifier lives in the header of the page, outside the screen: it is next to it here. */}
+      <h1 tabIndex={-1}>Movimientos</h1>
       <SearchToggle currentMonth={CURRENT} />
       <MovementsScreen space={SPACE} currentMonth={CURRENT} today={TODAY} api={api} />
     </QueryClientProvider>,
@@ -246,17 +262,267 @@ describe("the first load", () => {
     await screen.findByText("Mostrando 3 de 3 movimientos");
   });
 
-  it("draws every row read only: no link and no button in the list or in the table", async () => {
+  it("draws every row as a link, in the list of the phone and in the table", async () => {
     setup();
     await loaded();
-    expect(
-      document.querySelectorAll("tbody a, tbody button, [data-slot='movement-row'] a"),
-    ).toHaveLength(0);
-    expect(
-      document.querySelectorAll(
-        "[data-slot='movement-day-groups'] a, [data-slot='movement-day-groups'] button",
+    const phoneLinks = document.querySelectorAll("[data-slot='movement-day-groups'] a");
+    expect(phoneLinks).toHaveLength(3);
+    // The list of a phone has no button: it deletes from the sheet. The table has one per row.
+    expect(document.querySelectorAll("[data-slot='movement-day-groups'] button")).toHaveLength(0);
+    expect(document.querySelectorAll("tbody a")).toHaveLength(6);
+    expect(document.querySelectorAll("tbody button")).toHaveLength(3);
+  });
+});
+
+describe("opening a row (FE-23, KAN-83)", () => {
+  it("a plain click on a row of the phone writes the panel in the address, with the filters, and asks nothing", async () => {
+    const { api } = setup({ url: "/movimientos?tipo=gastos" });
+    await loaded();
+    const before = api.calls.length;
+    const row = document.querySelector("[data-slot='movement-day-groups'] a") as HTMLElement;
+    fireEvent.click(row);
+    expect(window.location.pathname).toBe("/movimientos");
+    expect(window.location.search).toBe(
+      `?tipo=gastos&movimiento=editar&id=${row.getAttribute("data-movement-id")}`,
+    );
+    await act(async () => {});
+    // The sheet is the shell's: the screen itself asked nothing, and the filters are the same.
+    expect(api.calls.length).toBe(before);
+    expect(callsOf(api, "list").at(-1)!.query.type).toBe("expense");
+  });
+
+  it("the description, 'Editar X' and 'Ver X' of the table open the same panel", async () => {
+    setup({
+      items: [
+        movementItem({ id: "t1", description: "Café", date: "2026-10-29" }),
+        adjustmentItem({ id: "t2", description: "Ajuste de saldo", date: "2026-10-28" }),
+      ],
+    });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    fireEvent.click(table.getByRole("link", { name: "Editar Café" }));
+    expect(window.location.search).toBe("?movimiento=editar&id=t1");
+    fireEvent.click(table.getByRole("link", { name: "Ver Ajuste de saldo" }));
+    expect(window.location.search).toBe("?movimiento=editar&id=t2");
+    fireEvent.click(table.getByRole("link", { name: "Café" }));
+    expect(window.location.search).toBe("?movimiento=editar&id=t1");
+  });
+
+  it("an adjustment has no delete in its row; the other rows do", async () => {
+    setup({
+      items: [
+        movementItem({ id: "t1", description: "Café", date: "2026-10-29" }),
+        adjustmentItem({ id: "t2", description: "Ajuste de saldo", date: "2026-10-28" }),
+        movementItem({ id: "t3", description: "Alquiler", status: "pending", date: "2026-10-27" }),
+      ],
+    });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByRole("button", { name: "Eliminar Café" })).toBeTruthy();
+    expect(table.queryByRole("button", { name: /Eliminar Ajuste/ })).toBeNull();
+    expect(table.queryByRole("button", { name: /Eliminar Alquiler/ })).toBeNull();
+    expect(table.getByRole("link", { name: "Ver Ajuste de saldo" })).toBeTruthy();
+    expect(table.getByRole("link", { name: "Ver Alquiler" })).toBeTruthy();
+  });
+});
+
+describe("deleting from the table (FE-23, KAN-83)", () => {
+  const remove = (name: string) =>
+    fireEvent.click(within(screen.getByRole("table")).getByRole("button", { name }));
+  const rowsOfTheTable = () => within(screen.getByRole("table")).getAllByRole("rowheader");
+
+  it("deletes without asking, takes the row out, says it with 'Deshacer' and asks the lists and the summary again", async () => {
+    const { api } = setup();
+    await loaded();
+    const listsBefore = callsOf(api, "list").length;
+    remove("Eliminar Café");
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Eliminaste «Café»",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Deshacer" }) }),
       ),
-    ).toHaveLength(0);
+    );
+    expect(callsOf(api, "delete")).toHaveLength(1);
+    expect(callsOf(api, "delete")[0]).toMatchObject({ id: "t1" });
+    await waitFor(() =>
+      expect(rowsOfTheTable().map((row) => row.textContent)).toEqual([
+        "Sueldo",
+        "Pago de Visa Itaú",
+      ]),
+    );
+    // The cache lost the row at once, and the server is asked again for the list and the summary.
+    await waitFor(() => expect(callsOf(api, "list").length).toBeGreaterThan(listsBefore));
+    await screen.findByText("Mostrando 2 de 2 movimientos");
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces the new count to assistive technology", async () => {
+    setup();
+    await loaded();
+    remove("Eliminar Café");
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((s) => s.textContent === "Octubre 2026: 2 movimientos"),
+      ).toBe(true),
+    );
+  });
+
+  it("the row also leaves the phone's list, and its day when it was the only one", async () => {
+    setup();
+    await loaded();
+    remove("Eliminar Café");
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "Hoy · jueves 29 de octubre" })).toBeNull(),
+    );
+    expect(screen.getByRole("heading", { name: "Ayer · miércoles 28 de octubre" })).toBeTruthy();
+  });
+
+  it("'Deshacer' brings the row back", async () => {
+    const { api } = setup();
+    await loaded();
+    remove("Eliminar Café");
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
+    await waitFor(() => expect(rowsOfTheTable()).toHaveLength(2));
+    const { action } = mocks.toastSuccess.mock.calls[0]![1] as { action: { onClick: () => void } };
+    act(() => action.onClick());
+    await waitFor(() => expect(rowsOfTheTable()).toHaveLength(3));
+    expect(callsOf(api, "restore")).toHaveLength(1);
+    expect(rowsOfTheTable()[0]!.textContent).toBe("Café");
+    await screen.findByText("Mostrando 3 de 3 movimientos");
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("shows the button busy while it runs, and a second click does not send a second request", async () => {
+    const { api } = setup({ delay: (call) => (call.kind === "delete" ? 150 : 0) });
+    await loaded();
+    const button = within(screen.getByRole("table")).getByRole("button", {
+      name: "Eliminar Café",
+    });
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    expect(callsOf(api, "delete")).toHaveLength(1);
+  });
+
+  it("two rows deleted one after the other are two requests and two toasts, each button busy on its own", async () => {
+    const { api } = setup({ delay: (call) => (call.kind === "delete" ? 100 : 0) });
+    await loaded();
+    const table = within(screen.getByRole("table"));
+    const first = table.getByRole("button", { name: "Eliminar Café" });
+    const second = table.getByRole("button", { name: "Eliminar Sueldo" });
+    await act(async () => {
+      first.click();
+      second.click();
+    });
+    expect(first.getAttribute("aria-busy")).toBe("true");
+    expect(second.getAttribute("aria-busy")).toBe("true");
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(2));
+    expect(callsOf(api, "delete")).toHaveLength(2);
+    await waitFor(() => expect(rowsOfTheTable()).toHaveLength(1));
+  });
+
+  it("when the server refuses, the row stays and a toast says why in Spanish", async () => {
+    setup({ fault: (call) => (call.kind === "delete" ? "account-archived" : undefined) });
+    await loaded();
+    remove("Eliminar Café");
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith("Esa cuenta está archivada", {
+        description: "Desarchívala desde Cuentas para poder eliminar este movimiento.",
+      }),
+    );
+    expect(rowsOfTheTable()).toHaveLength(3);
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("when the movement is already gone (404) it says so and asks the lists again", async () => {
+    const { api } = setup({ fault: (call) => (call.kind === "delete" ? "not-found" : undefined) });
+    await loaded();
+    const before = callsOf(api, "list").length;
+    remove("Eliminar Café");
+    await waitFor(() =>
+      expect(mocks.toastError.mock.calls[0]?.[0]).toBe("No encontramos ese movimiento"),
+    );
+    await waitFor(() => expect(callsOf(api, "list").length).toBeGreaterThan(before));
+  });
+
+  it("without a connection it fails at once and says so (it is not queued)", async () => {
+    setup({ fault: (call) => (call.kind === "delete" ? "offline" : undefined) });
+    await loaded();
+    remove("Eliminar Café");
+    await waitFor(() => expect(mocks.toastError.mock.calls[0]?.[0]).toBe("No pudimos conectar"));
+    expect(rowsOfTheTable()).toHaveLength(3);
+  });
+
+  describe("the focus when the row goes", () => {
+    // jsdom has no layout, so every link has the same (no) box: say that only the table's are on screen.
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        return (this.closest("table") ? [{}] : []) as unknown as DOMRectList;
+      });
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const activeRow = () => document.activeElement?.getAttribute("data-movement-id");
+
+    it("goes to the description of the next row, in the table", async () => {
+      setup();
+      await loaded();
+      remove("Eliminar Café");
+      await waitFor(() => expect(activeRow()).toBe("t2"));
+      expect(document.activeElement?.closest("table")).not.toBeNull();
+      expect(document.activeElement?.textContent).toBe("Sueldo");
+    });
+
+    it("goes to the row before when it was the last one", async () => {
+      setup();
+      await loaded();
+      remove("Eliminar Pago de Visa Itaú");
+      await waitFor(() => expect(activeRow()).toBe("t2"));
+    });
+
+    it("goes to the title of the screen when it was the only row", async () => {
+      setup({ items: [movementItem({ id: "solo", description: "Café", date: "2026-10-29" })] });
+      await loaded();
+      remove("Eliminar Café");
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Movimientos" })),
+      );
+    });
+
+    it("stays where it was when the delete fails: nothing left", async () => {
+      setup({ fault: (call) => (call.kind === "delete" ? "server" : undefined) });
+      await loaded();
+      const button = within(screen.getByRole("table")).getByRole("button", {
+        name: "Eliminar Café",
+      });
+      button.focus();
+      fireEvent.click(button);
+      await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+      expect(document.activeElement).toBe(button);
+    });
+
+    it("does not steal the focus later if the row goes for another reason after a failed delete", async () => {
+      const { state, client } = setup({
+        fault: (call) => (call.kind === "delete" ? "server" : undefined),
+      });
+      await loaded();
+      remove("Eliminar Café");
+      await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+      state.items = THREE.slice(1);
+      await act(async () => {
+        await client.invalidateQueries();
+      });
+      await waitFor(() => expect(rowsOfTheTable()).toHaveLength(2));
+      expect(document.activeElement).toBe(document.body);
+    });
   });
 });
 

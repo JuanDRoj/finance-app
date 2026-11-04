@@ -14,7 +14,18 @@ import { worstMovements } from "./movement-pieces-demos";
 // The demo runs the real screen against a scripted backend. This keeps the script honest: if the
 // screen changes the calls it makes, or the datasets drift from what the break-ui pass names, it
 // fails here.
+const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastError: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), { success: mocks.toastSuccess, error: mocks.toastError }),
+}));
+
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: mocks.refresh }),
   useSearchParams: () => {
     const search = useSyncExternalStore(
       (notify) => {
@@ -31,7 +42,16 @@ vi.mock("next/navigation", () => ({
 const replaceState = window.history.replaceState.bind(window.history);
 
 beforeEach(() => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: false, media: query }));
+  mocks.refresh.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.toastError.mockReset();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: false,
+    media: query,
+    // The sheet of a movement asks the width and listens to it (`useIsDesktop`).
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -121,6 +141,49 @@ describe("faultFor", () => {
   });
 });
 
+describe("faultFor, one movement (FE-23)", () => {
+  const call = (kind: "detail" | "update" | "delete" | "restore" | "list") => ({
+    kind,
+    path: "/x",
+    query: {},
+  });
+  const base = { load: "ok", next: "ok" } as const;
+
+  it("answers well when the setting is not there (the older callers) or says ok", () => {
+    for (const kind of ["detail", "update", "delete", "restore"] as const) {
+      expect(faultFor(base, call(kind), 0)).toBeUndefined();
+      expect(
+        faultFor({ ...base, open: "ok", save: "ok", remove: "ok", restore: "ok" }, call(kind), 0),
+      ).toBeUndefined();
+    }
+  });
+
+  it("fails each request as its own select says, and nothing else", () => {
+    expect(faultFor({ ...base, open: "notFound" }, call("detail"), 0)).toBe("not-found");
+    expect(faultFor({ ...base, open: "server" }, call("detail"), 0)).toBe("server");
+    expect(faultFor({ ...base, save: "notEditable" }, call("update"), 0)).toBe("not-editable");
+    expect(faultFor({ ...base, save: "amount" }, call("update"), 0)).toBe("invalid");
+    expect(faultFor({ ...base, remove: "accountArchived" }, call("delete"), 0)).toBe(
+      "account-archived",
+    );
+    expect(faultFor({ ...base, remove: "offline" }, call("delete"), 0)).toBe("offline");
+    expect(faultFor({ ...base, restore: "accountArchived" }, call("restore"), 0)).toBe(
+      "account-archived",
+    );
+    // A select does not reach the other requests.
+    expect(
+      faultFor({ ...base, save: "server", remove: "server", restore: "server" }, call("detail"), 0),
+    ).toBeUndefined();
+    expect(
+      faultFor({ ...base, open: "server", remove: "server" }, call("update"), 0),
+    ).toBeUndefined();
+    expect(
+      faultFor({ ...base, open: "server", save: "server" }, call("delete"), 0),
+    ).toBeUndefined();
+    expect(faultFor({ ...base, open: "server", save: "server" }, call("list"), 0)).toBeUndefined();
+  });
+});
+
 describe("faultFor, the lists of the filters", () => {
   const call = (kind: "accounts" | "categories" | "list") => ({ kind, path: "/x", query: {} });
   const settings = (lists: "ok" | "accounts" | "categories" | "both") =>
@@ -149,6 +212,95 @@ describe("MovementsScreenDemo", () => {
     expect(within(table).getByText("Tienda Inglesa")).toBeTruthy();
     expect(await screen.findByRole("region", { name: "Resumen de Octubre 2026" })).toBeTruthy();
     await screen.findByText("Octubre 2026 · 15 movimientos", { selector: "span" });
+  });
+
+  describe("opening and deleting a movement (FE-23)", () => {
+    const firstEditLink = async () => {
+      const table = await screen.findByRole("table", { name: "Movimientos de Octubre 2026" });
+      return within(table).getByRole("link", { name: "Editar Tienda Inglesa" });
+    };
+
+    it("a click on 'Editar X' writes the panel in this page's address and the real sheet opens on the movement", async () => {
+      render(<MovementsScreenDemo instant />);
+      const link = await firstEditLink();
+      fireEvent.click(link);
+      expect(window.location.search).toBe(
+        `?movimiento=editar&id=${link.getAttribute("data-movement-id")}`,
+      );
+      expect(link.getAttribute("data-movement-id")).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+      const dialog = await screen.findByRole("dialog", { name: "Editar movimiento" });
+      const amount = await within(dialog).findByLabelText("Monto");
+      expect((amount as HTMLInputElement).value).toBe("2340,00");
+    });
+
+    it("saving changes the row, and closing leaves the filters of the address alone", async () => {
+      render(<MovementsScreenDemo instant />);
+      fireEvent.click(await firstEditLink());
+      const dialog = await screen.findByRole("dialog", { name: "Editar movimiento" });
+      fireEvent.change(await within(dialog).findByLabelText("Monto"), { target: { value: "100" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Guardaste los cambios de «Tienda Inglesa»",
+        ),
+      );
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(window.location.search).toBe("");
+      const table = screen.getByRole("table", { name: "Movimientos de Octubre 2026" });
+      await waitFor(() => expect(within(table).getByText("−$ 100,00")).toBeTruthy());
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("an adjustment opens in read only, with 'Ajuste de saldo' and 'Cuadrar saldo'", async () => {
+      render(<MovementsScreenDemo instant />);
+      const table = await screen.findByRole("table", { name: "Movimientos de Octubre 2026" });
+      fireEvent.click(within(table).getByRole("link", { name: "Ver Ajuste de saldo" }));
+      const dialog = await screen.findByRole("dialog", { name: "Ajuste de saldo" });
+      expect(await within(dialog).findByRole("link", { name: "Cuadrar saldo" })).toBeTruthy();
+      expect(within(dialog).queryByLabelText("Monto")).toBeNull();
+      expect(within(dialog).queryByRole("button", { name: /Eliminar/ })).toBeNull();
+    });
+
+    it("shows what the server answers when it cannot open it: the 404 says so, in the sheet", async () => {
+      render(<MovementsScreenDemo instant />);
+      choose("Qué responde al abrir un movimiento", "notFound");
+      fireEvent.click(await firstEditLink());
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText("No encontramos ese movimiento")).toBeTruthy();
+    });
+
+    it("the trash of the table deletes at once with 'Deshacer', and 'Deshacer' brings the row back", async () => {
+      render(<MovementsScreenDemo instant />);
+      const table = await screen.findByRole("table", { name: "Movimientos de Octubre 2026" });
+      fireEvent.click(within(table).getByRole("button", { name: "Eliminar Tienda Inglesa" }));
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Eliminaste «Tienda Inglesa»",
+          expect.objectContaining({ action: expect.objectContaining({ label: "Deshacer" }) }),
+        ),
+      );
+      await waitFor(() => expect(within(table).queryByText("Tienda Inglesa")).toBeNull());
+      const { action } = mocks.toastSuccess.mock.calls[0]![1] as {
+        action: { onClick: () => void };
+      };
+      act(() => action.onClick());
+      await waitFor(() => expect(within(table).getByText("Tienda Inglesa")).toBeTruthy());
+    });
+
+    it("says why the delete was refused, with a toast", async () => {
+      render(<MovementsScreenDemo instant />);
+      choose("Qué responde al eliminar", "accountArchived");
+      const table = await screen.findByRole("table", { name: "Movimientos de Octubre 2026" });
+      fireEvent.click(within(table).getByRole("button", { name: "Eliminar Tienda Inglesa" }));
+      await waitFor(() =>
+        expect(mocks.toastError).toHaveBeenCalledWith("Esa cuenta está archivada", {
+          description: "Desarchívala desde Cuentas para poder eliminar este movimiento.",
+        }),
+      );
+      expect(within(table).getByText("Tienda Inglesa")).toBeTruthy();
+    });
   });
 
   it("moves through the months of the history", async () => {

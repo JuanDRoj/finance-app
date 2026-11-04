@@ -619,7 +619,9 @@ export function MovementForm(props: MovementFormProps) {
       disabled={busy}
       onClick={edit.onDelete}
       aria-label={panel ? undefined : "Eliminar movimiento"}
-      className={cn("text-destructive", panel && "self-start")}
+      // On a phone it is as wide as the canvas draws it (18 px of padding, an 18 px icon): "Eliminar" and
+      // "Guardar cambios" side by side must fit 328 px (a 360 px screen) without the second breaking in two.
+      className={cn("text-destructive", panel ? "self-start" : "px-4.5 [&_svg]:size-4.5")}
     >
       {edit.deleting ? null : <Trash aria-hidden />}
       {panel ? "Eliminar movimiento" : "Eliminar"}

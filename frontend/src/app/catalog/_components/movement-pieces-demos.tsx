@@ -339,7 +339,14 @@ export function MovementPiecesDemo({ limit }: Readonly<{ limit?: number }>) {
   const groups = useMemo(() => groupMovementsByDay(items, TODAY), [items]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div
+      className="flex flex-col gap-6"
+      // The rows are links to the sheet of a movement (FE-23), which the shell opens from the address:
+      // here there is no shell, and a click would only write `?movimiento=…` in the address of the catalog.
+      onClickCapture={(event) => {
+        if ((event.target as HTMLElement).closest("[data-movement-link]")) event.preventDefault();
+      }}
+    >
       <div className="grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SelectField
           label="Qué movimientos hay"

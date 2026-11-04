@@ -335,6 +335,68 @@ describe("active tab of the bottom bar", () => {
   });
 });
 
+// A row of Movimientos under a mouse or while it is pressed (FE-23, KAN-83). Its text is `foreground` (the
+// description), `muted-foreground` (the line, the date, the account, a quiet amount) and `income` (an
+// income), and has to keep 4.5:1 on the tint. The alphas are read from the components, so the test
+// cannot drift from them.
+// - The **table** (desktop) is tinted with the `sel` of the canvas, `primary` at 10 % (light) or 12 %
+//   (dark), over the solid card `surface`.
+// - The **phone's row** sits on a glass card (`card`) over the page or a blob. `primary` at 10 % holds in
+//   the light theme, but in the dark one any green tint takes `muted-foreground` under 4.5:1 over the
+//   first blob (4.4:1 at 4 %, 3.7:1 at 12 %: the card alone is at the limit), so there the row is
+//   darkened with the page `background` instead.
+describe("tint of a hovered or pressed row of Movimientos", () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+  const row = read("../components/movements/movement-row.tsx");
+  const table = read("../components/movements/movements-table.tsx");
+  const alpha = (source: string, pattern: RegExp) => Number(pattern.exec(source)?.[1]) / 100;
+  const texts = ["foreground", "muted-foreground", "income"] as const;
+  const grounds = ["background", "blob-1", "blob-2"] as const;
+
+  it("reads the alphas from the components: the table's sel, and the phone's row", () => {
+    expect(alpha(table, /(?<![:\w-])hover:bg-primary\/(\d+)/)).toBe(0.1);
+    expect(alpha(table, /dark:hover:bg-primary\/(\d+)/)).toBe(0.12);
+    expect(alpha(row, /(?<![:\w-])hover:bg-primary\/(\d+)/)).toBe(0.1);
+    expect(alpha(row, /dark:hover:bg-background\/(\d+)/)).toBe(0.3);
+    // Pressed is the same tint as hovered.
+    expect(alpha(row, /(?<![:\w-])active:bg-primary\/(\d+)/)).toBe(0.1);
+    expect(alpha(row, /dark:active:bg-background\/(\d+)/)).toBe(0.3);
+  });
+
+  describe.each([
+    ["light", light, 0.1],
+    ["dark", dark, 0.12],
+  ] as const)("the table, %s palette", (_name, palette, tintAlpha) => {
+    it.each(texts)("%s reaches 4.5:1 on the tint over the solid card", (text) => {
+      const tint = blend(hexOf(palette, "primary"), hexOf(palette, "surface"), tintAlpha);
+      expect(contrast(hexOf(palette, text), tint)).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+
+  describe.each([
+    ["light", light, "primary", 0.1],
+    ["dark", dark, "background", 0.3],
+  ] as const)("the phone's row, %s palette", (_name, palette, tint, tintAlpha) => {
+    it.each(texts)(
+      "%s reaches 4.5:1 on the tint over the glass card, over every ground",
+      (text) => {
+        for (const ground of grounds) {
+          const card = over(palette, "card", hexOf(palette, ground));
+          const tinted = blend(hexOf(palette, tint), card, tintAlpha);
+          expect(contrast(hexOf(palette, text), tinted)).toBeGreaterThanOrEqual(4.5);
+        }
+      },
+    );
+  });
+
+  it("documents why the dark row is not green: the table's green tint over the glass card fails", () => {
+    // If this ever passes, the phone's row can use the same green as the table and this can go.
+    const card = over(dark, "card", hexOf(dark, "blob-1"));
+    const green = blend(hexOf(dark, "primary"), card, 0.12);
+    expect(contrast(hexOf(dark, "muted-foreground"), green)).toBeLessThan(4.5);
+  });
+});
+
 describe("bottom bar and toast", () => {
   it("states the bar's height (68 px) and its distance from the edge (12 px or the safe area)", () => {
     expect(light.get("bottom-nav-height")).toBe("68px");

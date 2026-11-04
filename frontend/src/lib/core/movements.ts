@@ -103,8 +103,12 @@ function readParam(source: ParamSource, name: string): string | undefined {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** An id as the backend takes it, in the one form the key of the query uses; anything else is left out (it would be a 422). */
-function normalizeId(text: string | undefined): string | undefined {
+/**
+ * An id as the backend takes it, in the one form the key of the query uses: a UUID in lowercase, or
+ * `undefined` for anything else (it would be a 422). The filters of the URL and the id of a movement
+ * in `?movimiento=editar&id=` (FE-23, KAN-83) read ids this way.
+ */
+export function normalizeId(text: string | undefined): string | undefined {
   return text !== undefined && UUID.test(text) ? text.toLowerCase() : undefined;
 }
 

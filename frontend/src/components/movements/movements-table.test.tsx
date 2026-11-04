@@ -1,5 +1,5 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MovementsTable } from "./movements-table";
 import {
   COMIDA,
@@ -19,7 +19,7 @@ function bodyRows() {
 }
 
 describe("MovementsTable", () => {
-  it("is a real table with a caption and the five columns of the canvas", () => {
+  it("is a real table with a caption and the columns of the canvas, the last one only for assistive technology", () => {
     render(<MovementsTable items={[movementItem()]} currency={UYU} />);
     const table = screen.getByRole("table", { name: "Movimientos" });
     const headers = within(table).getAllByRole("columnheader");
@@ -29,7 +29,10 @@ describe("MovementsTable", () => {
       "Categoría",
       "Cuenta",
       "Monto",
+      "Acciones",
     ]);
+    // Nothing to see in that header: the buttons say what they are.
+    expect(headers.at(-1)!.querySelector(".sr-only")?.textContent).toBe("Acciones");
   });
 
   it("takes the name a screen gives it", () => {
@@ -49,15 +52,159 @@ describe("MovementsTable", () => {
     expect(container.querySelector("thead button, thead a, thead [tabindex]")).toBeNull();
   });
 
-  it("has no control in any row: it is read only until FE-23", () => {
-    const { container } = render(
-      <MovementsTable
-        items={[movementItem(), incomeItem(), transferItem(), adjustmentItem()]}
-        currency={UYU}
-      />,
-    );
-    expect(container.querySelector("tbody a, tbody button, tbody [tabindex]")).toBeNull();
-    expect(screen.queryByText("Acciones")).toBeNull();
+  describe("what a row can do (FE-23, KAN-83)", () => {
+    const ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020";
+    const href = (id: string) => `/movimientos?movimiento=editar&id=${id}`;
+
+    /** The controls of a row, by kind and name, in the order of the page. */
+    function controls(row: HTMLElement) {
+      return Array.from(row.querySelectorAll("a, button, input, select, textarea, [tabindex]")).map(
+        (element) => ({
+          tag: element.tagName.toLowerCase(),
+          name: element.getAttribute("aria-label") ?? element.textContent,
+          href: element.getAttribute("href"),
+        }),
+      );
+    }
+
+    it("a movement that can be edited has its description as a link, 'Editar X' and 'Eliminar X'", () => {
+      render(
+        <MovementsTable
+          items={[movementItem({ id: ID, description: "Uber" })]}
+          currency={UYU}
+          onRemove={() => {}}
+        />,
+      );
+      expect(controls(bodyRows()[0]!)).toEqual([
+        { tag: "a", name: "Uber", href: href(ID) },
+        { tag: "a", name: "Editar Uber", href: href(ID) },
+        { tag: "button", name: "Eliminar Uber", href: null },
+      ]);
+    });
+
+    it("an adjustment, a pending and a skipped movement have 'Ver X' and no delete: the API refuses it", () => {
+      render(
+        <MovementsTable
+          items={[
+            adjustmentItem({ id: "a-1", description: "Ajuste de saldo" }),
+            movementItem({ id: "p-1", status: "pending", description: "Alquiler" }),
+            movementItem({ id: "s-1", status: "skipped", description: "Gimnasio" }),
+          ]}
+          currency={UYU}
+          onRemove={() => {}}
+        />,
+      );
+      const names = bodyRows().map((row) => controls(row).map((control) => control.name));
+      expect(names[0]).toEqual(["Ajuste de saldo", "Ver Ajuste de saldo"]);
+      expect(names[1]).toEqual(["Alquiler", "Ver Alquiler"]);
+      expect(names[2]).toEqual(["Gimnasio", "Ver Gimnasio"]);
+      expect(screen.queryByRole("button")).toBeNull();
+    });
+
+    it("without onRemove there is no delete at all, for any row (a table that only shows)", () => {
+      render(
+        <MovementsTable
+          items={[movementItem(), incomeItem(), transferItem(), adjustmentItem()]}
+          currency={UYU}
+        />,
+      );
+      expect(screen.queryByRole("button")).toBeNull();
+      expect(screen.getAllByRole("link")).toHaveLength(8);
+    });
+
+    it("has no tab stop made by hand, and the header still has no controls", () => {
+      const { container } = render(
+        <MovementsTable
+          items={[movementItem(), incomeItem(), transferItem(), adjustmentItem()]}
+          currency={UYU}
+          onRemove={() => {}}
+        />,
+      );
+      // The only tab stops are the links and the buttons themselves (Base UI gives its buttons a
+      // `tabindex`): no cell, row or span was made focusable by hand.
+      expect(container.querySelector("[tabindex]:not(a):not(button)")).toBeNull();
+      expect(container.querySelector("thead a, thead button, thead [tabindex]")).toBeNull();
+    });
+
+    it("names the buttons by the movement, cut like a toast when it is long", () => {
+      render(
+        <MovementsTable
+          items={[movementItem({ description: "a".repeat(200) })]}
+          currency={UYU}
+          onRemove={() => {}}
+        />,
+      );
+      expect(screen.getByRole("link", { name: `Editar ${"a".repeat(39)}…` })).toBeTruthy();
+      expect(screen.getByRole("button", { name: `Eliminar ${"a".repeat(39)}…` })).toBeTruthy();
+    });
+
+    it("asks to delete that movement and nothing else", () => {
+      const onRemove = vi.fn();
+      const uber = movementItem({ id: "m-uber", description: "Uber" });
+      const cafe = movementItem({ id: "m-cafe", description: "Café" });
+      render(<MovementsTable items={[uber, cafe]} currency={UYU} onRemove={onRemove} />);
+      fireEvent.click(screen.getByRole("button", { name: "Eliminar Café" }));
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      expect(onRemove).toHaveBeenCalledWith(cafe);
+    });
+
+    it("shows the delete of the movements being deleted busy, and only those", () => {
+      render(
+        <MovementsTable
+          items={[
+            movementItem({ id: "m-uber", description: "Uber" }),
+            movementItem({ id: "m-cafe", description: "Café" }),
+            movementItem({ id: "m-pan", description: "Pan" }),
+          ]}
+          currency={UYU}
+          onRemove={() => {}}
+          pendingIds={new Set(["m-cafe", "m-pan"])}
+        />,
+      );
+      for (const name of ["Eliminar Café", "Eliminar Pan"]) {
+        const busy = screen.getByRole("button", { name });
+        expect(busy.getAttribute("aria-busy")).toBe("true");
+        expect(busy.querySelector("svg")?.getAttribute("class")).toContain("animate-spin");
+      }
+      expect(
+        screen.getByRole("button", { name: "Eliminar Uber" }).getAttribute("aria-busy"),
+      ).toBeNull();
+    });
+
+    it("keeps the actions at 36 px with a mouse and 44 with a finger, at full strength", () => {
+      render(<MovementsTable items={[movementItem()]} currency={UYU} onRemove={() => {}} />);
+      for (const control of [
+        screen.getByRole("link", { name: /^Editar/ }),
+        screen.getByRole("button", { name: /^Eliminar/ }),
+      ]) {
+        expect(control.className).toContain("size-9");
+        expect(control.className).toContain("pointer-coarse:size-11");
+        expect(control.className).toContain("text-muted-foreground");
+        expect(control.className).not.toContain("opacity");
+      }
+    });
+
+    it("pins 'Acciones' to the right edge on a solid background, so it stays in reach when the card scrolls", () => {
+      render(<MovementsTable items={[movementItem()]} currency={UYU} onRemove={() => {}} />);
+      const head = screen.getAllByRole("columnheader").at(-1)!;
+      const cell = within(bodyRows()[0]!).getAllByRole("cell").at(-1)!;
+      for (const element of [head, cell]) {
+        expect(element.className).toContain("sticky");
+        expect(element.className).toContain("right-0");
+        expect(element.className).toContain("bg-surface");
+        expect(element.className).toContain("w-21");
+      }
+      // The tint of the hovered row is drawn over that solid cell, so the row reads as one.
+      expect(cell.className).toContain("group-hover:after:opacity-100");
+      expect(bodyRows()[0]!.className).toContain("group");
+    });
+
+    it("tints a row under the mouse with the sel of the canvas", () => {
+      render(<MovementsTable items={[movementItem()]} currency={UYU} />);
+      const row = bodyRows()[0]!;
+      expect(row.className).toContain("hover:bg-primary/10");
+      expect(row.className).toContain("dark:hover:bg-primary/12");
+    });
   });
 
   it("writes a row: the date, the description as the row header, the category chip, the account and the amount", () => {
@@ -65,11 +212,13 @@ describe("MovementsTable", () => {
     const [row] = bodyRows();
     const cells = within(row!).getAllByRole("cell");
     expect(within(row!).getByRole("rowheader").textContent).toBe("Tienda Inglesa");
+    // The last cell is "Acciones": its buttons have no text, they have names.
     expect(cells.map((cell) => cell.textContent)).toEqual([
       "20 oct.",
       "Comida › Supermercado",
       "Visa Itaú",
       "−$ 2.340,00",
+      "",
     ]);
   });
 
@@ -93,7 +242,7 @@ describe("MovementsTable", () => {
       />,
     );
     const amounts = bodyRows().map((row) => {
-      const cell = within(row).getAllByRole("cell").at(-1)!;
+      const cell = within(row).getAllByRole("cell").at(-2)!;
       return { text: cell.textContent, className: cell.className };
     });
     expect(amounts[0]!.text).toBe("−$ 2.340,00");
@@ -189,7 +338,7 @@ describe("MovementsTable", () => {
         currency={UYU}
       />,
     );
-    const amount = within(bodyRows()[0]!).getAllByRole("cell").at(-1)!;
+    const amount = within(bodyRows()[0]!).getAllByRole("cell").at(-2)!;
     expect(amount.textContent).toBe("+$ 90.071.992.547.409,91");
     expect(amount.className).not.toContain("truncate");
     expect(amount.className).toContain("whitespace-nowrap");
@@ -207,7 +356,7 @@ describe("MovementsTable", () => {
 
   it("draws just the head for no rows", () => {
     render(<MovementsTable items={[]} currency={UYU} />);
-    expect(screen.getAllByRole("columnheader")).toHaveLength(5);
+    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
     expect(screen.queryAllByRole("rowheader")).toHaveLength(0);
   });
 });

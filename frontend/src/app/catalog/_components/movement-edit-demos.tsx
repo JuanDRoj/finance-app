@@ -248,17 +248,17 @@ type MovementKey = keyof typeof MOVEMENTS;
 /** Every movement of the scripted space: the ones above, so they can all be opened, deleted and restored. */
 const ALL_MOVEMENTS: MovementListItem[] = Object.values(MOVEMENTS).map(({ item }) => item);
 
-type OpenOutcome = "ok" | "slow" | "notFound" | "server";
-const OPEN_OUTCOMES: Record<OpenOutcome, string> = {
+export type OpenOutcome = "ok" | "slow" | "notFound" | "server";
+export const OPEN_OUTCOMES: Record<OpenOutcome, string> = {
   ok: "Todo bien",
   slow: "Tarda 2 s en abrir",
   notFound: "404: ya no existe (o es de otro espacio)",
   server: "500: error del servidor",
 };
 
-type SaveOutcome =
+export type SaveOutcome =
   "ok" | "never" | "notFound" | "notEditable" | "accountArchived" | "amount" | "server" | "offline";
-const SAVE_OUTCOMES: Record<SaveOutcome, string> = {
+export const SAVE_OUTCOMES: Record<SaveOutcome, string> = {
   ok: "Todo bien (tarda 1 s)",
   never: "Se queda enviando (nunca responde)",
   notFound: "404: el movimiento ya no existe",
@@ -269,8 +269,8 @@ const SAVE_OUTCOMES: Record<SaveOutcome, string> = {
   offline: "Sin conexión",
 };
 
-type DeleteOutcome = "ok" | "never" | "notFound" | "accountArchived" | "server" | "offline";
-const DELETE_OUTCOMES: Record<DeleteOutcome, string> = {
+export type DeleteOutcome = "ok" | "never" | "notFound" | "accountArchived" | "server" | "offline";
+export const DELETE_OUTCOMES: Record<DeleteOutcome, string> = {
   ok: "Todo bien (tarda 1 s)",
   never: "Se queda eliminando (nunca responde)",
   notFound: "404: el movimiento ya no existe",
@@ -279,8 +279,8 @@ const DELETE_OUTCOMES: Record<DeleteOutcome, string> = {
   offline: "Sin conexión",
 };
 
-type RestoreOutcome = "ok" | "accountArchived" | "notFound" | "server" | "offline";
-const RESTORE_OUTCOMES: Record<RestoreOutcome, string> = {
+export type RestoreOutcome = "ok" | "accountArchived" | "notFound" | "server" | "offline";
+export const RESTORE_OUTCOMES: Record<RestoreOutcome, string> = {
   ok: "Todo bien",
   accountArchived: "409: la cuenta se archivó mientras tanto (sin «Reintentar»)",
   notFound: "404: ya no existe (sin «Reintentar»)",
@@ -288,7 +288,8 @@ const RESTORE_OUTCOMES: Record<RestoreOutcome, string> = {
   offline: "Sin conexión (con «Reintentar», 10 s)",
 };
 
-const FAULT_OF = {
+/** The fault of the scripted backend for each answer the selects offer (`undefined`: it answers well). */
+export const FAULT_OF = {
   notFound: "not-found",
   notEditable: "not-editable",
   accountArchived: "account-archived",
@@ -400,7 +401,7 @@ function EditDemo({ movementKey, currency, outcomes, instant }: EditDemoProps) {
   const total = useQuery(transactionsSummaryQueryOptions(api, SPACE_ID, {}));
   const keyboardInset = useKeyboardInset(open && !desktop);
 
-  const { remove, pendingId } = useDeleteMovement({
+  const { remove, pendingIds } = useDeleteMovement({
     spaceId: SPACE_ID,
     api,
     onDeleted: (deleted) => {
@@ -480,7 +481,7 @@ function EditDemo({ movementKey, currency, outcomes, instant }: EditDemoProps) {
           onCancel={close}
           onNeedAccount={close}
           onDelete={() => remove(movementRead)}
-          deleting={pendingId === movementRead.id}
+          deleting={pendingIds.has(movementRead.id)}
           api={api}
         />
       ) : (
@@ -518,7 +519,7 @@ function EditDemo({ movementKey, currency, outcomes, instant }: EditDemoProps) {
         {isMovementEditable(item) ? (
           <Button
             variant="outline"
-            loading={pendingId === item.id}
+            loading={pendingIds.has(item.id)}
             onClick={() => {
               setLog(null);
               remove(item);

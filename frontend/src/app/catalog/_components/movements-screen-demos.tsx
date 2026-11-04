@@ -5,6 +5,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 import { MovementsHeaderActions } from "@/app/movimientos/_components/movements-header-actions";
 import { MovementsScreen } from "@/app/movimientos/_components/movements-screen";
 import { MovementsSubtitle } from "@/app/movimientos/_components/movements-subtitle";
+import { MovementPanelHost } from "@/components/movements/movement-panel";
 import {
   scriptedMovementsApi,
   type Fault,
@@ -15,6 +16,17 @@ import { Button } from "@/components/ui/button";
 import type { MovementListItem } from "@/lib/core/data/transactions";
 import { transactionsQueryKey } from "@/lib/core/data/transactions";
 import { Isolated } from "./category-demos";
+import {
+  DELETE_OUTCOMES,
+  FAULT_OF,
+  OPEN_OUTCOMES,
+  RESTORE_OUTCOMES,
+  SAVE_OUTCOMES,
+  type DeleteOutcome,
+  type OpenOutcome,
+  type RestoreOutcome,
+  type SaveOutcome,
+} from "./movement-edit-demos";
 import {
   ACCOUNT_CHOICES,
   CATEGORY_CHOICES,
@@ -39,6 +51,8 @@ const SPACE = {
   id: "00000000-0000-4000-8000-000000000000",
   currency: { code: "UYU", exponent: 2 },
 };
+/** What the host of the sheet and the panel needs besides: the zone that makes «hoy» (FE-23). */
+const HOST_SPACE = { ...SPACE, timezone: "America/Montevideo" };
 const CURRENT_MONTH = "2026-10";
 
 const byDateDesc = (items: MovementListItem[]) =>
@@ -132,7 +146,23 @@ const LISTS_CHOICES: Record<ListsLoad, string> = {
   both: "Las dos fallan",
 };
 
-type Settings = { load: ListLoad; next: NextPage; summary?: SummaryLoad; lists?: ListsLoad };
+/**
+ * What the sheet, the panel and the delete answer (FE-23): the same choices as the section «Editar y
+ * borrar movimientos», here on the real screen. All optional: the older callers do not have them.
+ */
+type MovementAnswers = {
+  open?: OpenOutcome;
+  save?: SaveOutcome;
+  remove?: DeleteOutcome;
+  restore?: RestoreOutcome;
+};
+
+type Settings = {
+  load: ListLoad;
+  next: NextPage;
+  summary?: SummaryLoad;
+  lists?: ListsLoad;
+} & MovementAnswers;
 
 /** What goes wrong for a request, given what the selects say. `listAnswers` counts the lists that already answered. */
 export function faultFor(
@@ -157,6 +187,11 @@ export function faultFor(
   const lists = settings.lists ?? "ok";
   if (call.kind === "accounts" && (lists === "accounts" || lists === "both")) return "server";
   if (call.kind === "categories" && (lists === "categories" || lists === "both")) return "server";
+  // One movement: opening it, saving it, deleting it and undoing the delete.
+  if (call.kind === "detail") return FAULT_OF[settings.open ?? "ok"];
+  if (call.kind === "update") return FAULT_OF[settings.save ?? "ok"];
+  if (call.kind === "delete") return FAULT_OF[settings.remove ?? "ok"];
+  if (call.kind === "restore") return FAULT_OF[settings.restore ?? "ok"];
   return undefined;
 }
 
@@ -180,6 +215,10 @@ export function demoApi({
   next,
   summary = "ok",
   lists = "ok",
+  open,
+  save,
+  remove,
+  restore,
   instant,
 }: Readonly<{
   data: ScreenData;
@@ -190,7 +229,8 @@ export function demoApi({
   summary?: SummaryLoad;
   lists?: ListsLoad;
   instant: boolean;
-}>) {
+}> &
+  MovementAnswers) {
   let answered = 0;
   const items = itemsOf(data);
   const accountList = accountsFor(accounts, items);
@@ -200,11 +240,23 @@ export function demoApi({
     accounts: () => accountList,
     categories: () => categoryList,
     fault: (call) => {
-      const fault = faultFor({ load, next, summary, lists }, call, answered);
+      const fault = faultFor(
+        { load, next, summary, lists, open, save, remove, restore },
+        call,
+        answered,
+      );
       if (call.kind === "list" && fault === undefined) answered += 1;
       return fault;
     },
-    delay: (call) => (instant ? 0 : next === "slow" && call.kind === "next-page" ? 1500 : 250),
+    delay: (call) => {
+      if (instant) return 0;
+      if (next === "slow" && call.kind === "next-page") return 1500;
+      // The tests of a sheet that takes its time: the skeleton and the busy buttons are seen.
+      if (call.kind === "detail" && open === "slow") return 2000;
+      if (call.kind === "update" && save === "ok") return 1000;
+      if (call.kind === "delete" && remove === "ok") return 1000;
+      return 250;
+    },
   });
 }
 
@@ -264,18 +316,36 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
   const [load, setLoad] = useState<ListLoad>("ok");
   const [next, setNext] = useState<NextPage>("ok");
   const [summary, setSummary] = useState<SummaryLoad>("ok");
+  const [open, setOpen] = useState<OpenOutcome>("ok");
+  const [save, setSave] = useState<SaveOutcome>("ok");
+  const [remove, setRemove] = useState<DeleteOutcome>("ok");
+  const [restore, setRestore] = useState<RestoreOutcome>("ok");
   const [round, setRound] = useState(0);
 
   // A new backend for every choice: changing what goes wrong starts the screen again, so "falla al
   // refrescar" always begins with a first list that answers well.
   const api = useMemo(
-    () => demoApi({ data, accounts, categories, load, next, summary, lists, instant }),
-    [data, accounts, categories, load, next, summary, lists, instant],
+    () =>
+      demoApi({
+        data,
+        accounts,
+        categories,
+        load,
+        next,
+        summary,
+        lists,
+        open,
+        save,
+        remove,
+        restore,
+        instant,
+      }),
+    [data, accounts, categories, load, next, summary, lists, open, save, remove, restore, instant],
   );
 
   return (
     <Isolated
-      key={`${data}-${accounts}-${categories}-${lists}-${load}-${next}-${summary}-${round}`}
+      key={`${data}-${accounts}-${categories}-${lists}-${load}-${next}-${summary}-${open}-${save}-${remove}-${restore}-${round}`}
     >
       <div className="flex flex-col gap-4">
         <div className="grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -356,6 +426,50 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
               </option>
             ))}
           </SelectField>
+          <SelectField
+            label="Qué responde al abrir un movimiento"
+            value={open}
+            onChange={(event) => setOpen(event.target.value as OpenOutcome)}
+          >
+            {(Object.keys(OPEN_OUTCOMES) as OpenOutcome[]).map((key) => (
+              <option key={key} value={key}>
+                {OPEN_OUTCOMES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué responde al guardar los cambios"
+            value={save}
+            onChange={(event) => setSave(event.target.value as SaveOutcome)}
+          >
+            {(Object.keys(SAVE_OUTCOMES) as SaveOutcome[]).map((key) => (
+              <option key={key} value={key}>
+                {SAVE_OUTCOMES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué responde al eliminar"
+            value={remove}
+            onChange={(event) => setRemove(event.target.value as DeleteOutcome)}
+          >
+            {(Object.keys(DELETE_OUTCOMES) as DeleteOutcome[]).map((key) => (
+              <option key={key} value={key}>
+                {DELETE_OUTCOMES[key]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Qué responde «Deshacer»"
+            value={restore}
+            onChange={(event) => setRestore(event.target.value as RestoreOutcome)}
+          >
+            {(Object.keys(RESTORE_OUTCOMES) as RestoreOutcome[]).map((key) => (
+              <option key={key} value={key}>
+                {RESTORE_OUTCOMES[key]}
+              </option>
+            ))}
+          </SelectField>
         </div>
         <p className="text-sm text-muted-foreground">
           La pantalla de abajo es la real; «Hoy» es el miércoles 21 de octubre de 2026 y el mes de
@@ -367,6 +481,16 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
           la caja con el teclado); la cuenta y la categoría son los selects de la tarjeta o el botón
           «Filtrar» (la hoja). Con «Carga bien y falla al refrescar», «Refrescar la lista» pide de
           nuevo y falla.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Tocar una fila (bajo 1024 px) o su descripción, el lápiz o el ojo (desde 1024 px) abre el
+          movimiento en una hoja o un panel, y escribe <code>?movimiento=editar&amp;id=…</code> en
+          la dirección de esta página; el panel es el mismo que tiene la app en todas sus pantallas.
+          Un gasto, un ingreso y una transferencia se editan; un ajuste, un pendiente, un omitido y
+          un movimiento de una cuenta archivada (elige «Qué cuentas hay» con archivadas) se ven en
+          solo lectura. La papelera de la tabla elimina sin preguntar, con el aviso «Eliminaste «…»»
+          y «Deshacer» (con el teclado, Alt+T lleva el foco al aviso); la fila siguiente recibe el
+          foco. Cambiar un selector de «Qué responde…» empieza de nuevo el servidor de mentira.
         </p>
         <div className="flex flex-wrap gap-2">
           {TRY_URLS.map(([label, search]) => (
@@ -407,6 +531,8 @@ export function MovementsScreenDemo({ instant = false }: Readonly<{ instant?: bo
           </div>
         </div>
         <MovementsScreen space={SPACE} currentMonth={CURRENT_MONTH} today={TODAY} api={api} />
+        {/* The sheet and the panel of the shell: here they have this page's address and this backend. */}
+        <MovementPanelHost space={HOST_SPACE} api={api} />
         <div className="flex flex-wrap gap-3">
           <RefreshButton />
           <Button variant="secondary" size="sm" onClick={() => setRound((n) => n + 1)}>

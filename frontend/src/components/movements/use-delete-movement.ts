@@ -25,6 +25,8 @@ export const DELETE_TOAST_MS = 6000;
 /** How long the toast of a failed "Deshacer" lasts: it carries "Reintentar", the last way back. */
 export const UNDO_FAILED_TOAST_MS = 10_000;
 
+const NONE: ReadonlySet<string> = new Set();
+
 /** A movement to delete: its id and what the toast calls it (any list item or detail has both). */
 export type DeletableMovement = MovementLike & { id: string };
 
@@ -65,8 +67,9 @@ type UseDeleteMovementOptions = {
  * - **One at a time per movement.** A movement already being deleted (or deleted and not undone) is
  *   not sent again; another movement is. The hook can be shared by every row of a list.
  *
- * `pendingId` is the movement being deleted now, to put a busy state on its button. With several in
- * flight it is the last one asked for, and a delete that ends clears it only if it is still its own.
+ * `pendingIds` are the movements being deleted now, to put a busy state on each button (the rows of a
+ * table share one hook, and two deletes can be on their way at once): a delete that ends takes out
+ * only its own id.
  */
 export function useDeleteMovement({
   spaceId,
@@ -75,10 +78,19 @@ export function useDeleteMovement({
 }: UseDeleteMovementOptions) {
   const queryClient = useQueryClient();
   const router = useRouter();
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(NONE);
   // Set before `mutate` (state comes from the render before, and a second tap would still find the
   // button enabled), released if the delete fails or the toast undoes it.
   const deleted = useRef(new Set<string>());
+
+  function stopPending(id: string) {
+    setPendingIds((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
 
   function refreshLists() {
     void queryClient.invalidateQueries({ queryKey: [...spaceQueryKey(spaceId), "accounts"] });
@@ -119,7 +131,7 @@ export function useDeleteMovement({
     mutationFn: (movement: DeletableMovement) => deleteTransaction(api, spaceId, movement.id),
     onSuccess: (_result, movement) => {
       // Only this movement stops being busy: another one may still be on its way.
-      setPendingId((current) => (current === movement.id ? null : current));
+      stopPending(movement.id);
       removeMovementFromListCache(queryClient, spaceId, movement.id);
       // The detail of a movement that no longer exists would be a 404 (`GET` of a deleted one): take
       // it out before the invalidation below, which reaches it (its key hangs from the movements' root)
@@ -146,7 +158,7 @@ export function useDeleteMovement({
       router.refresh();
     },
     onError: (failure, movement) => {
-      setPendingId((current) => (current === movement.id ? null : current));
+      stopPending(movement.id);
       deleted.current.delete(movement.id);
       if (isUnauthorized(failure)) {
         window.location.replace("/login");
@@ -166,11 +178,11 @@ export function useDeleteMovement({
     (movement: DeletableMovement) => {
       if (deleted.current.has(movement.id)) return;
       deleted.current.add(movement.id);
-      setPendingId(movement.id);
+      setPendingIds((current) => new Set(current).add(movement.id));
       mutate(movement);
     },
     [mutate],
   );
 
-  return { remove, pendingId };
+  return { remove, pendingIds };
 }

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { findMovementLink } from "@/components/movements/movement-link";
 import { MovementDayGroups } from "@/components/movements/movement-day-group";
 import { MovementsEmpty } from "@/components/movements/movements-empty";
 import { MovementsError } from "@/components/movements/movements-error";
@@ -15,6 +16,7 @@ import { MovementsNoResults } from "@/components/movements/movements-no-results"
 import { MovementsSkeleton } from "@/components/movements/movements-skeleton";
 import { MovementsSummary } from "@/components/movements/movements-summary";
 import { MovementsTable } from "@/components/movements/movements-table";
+import { useDeleteMovement } from "@/components/movements/use-delete-movement";
 import { NEW_ACCOUNT_ACTION, PRIMARY_ACTION } from "@/components/nav-sections";
 import { DESKTOP_MEDIA_QUERY } from "@/components/use-is-desktop";
 import { Alert } from "@/components/ui/alert";
@@ -98,7 +100,13 @@ type MovementsScreenProps = {
  *   "Quitar filtros" (the empty state's and the sheet's) also empties a text typed and not yet searched.
  * - **A space with no movement** shows the invitation. On desktop it hides the filters and the
  *   figures (there is nothing to filter); on a phone the month and the chips stay, as the canvas draws.
- * - The rows are **read only** (FE-22); editing and deleting are FE-23's.
+ * - **Open and delete (FE-23, KAN-83).** A row of the phone's list, and the description and the "Editar
+ *   X" / "Ver X" of the table, are links (`MovementLink`) that write `?movimiento=editar&id=` in the
+ *   address; the sheet or the panel that opens is the shell's (`MovementPanelHost`). "Eliminar X" of
+ *   the table deletes at once with the toast "Eliminaste «…»" and "Deshacer" (`useDeleteMovement`,
+ *   one hook for every row: `pendingIds` says which rows are busy). A phone deletes from the sheet.
+ *   When a row leaves the focus goes to the description of the next row, or the one before, or the
+ *   title of the screen: the button it was on is gone, and the page would take the focus otherwise.
  */
 export function MovementsScreen({
   space,
@@ -122,6 +130,34 @@ export function MovementsScreen({
   const categories = useQuery(categoriesQueryOptions(api, space.id, { includeArchived: true }));
 
   const rows = useMemo(() => flattenMovementPages(list.data), [list.data]);
+
+  // Deleting a row: the hook takes it out of the cache and then calls `onDeleted`, in the same turn, so
+  // `rowsRef` still has it and tells who the neighbour is. The focus moves in the effect below, once
+  // the list has been drawn without the row (a focus on a node that is about to go would be lost).
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+  const focusAfterRemoval = useRef<{ removedId: string; neighbourId: string | null } | null>(null);
+  const { remove, pendingIds } = useDeleteMovement({
+    spaceId: space.id,
+    api,
+    onDeleted: (deleted) => {
+      const all = rowsRef.current;
+      const index = all.findIndex((row) => row.id === deleted.id);
+      const neighbour = all[index + 1] ?? all[index - 1];
+      focusAfterRemoval.current = { removedId: deleted.id, neighbourId: neighbour?.id ?? null };
+    },
+  });
+  useEffect(() => {
+    const pending = focusAfterRemoval.current;
+    if (!pending || rows.some((row) => row.id === pending.removedId)) return;
+    focusAfterRemoval.current = null;
+    const target =
+      (pending.neighbourId ? findMovementLink(pending.neighbourId) : null) ??
+      document.querySelector<HTMLElement>("h1");
+    target?.focus();
+  }, [rows]);
   const groups = useMemo(() => groupMovementsByDay(rows, today), [rows, today]);
 
   const placeholder = list.isPlaceholderData;
@@ -268,6 +304,8 @@ export function MovementsScreen({
             today={today}
             caption={`Movimientos de ${period}`}
             className="mb-1"
+            onRemove={remove}
+            pendingIds={pendingIds}
           />
           <MoreFooter
             text={shown}

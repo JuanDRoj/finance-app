@@ -101,6 +101,14 @@ describe("MovementPiecesDemo", () => {
     expect(within(table).getByText("Itaú → Visa Itaú")).toBeTruthy();
   });
 
+  it("does not write the address when a row is clicked: there is no shell here to open the sheet (FE-23)", () => {
+    render(<MovementPiecesDemo limit={5} />);
+    const links = document.querySelectorAll<HTMLElement>("[data-movement-link]");
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) fireEvent.click(link);
+    expect(window.location.search).toBe("");
+  });
+
   it("takes the worst case without breaking: every row is still there, no raw 'null' or 'undefined'", () => {
     render(<MovementPiecesDemo />);
     choose("Qué movimientos hay", "worst");
