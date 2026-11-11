@@ -73,6 +73,27 @@ afterEach(() => {
   replaceState(null, "", "/");
 });
 
+/**
+ * The "Cargar más" button, looked for in the foot of the table. A role query with a name computes the
+ * name and the visibility of **every** button in the page, about 5 ms each in jsdom, and since FE-23 the
+ * table has an "Eliminar" button per row: asking the whole page with 120 rows costs about 0.8 s a time (a
+ * test that asks three times with 500 rows runs out of its 5 s). The foot has one button, so the
+ * query is the same and costs a millisecond.
+ */
+const moreFooter = () => document.querySelector<HTMLElement>("[data-slot='more-footer']");
+const moreButton = () => within(moreFooter()!).getByRole("button", { name: "Cargar más" });
+/**
+ * The count of the foot ("Mostrando 100 de 500 movimientos"), waited for in the foot. `findByText` on
+ * the page looks at every element on each change of the page, and a table of 100 rows has a thousand
+ * of them: it took more than the rows to draw.
+ */
+const findShown = (text: string) =>
+  waitFor(() => {
+    const footer = moreFooter();
+    if (!footer) throw new Error("The foot of the table is not in the page yet");
+    return within(footer).getByText(text);
+  });
+
 const choose = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
@@ -392,8 +413,8 @@ describe("MovementsScreenDemo", () => {
     render(<MovementsScreenDemo instant />);
     choose("Qué movimientos hay", "many");
     choose("Qué responde la página siguiente", "invalid");
-    await screen.findByText("Mostrando 50 de 500 movimientos");
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    await findShown("Mostrando 50 de 500 movimientos");
+    fireEvent.click(moreButton());
     await screen.findByText("No se pudieron cargar más movimientos");
     expect(screen.getByRole("alert").textContent).not.toContain("desde el principio");
   });
@@ -410,12 +431,12 @@ describe("MovementsScreenDemo", () => {
   it("pages the 500 movements ten by ten, and the next page can fail", async () => {
     render(<MovementsScreenDemo instant />);
     choose("Qué movimientos hay", "many");
-    await screen.findByText("Mostrando 50 de 500 movimientos");
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-    await screen.findByText("Mostrando 100 de 500 movimientos");
+    await findShown("Mostrando 50 de 500 movimientos");
+    fireEvent.click(moreButton());
+    await findShown("Mostrando 100 de 500 movimientos");
     choose("Qué responde la página siguiente", "offline");
-    await screen.findByText("Mostrando 50 de 500 movimientos");
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+    await findShown("Mostrando 50 de 500 movimientos");
+    fireEvent.click(moreButton());
     await screen.findByText("No se pudieron cargar más movimientos");
   });
 

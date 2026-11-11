@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { MovementListItem } from "@/lib/core/data/transactions";
 import {
   describeMovementSubline,
@@ -30,8 +31,11 @@ import { MovementLink } from "./movement-link";
  * Title and line are one line each and are cut with "…" (the whole text is in `title`); the amount
  * is never cut, but at the largest value the backend takes it may take two lines (at most 60 % of
  * the row) so the text does not vanish.
+ *
+ * A `memo`: a page of "Cargar más" makes new day groups, but a movement already on screen is the same
+ * object (TanStack Query keeps it), so only the new rows render.
  */
-export function MovementRow({
+export const MovementRow = memo(function MovementRow({
   item,
   currency,
 }: Readonly<{ item: MovementListItem; currency: Currency }>) {
@@ -70,4 +74,4 @@ export function MovementRow({
       </MovementLink>
     </li>
   );
-}
+});

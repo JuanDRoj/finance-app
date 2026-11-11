@@ -143,7 +143,13 @@ export const MovementsTable = memo(function MovementsTable({
   );
 });
 
-function MovementTableRow({
+/**
+ * One row. A `memo` on its own: when a page of "Cargar más" arrives, `items` is a new array but the
+ * movements already on screen are the same objects (TanStack Query keeps them), and so are the other
+ * props (`pending` is a boolean, the rest are stable), so only the new rows render. With 500 loaded,
+ * that is the difference between 50 rows and 500 on each page.
+ */
+const MovementTableRow = memo(function MovementTableRow({
   item,
   currency,
   today,
@@ -246,4 +252,4 @@ function MovementTableRow({
       </td>
     </tr>
   );
-}
+});

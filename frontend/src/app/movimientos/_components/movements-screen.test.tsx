@@ -179,6 +179,32 @@ function setup({
   return { api, client, state, view };
 }
 
+/**
+ * The "Cargar más" button, looked for in the foot of the table. A role query with a name computes the
+ * name and the visibility of **every** button in the page, about 5 ms each in jsdom, and since FE-23 the
+ * table has an "Eliminar" button per row: asking the whole page with 120 rows costs about 0.8 s a time (a
+ * test that asks three times with 500 rows runs out of its 5 s). The foot has one button, so the
+ * query is the same and costs a millisecond.
+ */
+const moreFooter = () => document.querySelector<HTMLElement>("[data-slot='more-footer']");
+const moreButton = () => within(moreFooter()!).getByRole("button", { name: "Cargar más" });
+const queryMoreButton = () => {
+  const footer = moreFooter();
+  return footer ? within(footer).queryByRole("button", { name: "Cargar más" }) : null;
+};
+const findMoreButton = () => waitFor(() => moreButton());
+/**
+ * The count of the foot ("Mostrando 100 de 120 movimientos"), waited for in the foot. `findByText` on
+ * the page looks at every element on each change of the page, and a table of 100 rows has a thousand
+ * of them: it took more than the rows to draw.
+ */
+const findShown = (text: string) =>
+  waitFor(() => {
+    const footer = moreFooter();
+    if (!footer) throw new Error("The foot of the table is not in the page yet");
+    return within(footer).getByText(text);
+  });
+
 const kinds = (api: ScriptedMovementsApi) => api.calls.map((call) => call.kind);
 const callsOf = (api: ScriptedMovementsApi, kind: ScriptedCall["kind"]) =>
   api.calls.filter((call) => call.kind === kind);
@@ -1469,31 +1495,31 @@ describe("more movements", () => {
     setup({ items: expenses(120) });
     await loaded();
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(51);
-    await screen.findByText("Mostrando 50 de 120 movimientos");
+    await findShown("Mostrando 50 de 120 movimientos");
   });
 
   it("loads the next page with 'Cargar más' and goes on until the last, where the button goes away", async () => {
     const { api } = setup({ items: expenses(120) });
     await loaded();
-    await screen.findByText("Mostrando 50 de 120 movimientos");
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-    await screen.findByText("Mostrando 100 de 120 movimientos");
+    await findShown("Mostrando 50 de 120 movimientos");
+    fireEvent.click(moreButton());
+    await findShown("Mostrando 100 de 120 movimientos");
     expect(callsOf(api, "next-page")[0]!.query).toEqual({
       month: CURRENT,
       limit: 50,
       cursor: "cursor:50",
     });
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-    await screen.findByText("Mostrando 120 de 120 movimientos");
-    expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull();
+    fireEvent.click(moreButton());
+    await findShown("Mostrando 120 de 120 movimientos");
+    expect(queryMoreButton()).toBeNull();
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(121);
   });
 
   it("has no 'Cargar más' when everything fits in the first page", async () => {
     setup({ items: expenses(50) });
     await loaded();
-    await screen.findByText("Mostrando 50 de 50 movimientos");
-    expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull();
+    await findShown("Mostrando 50 de 50 movimientos");
+    expect(queryMoreButton()).toBeNull();
   });
 
   it("asks for one page only when 'Cargar más' is pressed twice in a row", async () => {
@@ -1502,13 +1528,13 @@ describe("more movements", () => {
       delay: (call) => (call.kind === "next-page" ? 30 : 0),
     });
     await loaded();
-    await screen.findByText("Mostrando 50 de 120 movimientos");
-    const button = screen.getByRole("button", { name: "Cargar más" });
+    await findShown("Mostrando 50 de 120 movimientos");
+    const button = moreButton();
     act(() => {
       button.click();
       button.click();
     });
-    await screen.findByText("Mostrando 100 de 120 movimientos");
+    await findShown("Mostrando 100 de 120 movimientos");
     expect(callsOf(api, "next-page")).toHaveLength(1);
   });
 
@@ -1521,8 +1547,8 @@ describe("more movements", () => {
     }));
     setup({ items });
     await loaded();
-    fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
-    await screen.findByText("Mostrando 100 de 120 movimientos");
+    fireEvent.click(moreButton());
+    await findShown("Mostrando 100 de 120 movimientos");
     expect(screen.getAllByRole("heading", { name: /^Ayer/ })).toHaveLength(1);
     const section = screen.getByRole("region", { name: /^Ayer/ });
     expect(within(section).getAllByRole("listitem")).toHaveLength(53);
@@ -1534,7 +1560,7 @@ describe("more movements", () => {
       await loaded();
       expect(FakeObserver.live).toHaveLength(1);
       act(() => FakeObserver.live[0]!.report(true));
-      await screen.findByText("Mostrando 100 de 120 movimientos");
+      await findShown("Mostrando 100 de 120 movimientos");
       expect(callsOf(api, "next-page")).toHaveLength(1);
     });
 
@@ -1544,7 +1570,7 @@ describe("more movements", () => {
       act(() => FakeObserver.live[0]!.report(true));
       await screen.findByText("Cargando más movimientos");
       expect(FakeObserver.live).toHaveLength(0);
-      await screen.findByText("Mostrando 100 de 120 movimientos");
+      await findShown("Mostrando 100 de 120 movimientos");
       await waitFor(() => expect(FakeObserver.live).toHaveLength(1));
     });
 
@@ -1566,7 +1592,7 @@ describe("more movements", () => {
     it("waits while the rows are the previous filters': their cursor is of another list", async () => {
       const { state, api } = setup({ items: expenses(120) });
       await loaded();
-      await screen.findByRole("button", { name: "Cargar más" });
+      await findMoreButton();
       state.delay = (call) => (call.kind === "list" ? 60 : 0);
       fireEvent.click(desktopFilters().getByRole("button", { name: "Gastos" }));
       await waitFor(() => expect(document.querySelector("[aria-busy='true']")).not.toBeNull());
@@ -1574,10 +1600,10 @@ describe("more movements", () => {
       // sentinel is not watching and "Cargar más" is not there. Nothing sends the old cursor
       // with the new filters.
       expect(FakeObserver.live).toHaveLength(0);
-      expect(screen.queryByRole("button", { name: "Cargar más" })).toBeNull();
+      expect(queryMoreButton()).toBeNull();
       await waitFor(() => expect(document.querySelector("[aria-busy='true']")).toBeNull());
       expect(FakeObserver.live).toHaveLength(1);
-      expect(screen.getByRole("button", { name: "Cargar más" })).toBeTruthy();
+      expect(moreButton()).toBeTruthy();
       expect(callsOf(api, "next-page")).toHaveLength(0);
     });
   });
@@ -1594,16 +1620,14 @@ describe("more movements", () => {
       await screen.findByText("No se pudieron cargar más movimientos");
       // The sentinel is off and the button too: no loop, however long the person scrolls.
       expect(FakeObserver.live).toHaveLength(0);
-      expect(screen.getByRole("button", { name: "Cargar más" }).getAttribute("aria-disabled")).toBe(
-        "true",
-      );
+      expect(moreButton().getAttribute("aria-disabled")).toBe("true");
       await act(async () => {});
       expect(callsOf(api, "next-page")).toHaveLength(1);
       // The rows that were there stay.
       expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(51);
       broken = false;
       fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-      await screen.findByText("Mostrando 100 de 120 movimientos");
+      await findShown("Mostrando 100 de 120 movimientos");
       expect(screen.queryByText("No se pudieron cargar más movimientos")).toBeNull();
       expect(callsOf(api, "next-page")).toHaveLength(2);
     });
@@ -1615,14 +1639,14 @@ describe("more movements", () => {
         fault: (call) => (broken && call.kind === "next-page" ? "cursor" : undefined),
       });
       await loaded();
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+      fireEvent.click(moreButton());
       await screen.findByText("No se pudieron cargar más movimientos");
       expect(screen.getByRole("alert").textContent).toContain("desde el principio");
       broken = false;
       const listCalls = callsOf(api, "list").length;
       fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
       await waitFor(() => expect(callsOf(api, "list").length).toBe(listCalls + 1));
-      await screen.findByText("Mostrando 50 de 120 movimientos");
+      await findShown("Mostrando 50 de 120 movimientos");
       expect(screen.queryByText("No se pudieron cargar más movimientos")).toBeNull();
     });
 
@@ -1633,14 +1657,14 @@ describe("more movements", () => {
         fault: (call) => (broken && call.kind === "next-page" ? "invalid" : undefined),
       });
       await loaded();
-      fireEvent.click(screen.getByRole("button", { name: "Cargar más" }));
+      fireEvent.click(moreButton());
       await screen.findByText("No se pudieron cargar más movimientos");
       // It is not the unreadable cursor, so it does not say the list changed.
       expect(screen.getByRole("alert").textContent).not.toContain("desde el principio");
       broken = false;
       const listCalls = callsOf(api, "list").length;
       fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-      await screen.findByText("Mostrando 100 de 120 movimientos");
+      await findShown("Mostrando 100 de 120 movimientos");
       expect(screen.queryByText("No se pudieron cargar más movimientos")).toBeNull();
       // The same page again: a second request for the next page, and the first page is not asked for.
       expect(callsOf(api, "next-page")).toHaveLength(2);
