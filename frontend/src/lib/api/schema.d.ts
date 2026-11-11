@@ -377,6 +377,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/spaces/{space_id}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Dashboard
+         * @description Available, card debt, net and the five main categories where most was spent this month.
+         *
+         *     Everything is in the minor unit of the currency of the space. `available_minor`,
+         *     `card_debt_minor` and `net_minor` are the ones of `balance-summary` (all the accounts,
+         *     archived ones included; the debt is positive when the cards are owed). The month is the
+         *     current one in the timezone of the space and is returned as `month` (`YYYY-MM`, what the
+         *     movements list takes as its filter). `top_expense_categories` has up to five main categories,
+         *     largest first, each with its subcategories added in: `amount_minor` (positive) and
+         *     `percentage`, a whole percent of `month_expense_minor` (the total spent in the month, any
+         *     category) rounded to the nearest with the half up. Only confirmed, not deleted expenses
+         *     count: adjustments, transfers, incomes, pending, skipped and deleted movements do not.
+         */
+        get: operations["read_dashboard_spaces__space_id__dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spaces/{space_id}/transactions": {
         parameters: {
             query?: never;
@@ -737,6 +767,34 @@ export interface components {
             /** Exponent */
             exponent: number;
         };
+        /**
+         * DashboardRead
+         * @description What the home screen shows, in the minor unit of the currency of the space.
+         *
+         *     `available_minor`, `card_debt_minor` and `net_minor` are those of `balance-summary`: all the
+         *     accounts of the space, archived ones included, counting only confirmed movements that are not
+         *     deleted. `month` is the current month in the timezone of the space (`YYYY-MM`, the filter of
+         *     the movements list), and `month_expense_minor` is everything spent in it: the confirmed,
+         *     not deleted expenses of any category (adjustments, transfers, incomes, pending and skipped
+         *     movements do not count). It is the same `expense_minor` the movements summary gives for that
+         *     month, and the denominator of the percentages. `top_expense_categories` has up to five main
+         *     categories, largest first; what is left up to `month_expense_minor` is "Otros" for whoever
+         *     wants to draw it.
+         */
+        DashboardRead: {
+            /** Available Minor */
+            available_minor: number;
+            /** Card Debt Minor */
+            card_debt_minor: number;
+            /** Month */
+            month: string;
+            /** Month Expense Minor */
+            month_expense_minor: number;
+            /** Net Minor */
+            net_minor: number;
+            /** Top Expense Categories */
+            top_expense_categories: components["schemas"]["TopExpenseCategory"][];
+        };
         /** EntryRead */
         EntryRead: {
             /**
@@ -967,6 +1025,33 @@ export interface components {
         SpaceUpdate: {
             /** Currency */
             currency?: string;
+        };
+        /**
+         * TopExpenseCategory
+         * @description A main category in the top of the month, with its subcategories added in.
+         *
+         *     `category_id` is the main category: filtering the movements by it (`category_id` of the list)
+         *     includes its subcategories, so the movements it leads to add up to `amount_minor`.
+         *     `percentage` is a whole percent of `DashboardRead.month_expense_minor`, rounded to the nearest
+         *     with the half up (12.5 is 13): the rows of the top need not add up to 100.
+         */
+        TopExpenseCategory: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Category Id
+             * Format: uuid
+             */
+            category_id: string;
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "fork-knife" | "bowl-food" | "pizza" | "hamburger" | "coffee" | "beer-stein" | "wine" | "cake" | "shopping-cart" | "basket" | "shopping-bag" | "storefront" | "car" | "gas-pump" | "bus" | "taxi" | "train" | "motorcycle" | "bicycle" | "airplane-tilt" | "house" | "key" | "bed" | "lightbulb" | "lightning" | "drop" | "device-mobile" | "wifi-high" | "wrench" | "hammer" | "plant" | "heartbeat" | "stethoscope" | "pill" | "first-aid-kit" | "tooth" | "barbell" | "scissors" | "heart" | "game-controller" | "popcorn" | "music-notes" | "monitor-play" | "martini" | "suitcase" | "tent" | "graduation-cap" | "book-open" | "baby" | "paw-print" | "dog" | "gift" | "t-shirt" | "briefcase" | "laptop" | "money" | "coins" | "wallet" | "bank" | "piggy-bank" | "receipt" | "chart-line-up" | "percent" | "star" | "tag" | "dots-three-circle";
+            /** Name */
+            name: string;
+            /** Percentage */
+            percentage: number;
         };
         /** TransactionRead */
         TransactionRead: {
@@ -2081,6 +2166,55 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_dashboard_spaces__space_id__dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

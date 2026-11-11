@@ -225,9 +225,10 @@ async def test_the_space_route_guard_detects_routes_without_the_membership_check
 
 # What the guard has to walk -----------------------------------------------------------------
 
-# The operations that must be under the membership guard (accounts, balances, currency, categories
-# and movements). A subset, not the whole inventory: adding a route must not break this test, but
-# losing one of these from the walk (a renamed prefix, a router that stops being included) must.
+# The operations that must be under the membership guard (accounts, balances, dashboard, currency,
+# categories and movements). A subset, not the whole inventory: adding a route must not break this
+# test, but losing one of these from the walk (a renamed prefix, a router that stops being
+# included) must.
 EXPECTED_SPACE_OPERATIONS = {
     ("GET", "/spaces/{space_id}"),
     ("PATCH", "/spaces/{space_id}"),
@@ -239,6 +240,7 @@ EXPECTED_SPACE_OPERATIONS = {
     ("POST", "/spaces/{space_id}/accounts/{account_id}/unarchive"),
     ("POST", "/spaces/{space_id}/accounts/{account_id}/reconcile"),
     ("GET", "/spaces/{space_id}/balance-summary"),
+    ("GET", "/spaces/{space_id}/dashboard"),
     ("GET", "/spaces/{space_id}/categories"),
     ("POST", "/spaces/{space_id}/categories"),
     ("PATCH", "/spaces/{space_id}/categories/{category_id}"),

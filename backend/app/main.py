@@ -14,6 +14,7 @@ from app.modules.auth.firebase import create_firebase_auth
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.currencies.router import router as currencies_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.spaces.router import router as spaces_router
 from app.modules.transactions.router import balance_router
 from app.modules.transactions.router import router as transactions_router
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(categories_router)
     app.include_router(transactions_router)
     app.include_router(balance_router)
+    app.include_router(dashboard_router)
     return app
 
 

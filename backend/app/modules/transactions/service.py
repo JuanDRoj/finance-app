@@ -375,6 +375,23 @@ async def get_balance_summary(session: AsyncSession, space_id: uuid.UUID) -> Bal
     )
 
 
+async def get_expense_by_category(
+    session: AsyncSession, space_id: uuid.UUID, month: str
+) -> dict[uuid.UUID | None, int]:
+    """What was spent in the month (`"2026-11"`, the local month of the space) per category.
+
+    Positive amounts, one entry per category with spending, as the movements were classified: a
+    subcategory is its own key (rolling it up to its main category is the caller's job; it belongs
+    to `categories`). Only confirmed, not deleted expenses count: incomes, transfers, adjustments,
+    pending, skipped and deleted movements add nothing. The `None` key holds an expense without a
+    category (the API never writes one), so the sum of the values is the same `expense_minor` the
+    summary of that month gives. `month` is already validated by the caller (`Month`).
+    """
+    return await repository.expense_by_category(
+        session, space_id=space_id, month=month_bounds(month)
+    )
+
+
 async def list_movements(
     session: AsyncSession, space_id: uuid.UUID, filters: TransactionListFilters
 ) -> MovementPage:

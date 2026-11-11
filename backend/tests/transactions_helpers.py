@@ -26,12 +26,14 @@ from app.modules.users import service as users_service
 EntrySpec = tuple[uuid.UUID, int, uuid.UUID | None]
 
 
-async def make_user_and_space(session: AsyncSession, uid: str) -> tuple[uuid.UUID, uuid.UUID]:
-    """A user with their personal space; returns `(user_id, space_id)`."""
+async def make_user_and_space(
+    session: AsyncSession, uid: str, *, timezone: str = "America/Montevideo"
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """A user with their personal space in `timezone`; returns `(user_id, space_id)`."""
     user = await users_service.upsert_user(
         session, firebase_uid=uid, email=f"{uid}@example.com", display_name=None
     )
-    await spaces_service.ensure_personal_space(session, user.id, "America/Montevideo")
+    await spaces_service.ensure_personal_space(session, user.id, timezone)
     return user.id, await spaces_service.get_personal_space_id(session, user.id)
 
 
