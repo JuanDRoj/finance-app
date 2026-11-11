@@ -173,6 +173,36 @@ async def income_and_expense(
     return totals.get("income", 0), -totals.get("expense", 0)
 
 
+async def expense_by_category(
+    session: AsyncSession, *, space_id: uuid.UUID, month: tuple[date, date]
+) -> dict[uuid.UUID | None, int]:
+    """What was spent in `month` per category (not rolled up to the main one), as positive amounts.
+
+    `month` is `(first day, first day of the next month)` on `transactions.date`, the local date
+    of the space. It starts from `_counted_entries`, so only confirmed, not deleted movements are
+    there, and keeps the `expense` type: incomes, transfers and adjustments never count, and
+    neither do pending and skipped ones. One row per category with spending (a few dozen at most).
+    The key is `None` for an expense entry without a category: the API never writes one, but the
+    database allows it, and it must still add up in the total of the month. The expense entries
+    are negative: the sign is flipped here.
+    """
+    first, following = month
+    stmt = (
+        _counted_entries(space_id)
+        .with_only_columns(
+            Entry.category_id, func.sum(Entry.amount_minor), maintain_column_froms=True
+        )
+        .where(
+            Transaction.type == "expense",
+            Transaction.date >= first,
+            Transaction.date < following,
+        )
+        .group_by(Entry.category_id)
+    )
+    # SUM(bigint) is numeric in PostgreSQL: asyncpg returns a Decimal. Money here is always `int`.
+    return {category_id: -int(total) for category_id, total in await session.execute(stmt)}
+
+
 async def balance_change(
     session: AsyncSession,
     *,

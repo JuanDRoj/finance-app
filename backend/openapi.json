@@ -774,6 +774,49 @@
         "title": "CurrencyRead",
         "type": "object"
       },
+      "DashboardRead": {
+        "description": "What the home screen shows, in the minor unit of the currency of the space.\n\n`available_minor`, `card_debt_minor` and `net_minor` are those of `balance-summary`: all the\naccounts of the space, archived ones included, counting only confirmed movements that are not\ndeleted. `month` is the current month in the timezone of the space (`YYYY-MM`, the filter of\nthe movements list), and `month_expense_minor` is everything spent in it: the confirmed,\nnot deleted expenses of any category (adjustments, transfers, incomes, pending and skipped\nmovements do not count). It is the same `expense_minor` the movements summary gives for that\nmonth, and the denominator of the percentages. `top_expense_categories` has up to five main\ncategories, largest first; what is left up to `month_expense_minor` is \"Otros\" for whoever\nwants to draw it.",
+        "properties": {
+          "available_minor": {
+            "title": "Available Minor",
+            "type": "integer"
+          },
+          "card_debt_minor": {
+            "title": "Card Debt Minor",
+            "type": "integer"
+          },
+          "month": {
+            "pattern": "^(19|20|21)[0-9]{2}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "type": "string"
+          },
+          "month_expense_minor": {
+            "title": "Month Expense Minor",
+            "type": "integer"
+          },
+          "net_minor": {
+            "title": "Net Minor",
+            "type": "integer"
+          },
+          "top_expense_categories": {
+            "items": {
+              "$ref": "#/components/schemas/TopExpenseCategory"
+            },
+            "title": "Top Expense Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "month",
+          "available_minor",
+          "card_debt_minor",
+          "net_minor",
+          "month_expense_minor",
+          "top_expense_categories"
+        ],
+        "title": "DashboardRead",
+        "type": "object"
+      },
       "EntryRead": {
         "properties": {
           "account_id": {
@@ -1287,6 +1330,109 @@
           }
         },
         "title": "SpaceUpdate",
+        "type": "object"
+      },
+      "TopExpenseCategory": {
+        "description": "A main category in the top of the month, with its subcategories added in.\n\n`category_id` is the main category: filtering the movements by it (`category_id` of the list)\nincludes its subcategories, so the movements it leads to add up to `amount_minor`.\n`percentage` is a whole percent of `DashboardRead.month_expense_minor`, rounded to the nearest\nwith the half up (12.5 is 13): the rows of the top need not add up to 100.",
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "icon": {
+            "enum": [
+              "fork-knife",
+              "bowl-food",
+              "pizza",
+              "hamburger",
+              "coffee",
+              "beer-stein",
+              "wine",
+              "cake",
+              "shopping-cart",
+              "basket",
+              "shopping-bag",
+              "storefront",
+              "car",
+              "gas-pump",
+              "bus",
+              "taxi",
+              "train",
+              "motorcycle",
+              "bicycle",
+              "airplane-tilt",
+              "house",
+              "key",
+              "bed",
+              "lightbulb",
+              "lightning",
+              "drop",
+              "device-mobile",
+              "wifi-high",
+              "wrench",
+              "hammer",
+              "plant",
+              "heartbeat",
+              "stethoscope",
+              "pill",
+              "first-aid-kit",
+              "tooth",
+              "barbell",
+              "scissors",
+              "heart",
+              "game-controller",
+              "popcorn",
+              "music-notes",
+              "monitor-play",
+              "martini",
+              "suitcase",
+              "tent",
+              "graduation-cap",
+              "book-open",
+              "baby",
+              "paw-print",
+              "dog",
+              "gift",
+              "t-shirt",
+              "briefcase",
+              "laptop",
+              "money",
+              "coins",
+              "wallet",
+              "bank",
+              "piggy-bank",
+              "receipt",
+              "chart-line-up",
+              "percent",
+              "star",
+              "tag",
+              "dots-three-circle"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "percentage": {
+            "title": "Percentage",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_id",
+          "name",
+          "icon",
+          "amount_minor",
+          "percentage"
+        ],
+        "title": "TopExpenseCategory",
         "type": "object"
       },
       "TransactionRead": {
@@ -2904,6 +3050,70 @@
         "summary": "Unarchive Category",
         "tags": [
           "categories"
+        ]
+      }
+    },
+    "/spaces/{space_id}/dashboard": {
+      "get": {
+        "description": "Available, card debt, net and the five main categories where most was spent this month.\n\nEverything is in the minor unit of the currency of the space. `available_minor`,\n`card_debt_minor` and `net_minor` are the ones of `balance-summary` (all the accounts,\narchived ones included; the debt is positive when the cards are owed). The month is the\ncurrent one in the timezone of the space and is returned as `month` (`YYYY-MM`, what the\nmovements list takes as its filter). `top_expense_categories` has up to five main categories,\nlargest first, each with its subcategories added in: `amount_minor` (positive) and\n`percentage`, a whole percent of `month_expense_minor` (the total spent in the month, any\ncategory) rounded to the nearest with the half up. Only confirmed, not deleted expenses\ncount: adjustments, transfers, incomes, pending, skipped and deleted movements do not.",
+        "operationId": "read_dashboard_spaces__space_id__dashboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Dashboard",
+        "tags": [
+          "dashboard"
         ]
       }
     },
