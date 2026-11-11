@@ -14,6 +14,7 @@ import { summarizeAccounts, splitArchived } from "@/lib/core/accounts-summary";
 import { accountsQueryOptions } from "@/lib/core/data/accounts";
 import { ApiError, isUnauthorized } from "@/lib/core/data/errors";
 import { loadShellData } from "@/lib/core/data/shell";
+import { currentMonthIn, todayInTimezone } from "@/lib/core/dates";
 import { describeApiError } from "@/lib/core/i18n";
 import { formatMoney } from "@/lib/core/money";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,9 @@ function NewAccountAction() {
  *   own error state with "Reintentar" (never "no accounts").
  * - The subtitle of the header (from 1024 px) is the neto, computed from the same list so it always
  *   adds up with the totals of the groups; the mutations refresh the page (`router.refresh()`).
+ * - The movements of the detail (KAN-89) are not prefetched: the detail only exists from 1024 px and
+ *   a phone would pay for a request it never shows. The page hands the screen the **space's** current
+ *   month and day (its time zone, not the device's), so the server and the browser write the same.
  */
 export default async function AccountsPage() {
   const api = await getServerApi();
@@ -138,7 +142,11 @@ export default async function AccountsPage() {
       actions={<NewAccountAction />}
     >
       <HydrationBoundary state={dehydrate(queryClient)}>
-        <AccountsScreen space={{ id: space.id, currency: space.currency }} />
+        <AccountsScreen
+          space={{ id: space.id, currency: space.currency }}
+          currentMonth={currentMonthIn(space.timezone)}
+          today={todayInTimezone(space.timezone)}
+        />
       </HydrationBoundary>
     </AppShell>
   );

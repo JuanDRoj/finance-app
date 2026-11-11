@@ -40,6 +40,7 @@ import {
 import { LoadingDemo } from "./_components/loading-demo";
 import { MovementEditDemo } from "./_components/movement-edit-demos";
 import { MovementPiecesDemo } from "./_components/movement-pieces-demos";
+import { AccountDetailDemo } from "./_components/account-detail-demos";
 import { MovementsScreenDemo } from "./_components/movements-screen-demos";
 import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
 import { NavPreview } from "./_components/nav-preview";
@@ -547,6 +548,10 @@ export default async function CatalogPage({
 
         <Section title="Pantalla Movimientos">
           <MovementsScreenDemo />
+        </Section>
+
+        <Section title="Pantalla Cuentas: detalle de una cuenta (movimientos con saldo)">
+          <AccountDetailDemo />
         </Section>
 
         <Section title="Cifras (tnum)">

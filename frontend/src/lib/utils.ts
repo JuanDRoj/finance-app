@@ -20,6 +20,7 @@ const twMerge = extendTailwindMerge({
         "item",
         "caption",
         "panel-title",
+        "section-title",
         "amount",
         "amount-symbol",
         "amount-panel",

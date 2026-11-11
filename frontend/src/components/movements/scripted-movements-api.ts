@@ -1,3 +1,4 @@
+import { balanceDelta } from "@/lib/core/account-movements";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import type { CategoryRead } from "@/lib/core/data/categories";
@@ -12,7 +13,8 @@ import type {
 // the catalog talk to, since the catalog has no session. It answers `GET /transactions`,
 // `/transactions/summary` and `/accounts` the way the real one does (docs/arquitectura-backend.md
 // §7): newest first, a month / type / account / category / text filter, an opaque cursor, a summary
-// that adds up only confirmed incomes and expenses, and a `count` of everything the list would show.
+// that adds up only confirmed incomes and expenses, a `count` of everything the list would show and, with
+// `account_id`, the `balance_change_minor` of that account in the month (BE-25).
 // **FE-34 (KAN-99)** adds the movement itself: `GET .../transactions/{id}`, `PUT` (the whole movement
 // is replaced), `DELETE` (soft: it leaves the list and the summary) and `POST .../restore`, with the
 // rules of BE-20 (docs/arquitectura-backend.md §4): an adjustment, a pending and a skipped movement
@@ -120,7 +122,24 @@ function decodeCursor(cursor: unknown): number | null {
 const MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const clamp = (value: bigint) => Number(value > MAX ? MAX : value < -MAX ? -MAX : value);
 
-function summarize(items: readonly MovementListItem[]): TransactionSummary {
+/**
+ * `balance_change_minor` of the summary: how much the balance of the account moved over these
+ * movements, signed (on a card, negative = the debt grew). The real backend adds every confirmed one
+ * (income, expense, transfers in and out, adjustments) and ignores the `type`, `category_id` and `q`
+ * filters, so the caller hands it the movements of the month and the account only.
+ */
+function balanceChange(items: readonly MovementListItem[], accountId: string): number {
+  let total = BigInt(0);
+  for (const item of items) {
+    if (item.status === "confirmed") total += balanceDelta(item, accountId);
+  }
+  return clamp(total);
+}
+
+function summarize(
+  items: readonly MovementListItem[],
+  balanceChangeMinor: number | null = null,
+): TransactionSummary {
   let income = BigInt(0);
   let expense = BigInt(0);
   for (const item of items) {
@@ -134,6 +153,7 @@ function summarize(items: readonly MovementListItem[]): TransactionSummary {
     income_minor: clamp(income),
     expense_minor: clamp(expense),
     remaining_minor: clamp(income - expense),
+    balance_change_minor: balanceChangeMinor,
   };
 }
 
@@ -253,7 +273,21 @@ export function scriptedMovementsApi({
       return ok(query.include_archived ? all : all.filter((category) => !category.archived_at));
     }
     const filtered = current().filter((item) => matches(item, query));
-    if (kind === "summary" || kind === "total") return ok(summarize(filtered));
+    if (kind === "summary" || kind === "total") {
+      // With `account_id` the summary also says how much the balance of that account moved in the
+      // month, whatever the other filters are; without it, `null`.
+      const accountId = typeof query.account_id === "string" ? query.account_id : undefined;
+      const change =
+        accountId === undefined
+          ? null
+          : balanceChange(
+              current().filter((item) =>
+                matches(item, { month: query.month, account_id: accountId }),
+              ),
+              accountId,
+            );
+      return ok(summarize(filtered, change));
+    }
 
     const offset = query.cursor === undefined ? 0 : decodeCursor(query.cursor);
     if (offset === null) return unprocessable("cursor_invalid", ["query", "cursor"]);

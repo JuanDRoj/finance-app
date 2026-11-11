@@ -68,6 +68,63 @@ describe("MonthSelect", () => {
     expect(classes).toContain("appearance-none");
   });
 
+  describe("compact (the detail of an account)", () => {
+    it("is the same native select, without the calendar and with only the caret drawn", () => {
+      const { container } = render(
+        <MonthSelect
+          month="2026-09"
+          currentMonth={CURRENT}
+          onMonthChange={() => {}}
+          variant="compact"
+        />,
+      );
+      const select = screen.getByRole("combobox", { name: "Mes" }) as HTMLSelectElement;
+      expect(select.value).toBe("2026-09");
+      expect(within(select).getAllByRole("option")).toHaveLength(43);
+      const icons = container.querySelectorAll("svg");
+      expect(icons).toHaveLength(1);
+      expect(icons[0]!.getAttribute("aria-hidden")).toBe("true");
+      expect(icons[0]!.getAttribute("class")).toContain("pointer-events-none");
+    });
+
+    it("tells which month was chosen as YYYY-MM", () => {
+      const onMonthChange = vi.fn();
+      render(
+        <MonthSelect
+          month={CURRENT}
+          currentMonth={CURRENT}
+          onMonthChange={onMonthChange}
+          variant="compact"
+        />,
+      );
+      fireEvent.change(screen.getByRole("combobox", { name: "Mes" }), {
+        target: { value: "2026-03" },
+      });
+      expect(onMonthChange).toHaveBeenCalledWith("2026-03");
+    });
+
+    it("is a button of 36 px (44 for a finger) with a radius of 10 px and the border of a control", () => {
+      render(
+        <MonthSelect
+          month={CURRENT}
+          currentMonth={CURRENT}
+          onMonthChange={() => {}}
+          variant="compact"
+        />,
+      );
+      const classes = screen.getByRole("combobox", { name: "Mes" }).className;
+      expect(classes).toContain("h-9");
+      expect(classes).toContain("pointer-coarse:h-11");
+      expect(classes).toContain("rounded-tooltip");
+      expect(classes).not.toContain("rounded-full");
+      expect(classes).toContain("border-input");
+      // 14 px with a mouse, 16 px with a finger: under 16 px iOS zooms into the field.
+      expect(classes).toContain("text-sm");
+      expect(classes).toContain("pointer-coarse:text-base");
+      expect(classes).toContain("appearance-none");
+    });
+  });
+
   it("takes the class the screen gives it", () => {
     const { container } = render(
       <MonthSelect month={CURRENT} currentMonth={CURRENT} onMonthChange={() => {}} className="x" />,

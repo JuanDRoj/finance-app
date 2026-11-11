@@ -18,6 +18,7 @@ import {
 import type { Currency } from "@/lib/core/money";
 import { cn } from "@/lib/utils";
 import { AMOUNT_TONE_CLASS } from "./amount-tone";
+import { CategoryChip } from "./category-chip";
 import { MovementLink } from "./movement-link";
 
 type MovementsTableProps = {
@@ -194,17 +195,7 @@ const MovementTableRow = memo(function MovementTableRow({
         ) : null}
       </th>
       <td className="px-2">
-        <span
-          title={category.label}
-          className={cn(
-            "inline-block max-w-56 truncate rounded-full px-2.5 py-0.5 align-middle text-caption font-bold",
-            category.quiet
-              ? "bg-foreground/6 text-muted-foreground"
-              : "bg-primary-soft text-secondary-foreground",
-          )}
-        >
-          {category.label}
-        </span>
+        <CategoryChip category={category} />
       </td>
       <td className="px-2 text-muted-foreground">
         <span title={account} className="block max-w-44 truncate">

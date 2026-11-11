@@ -137,6 +137,48 @@ const EXPENSE: MovementCreate = {
   description: "Super",
 };
 
+describe("the summary of an account (BE-25)", () => {
+  it("adds the balance change of the account: every confirmed movement, transfers and adjustments too", async () => {
+    const { api } = setup();
+    // Itaú in October: -100 - 25 - 90 expenses, +5.000 income, -300 adjustment and -40 of the transfer;
+    // the pending one adds nothing and the one on the archived account is not Itaú's.
+    const itau = await getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "a1" });
+    expect(itau.balance_change_minor).toBe(-10000 - 2500 - 9000 + 500000 - 30000 - 4000);
+    // The transfer arrives at BROU as a plus.
+    const brou = await getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "a2" });
+    expect(brou.balance_change_minor).toBe(4000);
+  });
+
+  it("does not follow the type filter, as the real one does not", async () => {
+    const { api } = setup();
+    const expenses = await getTransactionsSummary(api, SPACE, {
+      month: "2026-10",
+      accountId: "a1",
+      type: "expense",
+    });
+    expect(expenses.balance_change_minor).toBe(-10000 - 2500 - 9000 + 500000 - 30000 - 4000);
+    // The income and expense of the summary do follow it.
+    expect(expenses.income_minor).toBe(0);
+    expect(expenses.expense_minor).toBe(10000 + 2500 + 9000);
+  });
+
+  it("is 0 for a month with no movements and for an account that does not exist", async () => {
+    const { api } = setup();
+    await expect(
+      getTransactionsSummary(api, SPACE, { month: "2026-09", accountId: "a1" }),
+    ).resolves.toMatchObject({ balance_change_minor: 0 });
+    await expect(
+      getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "nope" }),
+    ).resolves.toMatchObject({ balance_change_minor: 0 });
+  });
+
+  it("is null without an account", async () => {
+    const { api } = setup();
+    const summary = await getTransactionsSummary(api, SPACE, { month: "2026-10" });
+    expect(summary.balance_change_minor).toBeNull();
+  });
+});
+
 describe("GET of one movement", () => {
   it("answers the movement as the list has it", async () => {
     const { api } = setup();
