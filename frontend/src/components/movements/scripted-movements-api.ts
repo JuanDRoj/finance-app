@@ -128,9 +128,9 @@ const clamp = (value: bigint) => Number(value > MAX ? MAX : value < -MAX ? -MAX 
  * own sign, and a transfer takes the amount off the account it comes from and puts it in the one it
  * goes to.
  *
- * This rule is written here on purpose, apart from `balanceDelta` of `lib/core/account-movements.ts`
- * (the one the app uses to tell a movement from the account's point of view): a fake that borrowed the
- * rule it is meant to check would repeat its mistakes, and the test would pass. A test compares the
+ * This rule is written here on purpose, apart from the one the app uses to tell a movement from the
+ * account's point of view (in `lib/core/account-movements.ts`): a fake that borrowed the rule it is
+ * meant to check would repeat its mistakes, and the test would pass. A test compares the
  * two (`scripted-movements-api.test.ts`) and the file is checked not to import the app's.
  */
 function entriesOf(item: MovementListItem): [accountId: string | undefined, minor: bigint][] {

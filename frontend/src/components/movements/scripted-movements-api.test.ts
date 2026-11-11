@@ -325,14 +325,44 @@ describe("the rule of the fake for the balance, and the app's (BE-25)", () => {
     expect(brou.balance_change_minor).toBe(4000);
   });
 
-  it("does not import the app's rule: the fake and the demo that use it are checked apart", () => {
+  it("does not import, nor name, the app's rule: the fake and the demo that use it are checked apart", () => {
+    // A module whose path ends in `lib/core/account-movements`, taken by a static import, a side-effect
+    // import, a re-export, a dynamic `import()` or a `require()`. The component of the same name in
+    // `app/cuentas/_components/` is not it.
+    const IMPORTS_APP_RULE =
+      /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'][^"']*lib\/core\/account-movements(?:\.[jt]sx?)?["']/;
+    const NAMES_APP_RULE = /\bbalanceDelta\b/;
+
+    // The guard itself, so it cannot go quiet by a mistake of its own.
+    for (const hit of [
+      'import { balanceDelta } from "@/lib/core/account-movements";',
+      "import * as rule from '../../lib/core/account-movements.ts';",
+      'import "@/lib/core/account-movements";',
+      'export { balanceDelta } from "@/lib/core/account-movements";',
+      'const rule = await import("@/lib/core/account-movements");',
+      "const rule = require('@/lib/core/account-movements');",
+    ]) {
+      expect(hit, hit).toMatch(IMPORTS_APP_RULE);
+    }
+    for (const miss of [
+      'import { AccountMovements } from "@/app/cuentas/_components/account-movements";',
+      'import { AccountMovementsTable } from "./account-movements-table";',
+      'const screen = await import("@/app/cuentas/_components/account-movements");',
+      'import { movedBalance } from "@/components/movements/scripted-movements-api";',
+    ]) {
+      expect(miss, miss).not.toMatch(IMPORTS_APP_RULE);
+    }
+    expect("total += balanceDelta(item, id);").toMatch(NAMES_APP_RULE);
+    expect("total += movedBalance(item, id);").not.toMatch(NAMES_APP_RULE);
+
     const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
     for (const file of [
       "./scripted-movements-api.ts",
       "../../app/catalog/_components/account-detail-demos.tsx",
     ]) {
       const source = read(file);
-      expect(source, file).not.toMatch(/from\s+["'][^"']*account-movements["']/);
+      expect(source, `${file} imports the app's rule`).not.toMatch(IMPORTS_APP_RULE);
+      expect(source, `${file} names balanceDelta`).not.toMatch(NAMES_APP_RULE);
     }
   });
 });
