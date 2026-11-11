@@ -243,6 +243,8 @@ La lista de movimientos tiene su propia base `_active` (KAN-79): espacio + sin `
 - Índice: `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`. Al ser parcial, no le sirve a una consulta que también debe ver las borradas. Por eso "¿el espacio tiene alguna transacción?" (la regla de la moneda, KAN-68) usa el índice completo `ix_transactions_space_id`.
 - El orden es fijo. Si algún día el cliente elige el orden, se mapea un `Literal` a columnas conocidas; nunca `getattr(Model, texto_del_cliente)`.
 
+**Dashboard: top 5 del mes y porcentajes** (`GET /spaces/{id}/dashboard`, KAN-81). Disponible, Deuda y Neto son los de `balance-summary` (`get_balance_summary`, sin una segunda regla). El gasto del mes en curso (zona del espacio, con `now` inyectado desde el router; todo el mes, también los días posteriores a hoy) sale de `transactions.repository.expense_by_category`: `_counted_entries` + `type = 'expense'` + rango de fechas, agrupado por categoría. Así ajustes, transferencias, ingresos, pendientes, saltados y borrados quedan fuera por construcción, y la suma es el `expense_minor` de `/transactions/summary` del mismo mes. El rollup a la categoría principal, el orden `(-monto, id)` y el corte en 5 son funciones puras (`dashboard/top_expenses.py`): subcategorías y archivadas suman a su principal, con menos categorías salen menos filas y no hay fila "Otros" (el front la deriva de `month_expense_minor`). El porcentaje es entero, mitad hacia arriba, con aritmética entera (`(200·parte + total) // (2·total)`, nunca `float`) y sobre el total gastado del mes, así que las filas no suman 100. Son 5 consultas en secuencia sobre la sesión del request (nunca `asyncio.gather`), en número fijo (un test lo exige); cada una lee lo confirmado en su momento, y se acepta que dos cifras difieran por un movimiento guardado entre medio.
+
 **Cron idempotente.** `insert(...).on_conflict_do_nothing(constraint="uq_transactions_template_id_period").returning(Transaction.id)` (dialecto `postgresql`). Solo se crean entries para los ids devueltos. Correrlo dos veces el mismo día no duplica nada.
 
 **Siembra idempotente** (`categories.service.seed_default_categories`, KAN-65): mismo recurso. Si el espacio ya tiene alguna fila no hace nada (nunca se borra, solo se archiva). Inserta las principales con `on_conflict_do_nothing()`, que se apoya en el índice único de nombre, y cuelga las subcategorías de los ids que **de verdad** quedaron en la BD, no de los que generó. Dos siembras cruzadas terminan con un solo juego de filas y ninguna FK rota.
@@ -343,6 +345,17 @@ Crear movimientos (KAN-74) suma:
 | Unión pública más chica que la interna (`MovementCreate` sin ajuste) | `transactions/schemas.py` | §5 |
 | `loc` con el tag de la unión también en los errores del service | `transactions/service.py` (`_check_accounts`, `_check_category`) | §4 |
 | Id ajeno en el cuerpo: 422 idéntico a inexistente; 404 solo para la ruta | `tests/api/test_transactions.py` | §6 |
+
+El dashboard (KAN-81) suma:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Módulo de composición sin repository ni modelos: solo llama a services de módulos anteriores | `dashboard/service.py` | §2 |
+| Agregación que reutiliza la regla de otro endpoint en vez de duplicarla (`get_balance_summary`) | `dashboard/service.py` | §7 |
+| SQL de un agregado en el módulo dueño de los datos y aritmética en funciones puras | `transactions/repository.py` (`expense_by_category`) y `dashboard/top_expenses.py` | §7 |
+| Porcentaje con aritmética entera y redondeo mitad hacia arriba | `dashboard/top_expenses.py` (`percentage`) | §7 |
+| Número fijo de consultas, vigilado con un test de conteo de sentencias | `tests/services/test_dashboard_service.py` | §10 |
+| Fechas de un test de API leídas al correr cada test (fixture), no al importar | `tests/api/test_dashboard.py` (`months`) | §10 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 
