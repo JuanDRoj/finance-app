@@ -241,6 +241,7 @@ EXPECTED_SPACE_OPERATIONS = {
     ("POST", "/spaces/{space_id}/accounts/{account_id}/reconcile"),
     ("GET", "/spaces/{space_id}/balance-summary"),
     ("GET", "/spaces/{space_id}/dashboard"),
+    ("GET", "/spaces/{space_id}/dashboard/series"),
     ("GET", "/spaces/{space_id}/categories"),
     ("POST", "/spaces/{space_id}/categories"),
     ("PATCH", "/spaces/{space_id}/categories/{category_id}"),

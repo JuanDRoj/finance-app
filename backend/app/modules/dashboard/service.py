@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.categories import service as categories_service
-from app.modules.dashboard.schemas import DashboardRead, TopExpenseCategory
+from app.modules.dashboard.monthly_series import build_points, month_window
+from app.modules.dashboard.schemas import DashboardRead, DashboardSeriesRead, TopExpenseCategory
 from app.modules.dashboard.top_expenses import percentage, top_main_categories
 from app.modules.spaces import service as spaces_service
 from app.modules.transactions import service as transactions_service
@@ -31,9 +32,7 @@ async def get_dashboard(
     between two of them can show in one figure and not yet in another; they are independent
     figures and the next request agrees.
     """
-    timezone = await spaces_service.get_space_timezone(session, space_id)
-    local = now.astimezone(ZoneInfo(timezone))
-    month = f"{local.year:04d}-{local.month:02d}"
+    month = await _current_month(session, space_id, now)
     balances = await transactions_service.get_balance_summary(session, space_id)
     spent = await transactions_service.get_expense_by_category(session, space_id, month)
     category_reads = await categories_service.list_category_reads(
@@ -58,3 +57,30 @@ async def get_dashboard(
             for row in ranked
         ],
     )
+
+
+async def get_series(
+    session: AsyncSession, space_id: uuid.UUID, months: int, *, now: datetime
+) -> DashboardSeriesRead:
+    """Income, expense and net at the close of each of the last `months` months, oldest first.
+
+    The window ends in the current month of the space (`now` converted to `spaces.timezone`, as in
+    `get_dashboard`) and always has `months` points, with or without movements. The totals of every
+    month of the history come from `transactions` in one query (the owner of the entries, with the
+    rule of what counts: confirmed and not deleted) and `monthly_series` cuts the window out of
+    them: income and expense per month (the current one with all its days, like the top of the
+    dashboard), and the net as a running sum of everything that counts, adjustments included, so
+    the last point is the net of `get_balance_summary` and the dashboard.
+
+    Two statements, whatever the data and the months: the timezone of the space and the totals.
+    """
+    current = await _current_month(session, space_id, now)
+    totals = await transactions_service.get_monthly_totals(session, space_id)
+    return DashboardSeriesRead(points=build_points(totals, month_window(current, months)))
+
+
+async def _current_month(session: AsyncSession, space_id: uuid.UUID, now: datetime) -> str:
+    """The month `now` falls in, in the timezone of the space, as `YYYY-MM`."""
+    timezone = await spaces_service.get_space_timezone(session, space_id)
+    local = now.astimezone(ZoneInfo(timezone))
+    return f"{local.year:04d}-{local.month:02d}"

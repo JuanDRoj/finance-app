@@ -407,6 +407,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/spaces/{space_id}/dashboard/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Dashboard Series
+         * @description Income, expense and net at the close of each month, for the charts of the home screen.
+         *
+         *     `months` (1 to 12, 6 by default) is how many months to return, counting the current one in the
+         *     timezone of the space, which is the last point; they come oldest first and there are always
+         *     exactly that many, with 0 where there is nothing. Amounts are in the minor unit of the currency
+         *     of the space. `income_minor` and `expense_minor` (positive) are the confirmed, not deleted
+         *     incomes and expenses of the whole month, the same as the movements summary of that `month`;
+         *     adjustments, transfers, pending, skipped and deleted movements are not in them. `net_minor` is
+         *     the net (available minus card debt) at the close of the month, adjustments included; in the
+         *     current month it is the net of today, the one of `/dashboard` and `balance-summary` (a
+         *     confirmed movement dated after today counts there, and in no flow). A month without movements
+         *     keeps the net of the one before.
+         */
+        get: operations["read_dashboard_series_spaces__space_id__dashboard_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spaces/{space_id}/transactions": {
         parameters: {
             query?: never;
@@ -795,6 +826,18 @@ export interface components {
             /** Top Expense Categories */
             top_expense_categories: components["schemas"]["TopExpenseCategory"][];
         };
+        /**
+         * DashboardSeriesRead
+         * @description The months of the home charts, oldest first; the last one is the current month.
+         *
+         *     There are exactly as many points as the `months` asked, ending in the current month of the
+         *     space (in its timezone), whatever the movements are. The amounts are in the minor unit of the
+         *     currency of the space (`SpaceRead.currency`, as everywhere else in the API).
+         */
+        DashboardSeriesRead: {
+            /** Points */
+            points: components["schemas"]["MonthlySeriesPoint"][];
+        };
         /** EntryRead */
         EntryRead: {
             /**
@@ -891,6 +934,31 @@ export interface components {
              * @enum {string}
              */
             type: "income";
+        };
+        /**
+         * MonthlySeriesPoint
+         * @description One month of the series, in the minor unit of the currency of the space.
+         *
+         *     `income_minor` and `expense_minor` (both positive) are the confirmed, not deleted incomes and
+         *     expenses of the whole month, also the days after today in the current one (adjustments,
+         *     transfers, pending, skipped and deleted movements do not count): the same figures the
+         *     movements summary gives for that `month`. A month without movements has 0 in both.
+         *
+         *     `net_minor` is the net (available - card debt = the sum of every balance) at the close of the
+         *     month; in the current month, the net of today, the same as `DashboardRead.net_minor`. It does
+         *     count adjustments (the initial balance and the reconciliations are balance) and it does not
+         *     count pending, skipped and deleted movements. A month without movements keeps the net of the
+         *     month before, and the months before the first movement are 0.
+         */
+        MonthlySeriesPoint: {
+            /** Expense Minor */
+            expense_minor: number;
+            /** Income Minor */
+            income_minor: number;
+            /** Month */
+            month: string;
+            /** Net Minor */
+            net_minor: number;
         };
         /**
          * MovementListItem
@@ -2202,6 +2270,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardRead"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_dashboard_series_spaces__space_id__dashboard_series_get: {
+        parameters: {
+            query?: {
+                months?: number;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardSeriesRead"];
                 };
             };
             /** @description Unauthorized */
