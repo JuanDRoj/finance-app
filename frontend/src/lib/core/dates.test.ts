@@ -6,6 +6,7 @@ import {
   formatLocalDate,
   formatLocalWeekdayDate,
   formatMonth,
+  formatMonthName,
   formatWeekdayDate,
   isLocalDate,
   isMonth,
@@ -385,6 +386,27 @@ describe("formatMonth", () => {
   it("rejects a text that is not a month", () => {
     for (const text of ["", "2026-13", "2026-10-01", "octubre"]) {
       expect(() => formatMonth(text)).toThrow(RangeError);
+    }
+  });
+});
+
+describe("formatMonthName", () => {
+  it("writes the month in lowercase, as a sentence needs it", () => {
+    expect(formatMonthName("2026-10")).toBe("octubre");
+    expect(formatMonthName("2027-01")).toBe("enero");
+    // es-UY writes "setiembre" (the same locale as formatMonth).
+    expect(formatMonthName("2026-09")).toBe("setiembre");
+  });
+
+  it("adds the year on request", () => {
+    expect(formatMonthName("2025-10", { withYear: true })).toBe("octubre de 2025");
+    expect(formatMonthName("1900-01", { withYear: true })).toBe("enero de 1900");
+    expect(formatMonthName("2199-12", { withYear: true })).toBe("diciembre de 2199");
+  });
+
+  it("rejects a text that is not a month", () => {
+    for (const text of ["", "2026-13", "2026-10-01", "octubre"]) {
+      expect(() => formatMonthName(text)).toThrow(RangeError);
     }
   });
 });

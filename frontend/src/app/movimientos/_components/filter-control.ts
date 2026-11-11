@@ -15,3 +15,16 @@ export const FILTER_PILL = [
   "pointer-coarse:h-11 pointer-coarse:text-base",
   focusRing,
 ].join(" ");
+
+/**
+ * The small control of a card that is not the filters card (K-V2-Escritorio, the detail of an account:
+ * "Octubre 2026 ▾" and "Filtrar"): 36 px tall (the 34 to 40 px of a secondary control from 1024 px,
+ * 44 for a finger), radius 10 px (`rounded-tooltip` is that token), the same border from `--input`, a
+ * solid `surface` fill and Karla 14 in bold. With a finger the text is 16 px so iOS does not zoom into
+ * a `select`. It is the sibling of `FILTER_PILL`, which is 42 px and fully round.
+ */
+export const COMPACT_CONTROL = [
+  "h-9 rounded-tooltip border border-input bg-surface text-sm font-bold text-foreground",
+  "pointer-coarse:h-11 pointer-coarse:text-base",
+  focusRing,
+].join(" ");

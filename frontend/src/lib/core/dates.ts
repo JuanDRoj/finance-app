@@ -235,6 +235,27 @@ export function formatMonth(month: string, locale: string = DEFAULT_LOCALE): str
 }
 
 /**
+ * The name of a month inside a sentence: "octubre" (lowercase, no year) for "Movimiento neto de
+ * octubre". With `withYear` it adds the year, "octubre de 2025", which the detail of an account does
+ * when the month is not of the current year so an old month is never taken for this year's. Throws a
+ * `RangeError` for a text that is not a month the backend accepts.
+ */
+export function formatMonthName(
+  month: string,
+  options: { withYear?: boolean } = {},
+  locale: string = DEFAULT_LOCALE,
+): string {
+  if (!isMonth(month)) throw new RangeError(`Expected a YYYY-MM month: "${month}"`);
+  const [year, number] = [Number(month.slice(0, 4)), Number(month.slice(5, 7))];
+  const parts = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    timeZone: "UTC",
+  }).formatToParts(new Date(Date.UTC(year, number - 1, 1)));
+  const name = (parts.find((part) => part.type === "month")?.value ?? "").toLocaleLowerCase(locale);
+  return options.withYear ? `${name} de ${year}` : name;
+}
+
+/**
  * The day and the month of an instant in words, as the list of archived categories dates them
  * ("18 de octubre"; docs/diseno.md D19). The year is added only when it is not the current one in
  * the same zone ("18 de octubre de 2025"), so an old date is never taken for this year's. Both the

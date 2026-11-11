@@ -23,6 +23,9 @@ import { ArchivedAccounts } from "./archived-accounts";
 
 type AccountsScreenProps = {
   space: { id: string; currency: Currency };
+  /** The current month (`YYYY-MM`) and day of the space's zone, computed by the server page. */
+  currentMonth: string;
+  today: string;
   /** The API client; the browser's by default (the catalog and the tests pass a scripted one). */
   api?: ApiClient;
 };
@@ -39,10 +42,20 @@ type AccountsScreenProps = {
  *   unarchived).
  * - The detail's account is derived while rendering from `?sel`: none, an archived one or an id
  *   that does not exist give the first active account (`selectedAccount`).
- * - From 1024 px the list is a column of 320 px (it may shrink to 300) and the detail takes the
- *   rest, `min-w-0` so a long name or a huge amount cannot push it out.
+ * - From 1024 px the two are a wrapping row, as the canvas draws it (`flex-wrap`): the list wants
+ *   320 px (and grows to 400 at most) and the detail wants 480 px and takes all the rest, `min-w-0`
+ *   so a long name or a huge amount cannot push it out. With the table of movements inside, the
+ *   detail needs that room: below about 1124 px of window (a content column of 820 px) it does not
+ *   fit beside the list and goes under it, at the full width, instead of squeezing the table.
+ * - The detail is remounted for each account (`key`), and it asks for its movements only from 1024 px
+ *   (`currentMonth` and `today` are the space's, from the server page).
  */
-export function AccountsScreen({ space, api = browserApi }: AccountsScreenProps) {
+export function AccountsScreen({
+  space,
+  currentMonth,
+  today,
+  api = browserApi,
+}: AccountsScreenProps) {
   const searchParams = useSearchParams();
   const query = useQuery(accountsQueryOptions(api, space.id, { includeArchived: true }));
   const sel = searchParams.get(SELECTED_ACCOUNT_PARAM);
@@ -79,8 +92,8 @@ export function AccountsScreen({ space, api = browserApi }: AccountsScreenProps)
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-      <div className="flex min-w-0 flex-col gap-4 lg:min-w-75 lg:shrink lg:grow-0 lg:basis-80">
+    <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-start lg:gap-5">
+      <div className="flex min-w-0 flex-col gap-4 lg:max-w-100 lg:shrink lg:grow lg:basis-80">
         {groups.available.length > 0 ? (
           <AccountGroup
             title="Disponible"
@@ -103,8 +116,15 @@ export function AccountsScreen({ space, api = browserApi }: AccountsScreenProps)
         {archivedSection}
       </div>
       {selected ? (
-        <div className="hidden min-w-0 lg:block lg:flex-1">
-          <AccountDetail account={selected} currency={space.currency} />
+        <div className="hidden min-w-0 lg:block lg:shrink lg:grow-999 lg:basis-120">
+          <AccountDetail
+            key={selected.id}
+            account={selected}
+            space={space}
+            currentMonth={currentMonth}
+            today={today}
+            api={api}
+          />
         </div>
       ) : null}
     </div>

@@ -131,6 +131,13 @@ describe("cn", () => {
     );
   });
 
+  it("resolves the title size of a section of a card (KAN-89) against Tailwind's and colors", () => {
+    expect(cn("text-lg", "text-section-title")).toBe("text-section-title");
+    expect(cn("text-section-title", "text-lg")).toBe("text-lg");
+    expect(cn("text-section-title", "text-foreground")).toBe("text-section-title text-foreground");
+    expect(cn("text-panel-title", "text-section-title")).toBe("text-section-title");
+  });
+
   it("resolves the title size of the panel and the dialog (KAN-91) against Tailwind's and colors", () => {
     expect(cn("text-xl", "text-panel-title")).toBe("text-panel-title");
     expect(cn("text-panel-title", "text-xl")).toBe("text-xl");

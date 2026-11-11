@@ -37,6 +37,9 @@ afterEach(() => {
 });
 
 const SPACE = { id: "space-1", currency: { code: "UYU", exponent: 2 } };
+// The month and the day of the space, which the server page hands down (KAN-89).
+const CURRENT_MONTH = "2026-10";
+const TODAY = "2026-10-29";
 const API = { GET: mocks.get, POST: mocks.post } as unknown as ApiClient;
 
 function account(overrides: Partial<AccountWithBalance>): AccountWithBalance {
@@ -76,8 +79,24 @@ function failure(status: number, body?: unknown) {
   return { error: body, response: new Response(null, { status }) };
 }
 
+// The default backend answers by path: the accounts, and an empty month for the detail's movements
+// (the detail asks for them from 1024 px: `mocks.desktop`). Its own test is `account-detail.test.tsx`.
+function answerByPath(path: string) {
+  if (path.endsWith("/summary")) {
+    return ok({
+      count: 0,
+      income_minor: 0,
+      expense_minor: 0,
+      remaining_minor: 0,
+      balance_change_minor: 0,
+    });
+  }
+  if (path.endsWith("/transactions")) return ok({ items: [], next_cursor: null });
+  return ok([ITAU, EFECTIVO, VISA, OLD]);
+}
+
 beforeEach(() => {
-  mocks.get.mockReset().mockResolvedValue(ok([ITAU, EFECTIVO, VISA, OLD]));
+  mocks.get.mockReset().mockImplementation(async (path: string) => answerByPath(path));
   mocks.post.mockReset().mockResolvedValue(ok({ ...OLD, archived_at: null }));
   mocks.refresh.mockReset();
   mocks.toastSuccess.mockReset();
@@ -93,7 +112,7 @@ function renderScreen() {
   const invalidate = vi.spyOn(queryClient, "invalidateQueries");
   const ui = () => (
     <QueryClientProvider client={queryClient}>
-      <AccountsScreen space={SPACE} api={API} />
+      <AccountsScreen space={SPACE} currentMonth={CURRENT_MONTH} today={TODAY} api={API} />
     </QueryClientProvider>
   );
   const view = render(ui());
@@ -225,7 +244,12 @@ describe("AccountsScreen list", () => {
       <QueryClientProvider
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
-        <AccountsScreen space={{ id: "s2", currency: { code: "COP", exponent: 0 } }} api={API} />
+        <AccountsScreen
+          space={{ id: "s2", currency: { code: "COP", exponent: 0 } }}
+          currentMonth={CURRENT_MONTH}
+          today={TODAY}
+          api={API}
+        />
       </QueryClientProvider>,
     );
     expect((await view.findAllByText("$ 1.500")).length).toBeGreaterThan(0);

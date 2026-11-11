@@ -33,7 +33,10 @@ vi.mock("./_components/accounts-screen", () => ({
 }));
 
 // No vitest globals, so Testing Library does not clean up by itself.
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const USER = { id: "u1", email: "ana@example.com", display_name: "Ana" };
 const SPACE = {
@@ -98,12 +101,42 @@ describe("AccountsPage", () => {
   });
 
   it("asks for the archived accounts too and hands the screen the space", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T15:00:00Z"));
     await renderPage();
     expect(mocks.get).toHaveBeenCalledWith("/spaces/{space_id}/accounts", {
       params: { path: { space_id: "s1" }, query: { include_archived: true } },
     });
     expect(mocks.screen).toHaveBeenCalledWith({
       space: { id: "s1", currency: { code: "UYU", exponent: 2 } },
+      currentMonth: "2026-10",
+      today: "2026-10-29",
+    });
+  });
+
+  describe("the month and the day it hands down (KAN-89)", () => {
+    it("are those of the space's zone, not UTC's: still October at 01:00 UTC of November 1st in Montevideo", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-11-01T01:00:00Z"));
+      await renderPage();
+      expect(mocks.screen).toHaveBeenCalledWith(
+        expect.objectContaining({ currentMonth: "2026-10", today: "2026-10-31" }),
+      );
+    });
+
+    it("turn to the next month when the space's day does", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-11-01T03:00:00Z"));
+      await renderPage();
+      expect(mocks.screen).toHaveBeenCalledWith(
+        expect.objectContaining({ currentMonth: "2026-11", today: "2026-11-01" }),
+      );
+    });
+
+    it("do not make the page ask for the movements: the detail asks for them from 1024 px", async () => {
+      await renderPage();
+      const paths = mocks.get.mock.calls.map(([path]) => path);
+      expect(paths.some((path) => String(path).includes("transactions"))).toBe(false);
     });
   });
 

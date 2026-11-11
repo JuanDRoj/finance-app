@@ -183,8 +183,11 @@ export async function listTransactions(
 /**
  * What the filtered movements add up to (`GET /spaces/{space_id}/transactions/summary`): income,
  * expense and what is left, which count only confirmed incomes and expenses (never transfers nor
- * adjustments), and `count`, every movement the list would show. Same filters as the list. Throws
- * an `ApiError`: `space_not_found` (404), a 401 or a 422.
+ * adjustments), and `count`, every movement the list would show. Same filters as the list. With
+ * `accountId` it also carries `balance_change_minor` (BE-25): how much the balance of that account
+ * moved in `month`, signed, with transfers and adjustments counted; it ignores `type`, `categoryId`
+ * and `q`, and it is `null` without an account. Throws an `ApiError`: `space_not_found` (404), a 401
+ * or a 422.
  */
 export async function getTransactionsSummary(
   api: ApiClient,

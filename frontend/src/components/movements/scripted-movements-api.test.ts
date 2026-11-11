@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { balanceDelta } from "@/lib/core/account-movements";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { CategoryRead } from "@/lib/core/data/categories";
 import {
@@ -11,7 +13,12 @@ import {
   type MovementCreate,
   type MovementListItem,
 } from "@/lib/core/data/transactions";
-import { scriptedMovementsApi, type Fault, type ScriptedCall } from "./scripted-movements-api";
+import {
+  movedBalance,
+  scriptedMovementsApi,
+  type Fault,
+  type ScriptedCall,
+} from "./scripted-movements-api";
 
 // The little backend of the screen and the catalog, now with the movement itself (FE-34, KAN-99).
 // It has to answer the way BE-20 does, because the tests of the form, the hook and the screen, and
@@ -136,6 +143,229 @@ const EXPENSE: MovementCreate = {
   date: "2026-10-20",
   description: "Super",
 };
+
+describe("the summary of an account (BE-25)", () => {
+  it("adds the balance change of the account: every confirmed movement, transfers and adjustments too", async () => {
+    const { api } = setup();
+    // Itaú in October: -100 - 25 - 90 expenses, +5.000 income, -300 adjustment and -40 of the transfer;
+    // the pending one adds nothing and the one on the archived account is not Itaú's.
+    const itau = await getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "a1" });
+    expect(itau.balance_change_minor).toBe(-10000 - 2500 - 9000 + 500000 - 30000 - 4000);
+    // The transfer arrives at BROU as a plus.
+    const brou = await getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "a2" });
+    expect(brou.balance_change_minor).toBe(4000);
+  });
+
+  it("does not follow the type filter, as the real one does not", async () => {
+    const { api } = setup();
+    const expenses = await getTransactionsSummary(api, SPACE, {
+      month: "2026-10",
+      accountId: "a1",
+      type: "expense",
+    });
+    expect(expenses.balance_change_minor).toBe(-10000 - 2500 - 9000 + 500000 - 30000 - 4000);
+    // The income and expense of the summary do follow it.
+    expect(expenses.income_minor).toBe(0);
+    expect(expenses.expense_minor).toBe(10000 + 2500 + 9000);
+  });
+
+  it("is 0 for a month with no movements and for an account that does not exist", async () => {
+    const { api } = setup();
+    await expect(
+      getTransactionsSummary(api, SPACE, { month: "2026-09", accountId: "a1" }),
+    ).resolves.toMatchObject({ balance_change_minor: 0 });
+    await expect(
+      getTransactionsSummary(api, SPACE, { month: "2026-10", accountId: "nope" }),
+    ).resolves.toMatchObject({ balance_change_minor: 0 });
+  });
+
+  it("is null without an account", async () => {
+    const { api } = setup();
+    const summary = await getTransactionsSummary(api, SPACE, { month: "2026-10" });
+    expect(summary.balance_change_minor).toBeNull();
+  });
+});
+
+describe("the rule of the fake for the balance, and the app's (BE-25)", () => {
+  // The fake adds up balances (`balance_change_minor` of the summary and the running balance of the
+  // catalog's demo) with its own rule, written apart from `balanceDelta` of the app. If it borrowed
+  // that one, a mistake of sign in it would be repeated by the fake and no test would notice. Here
+  // both are held against the same cases and against the numbers a person would write by hand.
+  const VISA = account("a9", "Visa", { type: "credit_card" });
+  const transfer = (from: AccountWithBalance, to: AccountWithBalance, amount = 4000) =>
+    movement({
+      type: "transfer",
+      description: "Pase",
+      amount_minor: amount,
+      category: null,
+      account: null,
+      from_account: ref(from),
+      to_account: ref(to),
+    });
+  const onCard = (overrides: Partial<MovementListItem>) =>
+    movement({ account: ref(VISA), ...overrides });
+
+  // [name, movement, the account asked about, what it moved the balance of that account]
+  const CASES: [string, MovementListItem, string, number][] = [
+    [
+      "an outgoing transfer takes it off the account it comes from",
+      transfer(ITAU, BROU),
+      "a1",
+      -4000,
+    ],
+    ["an incoming transfer puts it in the account it goes to", transfer(ITAU, BROU), "a2", 4000],
+    ["a transfer does nothing to a third account", transfer(ITAU, BROU), "a3", 0],
+    [
+      "a payment received puts it in the card (its debt falls)",
+      transfer(ITAU, VISA, 1850000),
+      "a9",
+      1850000,
+    ],
+    ["a payment received takes it off the bank", transfer(ITAU, VISA, 1850000), "a1", -1850000],
+    [
+      "a transfer out of a card takes it off the card (its debt grows)",
+      transfer(VISA, ITAU, 100000),
+      "a9",
+      -100000,
+    ],
+    [
+      "an adjustment up",
+      movement({ type: "adjustment", amount_minor: 8500000, category: null }),
+      "a1",
+      8500000,
+    ],
+    [
+      "an adjustment down",
+      movement({ type: "adjustment", amount_minor: -30000, category: null }),
+      "a1",
+      -30000,
+    ],
+    [
+      "an adjustment of a card that lowers the debt",
+      onCard({ type: "adjustment", amount_minor: 2500000, category: null }),
+      "a9",
+      2500000,
+    ],
+    [
+      "an adjustment of a card that raises the debt",
+      onCard({ type: "adjustment", amount_minor: -2500000, category: null }),
+      "a9",
+      -2500000,
+    ],
+    [
+      "a purchase on a card makes the balance more negative",
+      onCard({ amount_minor: -234000 }),
+      "a9",
+      -234000,
+    ],
+    [
+      "a refund (an income) on a card raises it",
+      onCard({ type: "income", amount_minor: 50000 }),
+      "a9",
+      50000,
+    ],
+    ["an expense of the bank", movement({ amount_minor: -10000 }), "a1", -10000],
+    ["an income of the bank", movement({ type: "income", amount_minor: 500000 }), "a1", 500000],
+    [
+      "a movement of another account does nothing to this one",
+      movement({ amount_minor: -10000 }),
+      "a2",
+      0,
+    ],
+    [
+      "the biggest amount, exact",
+      movement({ amount_minor: -Number.MAX_SAFE_INTEGER }),
+      "a1",
+      -Number.MAX_SAFE_INTEGER,
+    ],
+  ];
+
+  it.each(CASES)("%s", (_name, item, accountId, expected) => {
+    expect(movedBalance(item, accountId)).toBe(BigInt(expected));
+    // The same answer from the app's rule: if either one is wrong, they stop agreeing.
+    expect(balanceDelta(item, accountId)).toBe(BigInt(expected));
+    expect(movedBalance(item, accountId)).toBe(balanceDelta(item, accountId));
+  });
+
+  it("takes the sign from the type, as the backend does, not from the number it came with", () => {
+    for (const amount of [10000, -10000]) {
+      const expense = movement({ amount_minor: amount });
+      const income = movement({ type: "income", amount_minor: amount });
+      expect(movedBalance(expense, "a1")).toBe(BigInt(-10000));
+      expect(movedBalance(income, "a1")).toBe(BigInt(10000));
+      expect(movedBalance(expense, "a1")).toBe(balanceDelta(expense, "a1"));
+      expect(movedBalance(income, "a1")).toBe(balanceDelta(income, "a1"));
+    }
+  });
+
+  it("is what the summary adds up as the balance change of an account, whatever the type filter says", async () => {
+    const items = [
+      transfer(ITAU, BROU, 4000),
+      movement({ id: "x1", date: "2026-10-03", amount_minor: -10000 }),
+      movement({ id: "x2", type: "income", date: "2026-10-02", amount_minor: 500000 }),
+      movement({
+        id: "x3",
+        type: "adjustment",
+        date: "2026-10-01",
+        amount_minor: -30000,
+        category: null,
+      }),
+      movement({ id: "x4", status: "pending", date: "2026-10-04", amount_minor: -999 }),
+    ];
+    const api = scriptedMovementsApi({ items: () => items, accounts: () => [ITAU, BROU, OLD] });
+    const itau = await getTransactionsSummary(api, SPACE, { accountId: "a1", month: "2026-10" });
+    expect(itau.balance_change_minor).toBe(-4000 - 10000 + 500000 - 30000);
+    const typed = await getTransactionsSummary(api, SPACE, {
+      accountId: "a1",
+      month: "2026-10",
+      type: "income",
+    });
+    expect(typed.balance_change_minor).toBe(itau.balance_change_minor);
+    const brou = await getTransactionsSummary(api, SPACE, { accountId: "a2", month: "2026-10" });
+    expect(brou.balance_change_minor).toBe(4000);
+  });
+
+  it("does not import, nor name, the app's rule: the fake and the demo that use it are checked apart", () => {
+    // A module whose path ends in `lib/core/account-movements`, taken by a static import, a side-effect
+    // import, a re-export, a dynamic `import()` or a `require()`. The component of the same name in
+    // `app/cuentas/_components/` is not it.
+    const IMPORTS_APP_RULE =
+      /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'][^"']*lib\/core\/account-movements(?:\.[jt]sx?)?["']/;
+    const NAMES_APP_RULE = /\bbalanceDelta\b/;
+
+    // The guard itself, so it cannot go quiet by a mistake of its own.
+    for (const hit of [
+      'import { balanceDelta } from "@/lib/core/account-movements";',
+      "import * as rule from '../../lib/core/account-movements.ts';",
+      'import "@/lib/core/account-movements";',
+      'export { balanceDelta } from "@/lib/core/account-movements";',
+      'const rule = await import("@/lib/core/account-movements");',
+      "const rule = require('@/lib/core/account-movements');",
+    ]) {
+      expect(hit, hit).toMatch(IMPORTS_APP_RULE);
+    }
+    for (const miss of [
+      'import { AccountMovements } from "@/app/cuentas/_components/account-movements";',
+      'import { AccountMovementsTable } from "./account-movements-table";',
+      'const screen = await import("@/app/cuentas/_components/account-movements");',
+      'import { movedBalance } from "@/components/movements/scripted-movements-api";',
+    ]) {
+      expect(miss, miss).not.toMatch(IMPORTS_APP_RULE);
+    }
+    expect("total += balanceDelta(item, id);").toMatch(NAMES_APP_RULE);
+    expect("total += movedBalance(item, id);").not.toMatch(NAMES_APP_RULE);
+
+    const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+    for (const file of [
+      "./scripted-movements-api.ts",
+      "../../app/catalog/_components/account-detail-demos.tsx",
+    ]) {
+      const source = read(file);
+      expect(source, `${file} imports the app's rule`).not.toMatch(IMPORTS_APP_RULE);
+      expect(source, `${file} names balanceDelta`).not.toMatch(NAMES_APP_RULE);
+    }
+  });
+});
 
 describe("GET of one movement", () => {
   it("answers the movement as the list has it", async () => {

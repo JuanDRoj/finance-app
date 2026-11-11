@@ -12,7 +12,8 @@ import type {
 // the catalog talk to, since the catalog has no session. It answers `GET /transactions`,
 // `/transactions/summary` and `/accounts` the way the real one does (docs/arquitectura-backend.md
 // §7): newest first, a month / type / account / category / text filter, an opaque cursor, a summary
-// that adds up only confirmed incomes and expenses, and a `count` of everything the list would show.
+// that adds up only confirmed incomes and expenses, a `count` of everything the list would show and, with
+// `account_id`, the `balance_change_minor` of that account in the month (BE-25).
 // **FE-34 (KAN-99)** adds the movement itself: `GET .../transactions/{id}`, `PUT` (the whole movement
 // is replaced), `DELETE` (soft: it leaves the list and the summary) and `POST .../restore`, with the
 // rules of BE-20 (docs/arquitectura-backend.md §4): an adjustment, a pending and a skipped movement
@@ -120,7 +121,59 @@ function decodeCursor(cursor: unknown): number | null {
 const MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const clamp = (value: bigint) => Number(value > MAX ? MAX : value < -MAX ? -MAX : value);
 
-function summarize(items: readonly MovementListItem[]): TransactionSummary {
+/**
+ * The **entries** a movement leaves, as the backend stores them (docs/modelo-de-datos.md): one signed
+ * amount per account, with the sign of that account's `balance_minor` (on a card, negative = the debt
+ * grew). An expense takes its amount off its account, an income puts it in, an adjustment carries its
+ * own sign, and a transfer takes the amount off the account it comes from and puts it in the one it
+ * goes to.
+ *
+ * This rule is written here on purpose, apart from the one the app uses to tell a movement from the
+ * account's point of view (in `lib/core/account-movements.ts`): a fake that borrowed the rule it is
+ * meant to check would repeat its mistakes, and the test would pass. A test compares the
+ * two (`scripted-movements-api.test.ts`) and the file is checked not to import the app's.
+ */
+function entriesOf(item: MovementListItem): [accountId: string | undefined, minor: bigint][] {
+  const amount = BigInt(item.amount_minor);
+  const size = amount < BigInt(0) ? -amount : amount;
+  if (item.type === "transfer") {
+    return [
+      [item.from_account?.id, -size],
+      [item.to_account?.id, size],
+    ];
+  }
+  if (item.type === "expense") return [[item.account?.id, -size]];
+  if (item.type === "income") return [[item.account?.id, size]];
+  return [[item.account?.id, amount]];
+}
+
+/** How much a movement moved the balance of an account, from its entries; 0 if it does not touch it. */
+export function movedBalance(item: MovementListItem, accountId: string): bigint {
+  let total = BigInt(0);
+  for (const [entryAccount, minor] of entriesOf(item)) {
+    if (entryAccount === accountId) total += minor;
+  }
+  return total;
+}
+
+/**
+ * `balance_change_minor` of the summary: how much the balance of the account moved over these
+ * movements, signed (on a card, negative = the debt grew). The real backend adds every confirmed one
+ * (income, expense, transfers in and out, adjustments) and ignores the `type`, `category_id` and `q`
+ * filters, so the caller hands it the movements of the month and the account only.
+ */
+function balanceChange(items: readonly MovementListItem[], accountId: string): number {
+  let total = BigInt(0);
+  for (const item of items) {
+    if (item.status === "confirmed") total += movedBalance(item, accountId);
+  }
+  return clamp(total);
+}
+
+function summarize(
+  items: readonly MovementListItem[],
+  balanceChangeMinor: number | null = null,
+): TransactionSummary {
   let income = BigInt(0);
   let expense = BigInt(0);
   for (const item of items) {
@@ -134,6 +187,7 @@ function summarize(items: readonly MovementListItem[]): TransactionSummary {
     income_minor: clamp(income),
     expense_minor: clamp(expense),
     remaining_minor: clamp(income - expense),
+    balance_change_minor: balanceChangeMinor,
   };
 }
 
@@ -253,7 +307,21 @@ export function scriptedMovementsApi({
       return ok(query.include_archived ? all : all.filter((category) => !category.archived_at));
     }
     const filtered = current().filter((item) => matches(item, query));
-    if (kind === "summary" || kind === "total") return ok(summarize(filtered));
+    if (kind === "summary" || kind === "total") {
+      // With `account_id` the summary also says how much the balance of that account moved in the
+      // month, whatever the other filters are; without it, `null`.
+      const accountId = typeof query.account_id === "string" ? query.account_id : undefined;
+      const change =
+        accountId === undefined
+          ? null
+          : balanceChange(
+              current().filter((item) =>
+                matches(item, { month: query.month, account_id: accountId }),
+              ),
+              accountId,
+            );
+      return ok(summarize(filtered, change));
+    }
 
     const offset = query.cursor === undefined ? 0 : decodeCursor(query.cursor);
     if (offset === null) return unprocessable("cursor_invalid", ["query", "cursor"]);
