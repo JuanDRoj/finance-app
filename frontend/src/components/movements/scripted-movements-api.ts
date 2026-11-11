@@ -1,4 +1,3 @@
-import { balanceDelta } from "@/lib/core/account-movements";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { ApiClient } from "@/lib/core/data/api-client";
 import type { CategoryRead } from "@/lib/core/data/categories";
@@ -123,6 +122,41 @@ const MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const clamp = (value: bigint) => Number(value > MAX ? MAX : value < -MAX ? -MAX : value);
 
 /**
+ * The **entries** a movement leaves, as the backend stores them (docs/modelo-de-datos.md): one signed
+ * amount per account, with the sign of that account's `balance_minor` (on a card, negative = the debt
+ * grew). An expense takes its amount off its account, an income puts it in, an adjustment carries its
+ * own sign, and a transfer takes the amount off the account it comes from and puts it in the one it
+ * goes to.
+ *
+ * This rule is written here on purpose, apart from `balanceDelta` of `lib/core/account-movements.ts`
+ * (the one the app uses to tell a movement from the account's point of view): a fake that borrowed the
+ * rule it is meant to check would repeat its mistakes, and the test would pass. A test compares the
+ * two (`scripted-movements-api.test.ts`) and the file is checked not to import the app's.
+ */
+function entriesOf(item: MovementListItem): [accountId: string | undefined, minor: bigint][] {
+  const amount = BigInt(item.amount_minor);
+  const size = amount < BigInt(0) ? -amount : amount;
+  if (item.type === "transfer") {
+    return [
+      [item.from_account?.id, -size],
+      [item.to_account?.id, size],
+    ];
+  }
+  if (item.type === "expense") return [[item.account?.id, -size]];
+  if (item.type === "income") return [[item.account?.id, size]];
+  return [[item.account?.id, amount]];
+}
+
+/** How much a movement moved the balance of an account, from its entries; 0 if it does not touch it. */
+export function movedBalance(item: MovementListItem, accountId: string): bigint {
+  let total = BigInt(0);
+  for (const [entryAccount, minor] of entriesOf(item)) {
+    if (entryAccount === accountId) total += minor;
+  }
+  return total;
+}
+
+/**
  * `balance_change_minor` of the summary: how much the balance of the account moved over these
  * movements, signed (on a card, negative = the debt grew). The real backend adds every confirmed one
  * (income, expense, transfers in and out, adjustments) and ignores the `type`, `category_id` and `q`
@@ -131,7 +165,7 @@ const clamp = (value: bigint) => Number(value > MAX ? MAX : value < -MAX ? -MAX 
 function balanceChange(items: readonly MovementListItem[], accountId: string): number {
   let total = BigInt(0);
   for (const item of items) {
-    if (item.status === "confirmed") total += balanceDelta(item, accountId);
+    if (item.status === "confirmed") total += movedBalance(item, accountId);
   }
   return clamp(total);
 }

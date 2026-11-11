@@ -705,6 +705,29 @@ describe("states", () => {
     expect(document.activeElement?.textContent).toBe("Todos");
   });
 
+  it("sends the focus to 'Filtrar', not to the page, when 'Quitar filtro' is pressed with the row of the types closed (WCAG 2.4.3)", async () => {
+    window.history.replaceState(null, "", "/cuentas?tipo=transferencias&mes=2026-09");
+    setup();
+    expect(await screen.findByText("No hay movimientos de este tipo")).toBeTruthy();
+    // The row opened by itself because of the ?tipo; the person puts it away, with the type still on.
+    const toggle = detail().getByRole("button", { name: "Filtrar, 1 filtro activo" });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(detail().queryByRole("button", { name: "Todos" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    expect(window.location.search).toBe("?mes=2026-09");
+    // The chips are `hidden` and cannot take the focus: it goes to the control of that filter, which stays.
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(toggle);
+    // Its name says the filter is off now, and the row stays as the person left it: closed.
+    expect(toggle.getAttribute("aria-label")).toBe("Filtrar");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(detail().queryByRole("button", { name: "Todos" })).toBeNull();
+    expect(await screen.findByText("Compra de setiembre")).toBeTruthy();
+    expect(document.activeElement).toBe(toggle);
+  });
+
   it("is an error with Reintentar when the list fails, never an empty month", async () => {
     let failing = true;
     setup({ fault: (call) => (failing && call.kind === "list" ? "server" : undefined) });

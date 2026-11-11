@@ -131,10 +131,19 @@ export function AccountMovements({
   const filtersId = useId();
   const headingId = useId();
   const filtersRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const clearType = () => {
     onFiltersChange({ type: undefined });
-    // "Quitar filtro" goes away with the state it was in: the focus goes to the types, the filter.
-    filtersRef.current?.querySelector<HTMLElement>("[data-slot='type-chips'] button")?.focus();
+    // "Quitar filtro" goes away with the state it was in, and the focus must land somewhere (WCAG
+    // 2.4.3). With the row of the types open it goes to the first of them, the filter that was just
+    // taken off. With the row closed (a type on, and the row put away by hand) those chips are
+    // `hidden` and cannot take the focus, so it goes to "Filtrar": it is the control of that filter,
+    // it stays, and its name changes from "Filtrar, 1 filtro activo" to "Filtrar". Opening the row
+    // instead would move the layout under the person's pointer.
+    const target = filtersOpen
+      ? filtersRef.current?.querySelector<HTMLElement>("[data-slot='type-chips'] button")
+      : toggleRef.current;
+    target?.focus();
   };
 
   let body: ReactNode;
@@ -266,6 +275,7 @@ export function AccountMovements({
             onMonthChange={(next) => onFiltersChange({ month: next })}
           />
           <AccountFilterToggle
+            ref={toggleRef}
             open={filtersOpen}
             count={type !== undefined ? 1 : 0}
             controls={filtersId}

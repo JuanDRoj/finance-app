@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { AccountsScreen } from "@/app/cuentas/_components/accounts-screen";
 import { MovementPanelHost } from "@/components/movements/movement-panel";
 import {
+  movedBalance,
   scriptedMovementsApi,
   type Fault,
   type ScriptedCall,
@@ -12,7 +13,6 @@ import {
 } from "@/components/movements/scripted-movements-api";
 import { SelectField } from "@/components/select-field";
 import { Button } from "@/components/ui/button";
-import { balanceDelta } from "@/lib/core/account-movements";
 import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import { transactionsQueryKey, type MovementListItem } from "@/lib/core/data/transactions";
 import { Isolated } from "./category-demos";
@@ -201,7 +201,7 @@ function balanceOf(items: readonly MovementListItem[], accountId: string): numbe
   let total = BigInt(0);
   for (const item of items) {
     if (item.status === "confirmed" && isOf(item, accountId))
-      total += balanceDelta(item, accountId);
+      total += movedBalance(item, accountId);
   }
   return Number(total);
 }
@@ -336,7 +336,7 @@ export function demoApi({
     for (const item of [...items].reverse()) {
       if (scripted.deleted.has(item.id) || item.status !== "confirmed") continue;
       if (!isOf(item, accountId)) continue;
-      total += balanceDelta(item, accountId);
+      total += movedBalance(item, accountId);
       balances.set(item.id, Number(total));
     }
     return balances;
