@@ -429,14 +429,28 @@ async def get_movements_summary(
 
     Same filters as the list, `type` included, so the figures match the table. Income and expense
     count only confirmed incomes and expenses; `count` is every row the list would show.
+
+    With an `account_id` it also says how much that account's balance moved in the month
+    (`balance_change_minor`). That figure takes only the account and the month: `type`, the
+    category and the search do not narrow it, as they do not narrow `balance_after_minor`. It is a
+    separate query, so the filters of the other three figures cannot leak into it.
     """
     criteria = await _criteria(session, space_id, filters)
     total = await repository.count(session, space_id=space_id, criteria=criteria)
     income, expense = await repository.income_and_expense(
         session, space_id=space_id, criteria=criteria
     )
+    change = None
+    if criteria.account_id is not None:
+        change = await repository.balance_change(
+            session, space_id=space_id, account_id=criteria.account_id, month=criteria.month
+        )
     return TransactionSummaryRead(
-        count=total, income_minor=income, expense_minor=expense, remaining_minor=income - expense
+        count=total,
+        income_minor=income,
+        expense_minor=expense,
+        remaining_minor=income - expense,
+        balance_change_minor=change,
     )
 
 

@@ -277,9 +277,22 @@ class TransactionSummaryRead(ReadModel):
     `remaining_minor` is their difference ("te quedan"). The filters apply as they do to the list,
     `type` included. `count` is every movement the list would show for those filters (any type and
     status, deleted ones excluded): the `m` of "showing n of m".
+
+    `balance_change_minor` has a value only when the request has `account_id`: how much the
+    balance of that account moved in `month` (the whole history if there is no `month`, which is
+    its current balance). It is the signed sum of everything that counts for its balance
+    (confirmed, not deleted): income, expense, transfers in and out, and adjustments (the initial
+    balance and the reconciliations too), with the sign of `balance_minor` (on a credit card,
+    negative = the debt grew). It is the balance after the last movement of the month minus the
+    one after the last movement before it (`balance_after_minor` of the list). It does not follow
+    `type`, `category_id` nor `q`: a movement those filters hide still moved the balance. An
+    account of another space or that does not exist gives 0. Without `account_id` it is null.
     """
 
     count: int
     income_minor: int
     expense_minor: int
     remaining_minor: int
+    # A default (not just `| None`) so that OpenAPI and the TS types declare it optional: the field
+    # is always sent, null without `account_id`.
+    balance_change_minor: int | None = None

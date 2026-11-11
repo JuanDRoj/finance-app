@@ -1351,8 +1351,19 @@
         "type": "object"
       },
       "TransactionSummaryRead": {
-        "description": "What the filtered period adds up to, in the minor unit of the space's currency.\n\n`income_minor` and `expense_minor` add up only the confirmed incomes and expenses (never\nadjustments, transfers, pending, skipped or deleted ones), both as positive amounts, and\n`remaining_minor` is their difference (\"te quedan\"). The filters apply as they do to the list,\n`type` included. `count` is every movement the list would show for those filters (any type and\nstatus, deleted ones excluded): the `m` of \"showing n of m\".",
+        "description": "What the filtered period adds up to, in the minor unit of the space's currency.\n\n`income_minor` and `expense_minor` add up only the confirmed incomes and expenses (never\nadjustments, transfers, pending, skipped or deleted ones), both as positive amounts, and\n`remaining_minor` is their difference (\"te quedan\"). The filters apply as they do to the list,\n`type` included. `count` is every movement the list would show for those filters (any type and\nstatus, deleted ones excluded): the `m` of \"showing n of m\".\n\n`balance_change_minor` has a value only when the request has `account_id`: how much the\nbalance of that account moved in `month` (the whole history if there is no `month`, which is\nits current balance). It is the signed sum of everything that counts for its balance\n(confirmed, not deleted): income, expense, transfers in and out, and adjustments (the initial\nbalance and the reconciliations too), with the sign of `balance_minor` (on a credit card,\nnegative = the debt grew). It is the balance after the last movement of the month minus the\none after the last movement before it (`balance_after_minor` of the list). It does not follow\n`type`, `category_id` nor `q`: a movement those filters hide still moved the balance. An\naccount of another space or that does not exist gives 0. Without `account_id` it is null.",
         "properties": {
+          "balance_change_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance Change Minor"
+          },
           "count": {
             "title": "Count",
             "type": "integer"
@@ -3201,7 +3212,7 @@
     },
     "/spaces/{space_id}/transactions/summary": {
       "get": {
-        "description": "Income, expense, what is left and the number of movements of the filtered period.\n\nThe same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed\nincomes and expenses add up; adjustments and transfers do not. `count` is the number of\nmovements the list shows for those filters, for \"showing n of m\".",
+        "description": "Income, expense, what is left and the number of movements of the filtered period.\n\nThe same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed\nincomes and expenses add up; adjustments and transfers do not. `count` is the number of\nmovements the list shows for those filters, for \"showing n of m\".\n\nWith `account_id`, `balance_change_minor` is how much the balance of that account moved in\n`month`: everything that counts for its balance, transfers in and out and adjustments\nincluded, with the sign of `balance_minor` (negative on a credit card whose debt grew). It\nmatches `balance_after_minor` of the list and ignores `type`, `category_id` and `q`. Without\n`month` it covers the whole history; an account that is not in the space gives 0; without\n`account_id` it is null.",
         "operationId": "read_transactions_summary_spaces__space_id__transactions_summary_get",
         "parameters": [
           {

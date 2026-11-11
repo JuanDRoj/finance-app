@@ -305,13 +305,17 @@ async def test_filtering_by_an_account_or_category_of_another_space_shows_nothin
     _sign_in_as(fake_firebase, "uid-b")
     empty_summary = {"count": 0, "income_minor": 0, "expense_minor": 0, "remaining_minor": 0}
 
-    for params in ({"account_id": str(account_a.id)}, {"category_id": str(category_a.id)}):
+    # With an account the summary also says how much its balance moved: nothing, here (0, not null).
+    for params, change in (
+        ({"account_id": str(account_a.id)}, 0),
+        ({"category_id": str(category_a.id)}, None),
+    ):
         listing = await _get(api_client, space_b, **params)
         assert listing.status_code == 200
         assert listing.json() == {"items": [], "next_cursor": None}
         summary = await _get(api_client, space_b, "/summary", **params)
         assert summary.status_code == 200
-        assert summary.json() == empty_summary
+        assert summary.json() == {**empty_summary, "balance_change_minor": change}
 
 
 async def test_a_cursor_from_another_space_gives_only_your_own_data(
@@ -365,6 +369,7 @@ async def test_the_summary_of_the_period(
         "income_minor": 9_000_000,
         "expense_minor": 4_670_000,
         "remaining_minor": 4_330_000,
+        "balance_change_minor": None,  # no `account_id`
     }
 
 
@@ -492,6 +497,7 @@ async def test_a_movement_created_by_the_api_is_listed_once_even_if_the_post_is_
         "income_minor": 0,
         "expense_minor": 1550,
         "remaining_minor": -1550,
+        "balance_change_minor": None,
     }
     detail = await _get(api_client, space_id, f"/{first.json()['id']}")
     assert detail.json()["description"] == "Súper"

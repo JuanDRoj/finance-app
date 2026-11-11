@@ -85,10 +85,10 @@ async def _list(client: AsyncClient, space_id: uuid.UUID, **params: str) -> dict
     return page
 
 
-async def _totals(client: AsyncClient, space_id: uuid.UUID) -> dict[str, int]:
+async def _totals(client: AsyncClient, space_id: uuid.UUID) -> dict[str, int | None]:
     response = await client.get(f"/spaces/{space_id}/transactions/summary", headers=COOKIE)
     assert response.status_code == 200, response.text
-    totals: dict[str, int] = response.json()
+    totals: dict[str, int | None] = response.json()
     return totals
 
 
@@ -226,6 +226,7 @@ async def test_put_recalculates_every_balance_the_list_and_the_summary(
         "income_minor": 90_000,
         "expense_minor": 4_000,
         "remaining_minor": 86_000,
+        "balance_change_minor": None,
     }
     items = (await _list(api_client, space_id, account_id=str(visa.id)))["items"]
     assert [(item["id"], item["balance_after_minor"]) for item in items] == [(str(target), -4_000)]
@@ -540,6 +541,7 @@ async def test_delete_answers_204_and_the_movement_stops_counting_everywhere(
         "income_minor": 90_000,
         "expense_minor": 0,
         "remaining_minor": 90_000,
+        "balance_change_minor": None,
     }
     listed = [item["id"] for item in (await _list(api_client, space_id))["items"]]
     assert str(target) not in listed
