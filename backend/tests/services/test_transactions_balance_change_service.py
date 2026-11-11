@@ -65,10 +65,9 @@ async def test_a_transfer_with_one_account_on_both_sides_moves_nothing_and_agree
 
     by_id = {item.id: item.balance_after_minor for item in items}
     assert by_id[odd.id] == 0  # it nets out to zero in the running balance
-    assert await _change(session, space_id, account_id=str(account.id), month="2026-10") == -100
-    assert await _change(session, space_id, account_id=str(account.id), month="2026-10") == (
-        items[0].balance_after_minor
-    )
+    change = await _change(session, space_id, account_id=str(account.id), month="2026-10")
+    assert change == -100
+    assert change == items[0].balance_after_minor
 
 
 async def test_the_change_is_a_plain_int_up_to_the_largest_entry_the_database_accepts(

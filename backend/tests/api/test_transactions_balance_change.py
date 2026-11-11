@@ -161,6 +161,60 @@ async def test_adjustments_count_with_their_sign(
     assert (totals["income_minor"], totals["expense_minor"], totals["remaining_minor"]) == (0, 0, 0)
 
 
+async def test_the_initial_balance_and_a_reconciliation_made_through_the_api_count_in_their_month(
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+) -> None:
+    """The real routes date their adjustments "today" in the space's timezone; the month of the
+    summary is taken from the dates they were given, so the test does not depend on the day."""
+    _, space_id = await make_user_and_space(session, "uid-a")
+    _sign_in_as(fake_firebase, "uid-a")
+    accounts_url = f"/spaces/{space_id}/accounts"
+
+    async def create(body: dict[str, Any]) -> dict[str, Any]:
+        response = await api_client.post(accounts_url, json=body, headers=COOKIE)
+        assert response.status_code == 201, response.text
+        created: dict[str, Any] = response.json()
+        return created
+
+    bank = await create({"type": "bank", "name": "Itaú", "initial_balance_minor": 100_000})
+    card = await create(
+        {
+            "type": "credit_card",
+            "name": "Visa",
+            "closing_day": 5,
+            "due_day": 12,
+            "initial_balance_minor": -300_000,
+        }
+    )
+    # What the person really has, according to the bank / the card statement.
+    for account, real_balance in ((bank, 112_550), (card, -250_000)):
+        response = await api_client.post(
+            f"{accounts_url}/{account['id']}/reconcile",
+            json={"balance_minor": real_balance},
+            headers=COOKIE,
+        )
+        assert response.status_code == 200, response.text
+
+    for account, initial, real_balance in ((bank, 100_000, 112_550), (card, -300_000, -250_000)):
+        items = await _listing(api_client, space_id, account_id=account["id"])
+        # Oldest first: the initial balance, then the difference the reconciliation wrote.
+        assert [(item["type"], item["amount_minor"]) for item in reversed(items)] == [
+            ("adjustment", initial),
+            ("adjustment", real_balance - initial),
+        ]
+        months = {item["date"][:7] for item in items}  # one month, except across midnight
+        changes = {
+            month: await _change(api_client, space_id, account_id=account["id"], month=month)
+            for month in months
+        }
+        for month, change in changes.items():
+            assert change == sum(
+                item["amount_minor"] for item in items if item["date"][:7] == month
+            )
+        # Both adjustments count, whatever the month(s) they landed in: it adds up to the balance.
+        assert sum(c for c in changes.values() if c is not None) == real_balance
+
+
 # what counts ------------------------------------------------------------------------------------
 
 
