@@ -628,6 +628,7 @@ async def test_a_deleted_movement_counts_nowhere_and_comes_back_identical(
         "income_minor": 9000,
         "expense_minor": 0,
         "remaining_minor": 9000,
+        "balance_change_minor": None,
     }
     assert target not in [uuid.UUID(item["id"]) for item in during["list"]["items"]]
     assert target not in [uuid.UUID(item["id"]) for item in during["list_of_account"]["items"]]

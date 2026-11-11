@@ -173,6 +173,39 @@ async def income_and_expense(
     return totals.get("income", 0), -totals.get("expense", 0)
 
 
+async def balance_change(
+    session: AsyncSession,
+    *,
+    space_id: uuid.UUID,
+    account_id: uuid.UUID,
+    month: tuple[date, date] | None,
+) -> int:
+    """How much the balance of the account moved in `month`: the signed sum of its counted entries.
+
+    `month` is `(first day, first day of the next month)` on `transactions.date`, the local date
+    of the space, or `None` for the whole history (the balance today). It starts from
+    `_counted_entries` like every balance, so it is the same rule and the same sign as
+    `balances_after`: summing the deltas of the transactions of a range of dates gives the balance
+    after the last of them minus the balance after the last one before. Only the account and the
+    month apply: the type, the category and the search of the list do not, because a movement they
+    hide still moved the balance. 0 if the account has nothing in the range, is of another space
+    or does not exist. A transfer counts through its entry in this account (out of it: negative,
+    into it: positive).
+    """
+    stmt = (
+        _counted_entries(space_id)
+        .with_only_columns(
+            func.coalesce(func.sum(Entry.amount_minor), 0), maintain_column_froms=True
+        )
+        .where(Entry.account_id == account_id)
+    )
+    if month is not None:
+        first, following = month
+        stmt = stmt.where(Transaction.date >= first, Transaction.date < following)
+    # SUM(bigint) is numeric in PostgreSQL: asyncpg returns a Decimal. Money here is always `int`.
+    return int(await session.scalar(stmt) or 0)
+
+
 async def balances_after(
     session: AsyncSession,
     *,

@@ -124,6 +124,13 @@ async def read_transactions_summary(
     The same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed
     incomes and expenses add up; adjustments and transfers do not. `count` is the number of
     movements the list shows for those filters, for "showing n of m".
+
+    With `account_id`, `balance_change_minor` is how much the balance of that account moved in
+    `month`: everything that counts for its balance, transfers in and out and adjustments
+    included, with the sign of `balance_minor` (negative on a credit card whose debt grew). It
+    matches `balance_after_minor` of the list and ignores `type`, `category_id` and `q`. Without
+    `month` it covers the whole history; an account that is not in the space gives 0; without
+    `account_id` it is null.
     """
     return await service.get_movements_summary(session, space_id, filters)
 

@@ -443,16 +443,17 @@ async def test_a_filter_by_an_unknown_or_foreign_account_or_category_is_empty_no
     category_b = await make_category(session, space_b)
     await insert_expense(session, space_b, user_b, account_b.id, category_b.id, 100)
 
-    for fields in (
-        {"account_id": str(uuid.uuid4())},
-        {"category_id": str(uuid.uuid4())},
-        {"account_id": str(account_b.id)},  # an account of another space
-        {"category_id": str(category_b.id)},  # a category of another space
+    # With an account the summary also carries the change of its balance: 0 for these (not null).
+    for fields, change in (
+        ({"account_id": str(uuid.uuid4())}, 0),
+        ({"category_id": str(uuid.uuid4())}, None),
+        ({"account_id": str(account_b.id)}, 0),  # an account of another space
+        ({"category_id": str(category_b.id)}, None),  # a category of another space
     ):
         assert await _ids(session, space_a, **fields) == []
         summary = await service.get_movements_summary(session, space_a, _filters(**fields))
         assert summary == TransactionSummaryRead(
-            count=0, income_minor=0, expense_minor=0, remaining_minor=0
+            count=0, income_minor=0, expense_minor=0, remaining_minor=0, balance_change_minor=change
         )
 
 

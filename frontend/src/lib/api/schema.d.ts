@@ -443,6 +443,13 @@ export interface paths {
          *     The same filters as the list (without `limit` nor `cursor`), `type` included. Only confirmed
          *     incomes and expenses add up; adjustments and transfers do not. `count` is the number of
          *     movements the list shows for those filters, for "showing n of m".
+         *
+         *     With `account_id`, `balance_change_minor` is how much the balance of that account moved in
+         *     `month`: everything that counts for its balance, transfers in and out and adjustments
+         *     included, with the sign of `balance_minor` (negative on a credit card whose debt grew). It
+         *     matches `balance_after_minor` of the list and ignores `type`, `category_id` and `q`. Without
+         *     `month` it covers the whole history; an account that is not in the space gives 0; without
+         *     `account_id` it is null.
          */
         get: operations["read_transactions_summary_spaces__space_id__transactions_summary_get"];
         put?: never;
@@ -997,8 +1004,20 @@ export interface components {
          *     `remaining_minor` is their difference ("te quedan"). The filters apply as they do to the list,
          *     `type` included. `count` is every movement the list would show for those filters (any type and
          *     status, deleted ones excluded): the `m` of "showing n of m".
+         *
+         *     `balance_change_minor` has a value only when the request has `account_id`: how much the
+         *     balance of that account moved in `month` (the whole history if there is no `month`, which is
+         *     its current balance). It is the signed sum of everything that counts for its balance
+         *     (confirmed, not deleted): income, expense, transfers in and out, and adjustments (the initial
+         *     balance and the reconciliations too), with the sign of `balance_minor` (on a credit card,
+         *     negative = the debt grew). It is the balance after the last movement of the month minus the
+         *     one after the last movement before it (`balance_after_minor` of the list). It does not follow
+         *     `type`, `category_id` nor `q`: a movement those filters hide still moved the balance. An
+         *     account of another space or that does not exist gives 0. Without `account_id` it is null.
          */
         TransactionSummaryRead: {
+            /** Balance Change Minor */
+            balance_change_minor?: number | null;
             /** Count */
             count: number;
             /** Expense Minor */
