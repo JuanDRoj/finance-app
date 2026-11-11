@@ -23,6 +23,17 @@ describe("uuidOf", () => {
 describe("withUuids", () => {
   const items = withUuids([movementItem(), incomeItem(), transferItem()]);
 
+  it("gives each movement a UUID of its own, and the same one for the same id (its address takes one)", () => {
+    for (const item of items) expect(item.id).toMatch(UUID);
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+    const same = withUuids([
+      { ...movementItem(), id: "mov-x" },
+      { ...incomeItem(), id: "mov-x" },
+    ]);
+    expect(same[0]!.id).toBe(same[1]!.id);
+    expect(same[0]!.id).toBe(uuidOf("mov-x"));
+  });
+
   it("turns every account and category id into a UUID, parents included", () => {
     const ids = items.flatMap((item) => [
       item.account?.id,

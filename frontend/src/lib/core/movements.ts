@@ -103,8 +103,12 @@ function readParam(source: ParamSource, name: string): string | undefined {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** An id as the backend takes it, in the one form the key of the query uses; anything else is left out (it would be a 422). */
-function normalizeId(text: string | undefined): string | undefined {
+/**
+ * An id as the backend takes it, in the one form the key of the query uses: a UUID in lowercase, or
+ * `undefined` for anything else (it would be a 422). The filters of the URL and the id of a movement
+ * in `?movimiento=editar&id=` (FE-23, KAN-83) read ids this way.
+ */
+export function normalizeId(text: string | undefined): string | undefined {
   return text !== undefined && UUID.test(text) ? text.toLowerCase() : undefined;
 }
 
@@ -678,21 +682,35 @@ function accountsOf(movement: MovementLike) {
   );
 }
 
+/** The ids of the archived accounts of the list of the space **with** its archived ones. */
+export function archivedAccountIdsOf(
+  accounts: readonly Pick<AccountWithBalance, "id" | "archived_at">[],
+): ReadonlySet<string> {
+  return new Set(
+    accounts.filter((account) => account.archived_at !== null).map((account) => account.id),
+  );
+}
+
 /**
- * The accounts of a movement that are archived, by the list of the space **with** its archived ones
- * (`accountsQueryOptions` with `includeArchived`). An account the list does not have is not counted:
- * the backend decides. Empty when none is.
+ * The accounts of a movement that are archived, given the ids of the archived accounts of the space
+ * (`archivedAccountIdsOf`). An account the list does not have is not counted: the backend decides.
+ * Empty when none is.
  */
+export function archivedAccountsIn(
+  movement: MovementLike,
+  archivedIds: ReadonlySet<string>,
+): { id: string; name: string }[] {
+  return accountsOf(movement)
+    .filter((account) => archivedIds.has(account.id))
+    .map(({ id, name }) => ({ id, name }));
+}
+
+/** `archivedAccountsIn` for the list of the space **with** its archived ones (`accountsQueryOptions` with `includeArchived`). */
 export function archivedAccountsOf(
   movement: MovementLike,
   accounts: readonly Pick<AccountWithBalance, "id" | "archived_at">[],
 ): { id: string; name: string }[] {
-  const archived = new Set(
-    accounts.filter((account) => account.archived_at !== null).map((account) => account.id),
-  );
-  return accountsOf(movement)
-    .filter((account) => archived.has(account.id))
-    .map(({ id, name }) => ({ id, name }));
+  return archivedAccountsIn(movement, archivedAccountIdsOf(accounts));
 }
 
 /**
@@ -707,14 +725,28 @@ export function archivedAccountsOf(
  */
 export type MovementDetailKind = "editable" | "adjustment" | "unconfirmed" | "archived-account";
 
+/**
+ * The kind of a movement given the ids of the archived accounts of the space. It is the one rule of
+ * what a movement allows: the sheet (`movementDetailKind`) and the actions of a row of the table
+ * ("Editar X" or "Ver X", and whether it has "Eliminar X") both read it, so the row never offers what
+ * the sheet then refuses.
+ */
+export function movementDetailKindIn(
+  movement: MovementLike,
+  archivedIds: ReadonlySet<string>,
+): MovementDetailKind {
+  if (movement.type === "adjustment") return "adjustment";
+  if (movement.status !== "confirmed") return "unconfirmed";
+  if (archivedAccountsIn(movement, archivedIds).length > 0) return "archived-account";
+  return "editable";
+}
+
+/** `movementDetailKindIn` for the list of the space **with** its archived ones. */
 export function movementDetailKind(
   movement: MovementLike,
   accounts: readonly Pick<AccountWithBalance, "id" | "archived_at">[],
 ): MovementDetailKind {
-  if (movement.type === "adjustment") return "adjustment";
-  if (movement.status !== "confirmed") return "unconfirmed";
-  if (archivedAccountsOf(movement, accounts).length > 0) return "archived-account";
-  return "editable";
+  return movementDetailKindIn(movement, archivedAccountIdsOf(accounts));
 }
 
 /** The title of the sheet or panel of a read-only movement: "Ajuste de saldo" (the canvas) or "Detalle del movimiento". */

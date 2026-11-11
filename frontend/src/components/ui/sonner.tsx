@@ -22,7 +22,8 @@ const DESKTOP_OFFSET = {
  * The one `<Toaster />` of the app (mounted in layout.tsx); call `toast()` from client code only.
  * A toast is floating chrome: it uses the `glass` surface (docs/diseno.md D8, D13).
  * 6 s by default so the "Deshacer" action can be reached. Below 1024 px it is at the bottom and
- * centered; from 1024 px, at the bottom right.
+ * centered; from 1024 px, at the bottom right. The region is named "Notificaciones alt+T" (Sonner's
+ * hotkey, Alt+T, moves the focus to it; the timer pauses while the focus is inside).
  */
 export function Toaster(props: ToasterProps) {
   const desktop = useIsDesktop();
@@ -32,6 +33,9 @@ export function Toaster(props: ToasterProps) {
       theme="system"
       position={desktop ? "bottom-right" : "bottom-center"}
       duration={6000}
+      // The region of the toasts is named for assistive technology (Sonner writes "{this} alt+T": the
+      // hotkey that takes the focus to the toasts, so "Deshacer" can be reached with the keyboard).
+      containerAriaLabel="Notificaciones"
       offset={desktop ? DESKTOP_OFFSET : { bottom: OFFSET, left: 16, right: 16 }}
       mobileOffset={{ bottom: OFFSET, left: 16, right: 16 }}
       icons={{

@@ -31,10 +31,12 @@ export function uuidOf(id: string): string {
 const mapAccount = <T extends { id: string }>(ref: T | null): T | null =>
   ref ? { ...ref, id: uuidOf(ref.id) } : null;
 
-/** The movements with the ids of their accounts and categories turned into UUIDs. */
+/** The movements with their own id and the ids of their accounts and categories turned into UUIDs. */
 export function withUuids(items: readonly MovementListItem[]): MovementListItem[] {
   return items.map((item) => ({
     ...item,
+    // The address of a movement, `?movimiento=editar&id=`, takes a UUID too (FE-23).
+    id: uuidOf(item.id),
     account: mapAccount(item.account),
     from_account: mapAccount(item.from_account),
     to_account: mapAccount(item.to_account),

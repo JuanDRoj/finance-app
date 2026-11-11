@@ -93,6 +93,11 @@ async function deleted(context: ReturnType<typeof setup>, movement: MovementList
   return mocks.toastSuccess.mock.calls[before]![1].action as { label: string; onClick: () => void };
 }
 
+/** The ids being deleted, sorted, to compare them. */
+function ids(context: ReturnType<typeof setup>) {
+  return [...context.result.current.pendingIds].sort();
+}
+
 function keysInvalidated(invalidate: { mock: { calls: unknown[][] } }) {
   return invalidate.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
 }
@@ -176,15 +181,15 @@ describe("deleting a movement", () => {
     expect(order(context.onDeleted)).toBeLessThan(order(mocks.refresh));
   });
 
-  it("is busy while it runs: pendingId is the movement being deleted, and nothing after", async () => {
+  it("is busy while it runs: pendingIds has the movement being deleted, and nothing after", async () => {
     let finish: (value: unknown) => void = () => {};
     const del = vi.fn().mockReturnValue(new Promise((resolve) => (finish = resolve)));
     const context = setup({ del });
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual([]);
     act(() => context.result.current.remove(UBER));
-    expect(context.result.current.pendingId).toBe("mov-uber");
+    expect(ids(context)).toEqual(["mov-uber"]);
     await act(async () => finish(noContent()));
-    await waitFor(() => expect(context.result.current.pendingId).toBeNull());
+    await waitFor(() => expect(ids(context)).toEqual([]));
   });
 
   it("deletes once with two taps in the same instant: one request, one toast, one refresh", async () => {
@@ -239,7 +244,7 @@ describe("deleting a movement", () => {
   });
 });
 
-describe("several deletes at once (pendingId)", () => {
+describe("several deletes at once (pendingIds)", () => {
   /** A DELETE that stays on its way until the test lets it finish. */
   function held() {
     let finish: (value: unknown) => void = () => {};
@@ -247,21 +252,21 @@ describe("several deletes at once (pendingId)", () => {
     return { promise, finish: (value: unknown) => act(async () => finish(value)) };
   }
 
-  it("keeps the later movement busy when the earlier one finishes first", async () => {
+  it("keeps both busy while both are on their way, and each one stops alone when it finishes", async () => {
     const a = held();
     const b = held();
     const del = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
     const context = setup({ del });
     act(() => context.result.current.remove(UBER));
     act(() => context.result.current.remove(CAFE));
-    expect(context.result.current.pendingId).toBe("mov-cafe");
+    expect(ids(context)).toEqual(["mov-cafe", "mov-uber"]);
     await a.finish(noContent());
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
     // A is done; B is still on its way, and its button must keep saying so.
-    expect(context.result.current.pendingId).toBe("mov-cafe");
+    expect(ids(context)).toEqual(["mov-cafe"]);
     await b.finish(noContent());
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(2));
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual([]);
   });
 
   it("keeps the later movement busy when the earlier one fails first", async () => {
@@ -273,13 +278,13 @@ describe("several deletes at once (pendingId)", () => {
     act(() => context.result.current.remove(CAFE));
     await a.finish(failure(500));
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
-    expect(context.result.current.pendingId).toBe("mov-cafe");
+    expect(ids(context)).toEqual(["mov-cafe"]);
     await b.finish(failure(500));
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2));
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual([]);
   });
 
-  it("clears it when the last one asked for is the one that ends", async () => {
+  it("keeps the earlier movement busy when the later one finishes first (one id could not say it)", async () => {
     const a = held();
     const b = held();
     const del = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
@@ -288,10 +293,23 @@ describe("several deletes at once (pendingId)", () => {
     act(() => context.result.current.remove(CAFE));
     await b.finish(noContent());
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual(["mov-uber"]);
     await a.finish(noContent());
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(2));
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual([]);
+  });
+
+  it("changes the Set only when an id comes or goes, so a row not involved is not asked to render again", async () => {
+    const a = held();
+    const del = vi.fn().mockReturnValueOnce(a.promise);
+    const context = setup({ del });
+    const first = context.result.current.pendingIds;
+    act(() => context.result.current.remove(UBER));
+    const second = context.result.current.pendingIds;
+    expect(second).not.toBe(first);
+    await a.finish(noContent());
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
+    expect(context.result.current.pendingIds).not.toBe(second);
   });
 });
 
@@ -363,7 +381,7 @@ describe("when the delete fails", () => {
     });
     expect(context.onDeleted).not.toHaveBeenCalled();
     expect(mocks.refresh).not.toHaveBeenCalled();
-    expect(context.result.current.pendingId).toBeNull();
+    expect(ids(context)).toEqual([]);
     // The guard is let go: the same movement can be deleted again.
     await deleted(context);
     expect(del).toHaveBeenCalledTimes(2);

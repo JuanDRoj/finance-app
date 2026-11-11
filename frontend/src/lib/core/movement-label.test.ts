@@ -193,6 +193,32 @@ describe("describeMovementRowActions", () => {
     }
   });
 
+  it("says 'Ver X' and has no delete for a movement of an archived account: the sheet opens it read only", () => {
+    const archived = new Set(["a1"]);
+    const actions = describeMovementRowActions(saved(), archived);
+    expect(actions.open).toEqual({ kind: "view", label: "Ver Uber" });
+    expect(actions.remove).toBeNull();
+    // Either side of a transfer.
+    const transfer = saved({
+      type: "transfer",
+      description: "Pago",
+      category: null,
+      account: null,
+      from_account: { id: "a2", name: "Visa Itaú", type: "credit_card" },
+      to_account: { id: "a1", name: "Itaú", type: "bank" },
+    });
+    expect(describeMovementRowActions(transfer, archived).open.kind).toBe("view");
+    expect(describeMovementRowActions(transfer, archived).remove).toBeNull();
+  });
+
+  it("keeps 'Editar X' and 'Eliminar X' when the archived accounts are other ones, or when there is no list", () => {
+    for (const archived of [new Set(["otra"]), new Set<string>(), undefined]) {
+      const actions = describeMovementRowActions(saved(), archived);
+      expect(actions.open).toEqual({ kind: "edit", label: "Editar Uber" });
+      expect(actions.remove).toEqual({ label: "Eliminar Uber" });
+    }
+  });
+
   it("cuts a long description like a toast does, so the name of the button stays short", () => {
     const { open, remove } = describeMovementRowActions(saved({ description: "a".repeat(200) }));
     expect(open.label).toBe(`Editar ${"a".repeat(39)}…`);

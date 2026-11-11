@@ -302,6 +302,10 @@ describe("'Eliminar'", () => {
     // What is seen is "Eliminar"; the name that contains it is "Eliminar movimiento".
     expect(remove.textContent).toBe("Eliminar");
     expect(remove.getAttribute("aria-label")).toBe("Eliminar movimiento");
+    // As wide as the canvas draws it (18 px of padding and icon), so the footer fits at 360 px.
+    expect(remove.className).toContain("px-4.5");
+    expect(remove.className).not.toContain("px-6");
+    expect(remove.className).toContain("[&_svg]:size-4.5");
     const footer = document.querySelector("[data-slot='sheet-footer']") as HTMLElement;
     const buttons = within(footer).getAllByRole("button");
     expect(buttons[0]).toBe(remove);

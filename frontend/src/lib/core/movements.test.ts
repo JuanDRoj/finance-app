@@ -9,6 +9,8 @@ import {
   MOVEMENT_TYPE_PARAMS,
   activeFilterCount,
   applyMovementFilters,
+  archivedAccountIdsOf,
+  archivedAccountsIn,
   archivedAccountsOf,
   buildAccountOptions,
   buildCategoryOptions,
@@ -37,6 +39,7 @@ import {
   movementAmountView,
   movementBodyOf,
   movementDetailKind,
+  movementDetailKindIn,
   movementFormValuesOf,
   movementTypeFromParam,
   normalizeSearch,
@@ -1142,6 +1145,44 @@ describe("archivedAccountsOf and movementDetailKind", () => {
     expect(movementDetailKind(item({ status: "skipped" }), [archivedVisa])).toBe("unconfirmed");
     expect(movementDetailKind(item(), [archivedVisa])).toBe("archived-account");
     expect(movementDetailKind(transfer(), [archivedItau])).toBe("archived-account");
+  });
+});
+
+describe("the archived accounts as ids (the table's rows ask the same rule as the sheet)", () => {
+  const archivedAt = "2026-10-01T10:00:00Z";
+  const accounts = [
+    { id: ITAU.id, archived_at: null },
+    { id: VISA.id, archived_at: archivedAt },
+  ];
+
+  it("archivedAccountIdsOf is the Set of the archived ones", () => {
+    expect([...archivedAccountIdsOf(accounts)]).toEqual([VISA.id]);
+    expect(archivedAccountIdsOf([]).size).toBe(0);
+    expect(archivedAccountIdsOf([{ id: ITAU.id, archived_at: null }]).size).toBe(0);
+  });
+
+  it("archivedAccountsIn and archivedAccountsOf give the same accounts", () => {
+    const ids = archivedAccountIdsOf(accounts);
+    for (const movement of [item(), transfer(), adjustment()]) {
+      expect(archivedAccountsIn(movement, ids)).toEqual(archivedAccountsOf(movement, accounts));
+    }
+    expect(archivedAccountsIn(transfer(), ids)).toEqual([{ id: VISA.id, name: VISA.name }]);
+  });
+
+  it("movementDetailKindIn is movementDetailKind with the ids already made, whatever the movement", () => {
+    const ids = archivedAccountIdsOf(accounts);
+    for (const movement of [
+      item(),
+      transfer(),
+      adjustment(),
+      item({ status: "pending" }),
+      item({ account: ITAU }),
+    ]) {
+      expect(movementDetailKindIn(movement, ids)).toBe(movementDetailKind(movement, accounts));
+    }
+    expect(movementDetailKindIn(item(), ids)).toBe("archived-account");
+    expect(movementDetailKindIn(item({ account: ITAU }), ids)).toBe("editable");
+    expect(movementDetailKindIn(item(), new Set())).toBe("editable");
   });
 });
 

@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiClient } from "@/lib/core/data/api-client";
 import { MovementPanelHost } from "./movement-panel";
 
 // The router, the width and the sheet itself are stand-ins: the sheet has its own test. What is under
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   search: "",
   sheet: vi.fn(),
+  editSheet: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -33,6 +35,35 @@ vi.mock("@/components/movements/movement-sheet", () => ({
         </button>
         <button type="button" onClick={props.onNoAccounts}>
           sin cuentas
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock("@/components/movements/movement-edit-sheet", () => ({
+  MovementEditSheet: (props: {
+    open: boolean;
+    movementId: string;
+    onClose: () => void;
+    onSaved: () => void;
+    onDeleted: () => void;
+    onExited?: () => void;
+  }) => {
+    mocks.editSheet(props);
+    return (
+      <div data-testid="edit-sheet" data-open={String(props.open)} data-id={props.movementId}>
+        <button type="button" onClick={props.onClose}>
+          cerrar la edición
+        </button>
+        <button type="button" onClick={props.onSaved}>
+          guardada
+        </button>
+        <button type="button" onClick={props.onDeleted}>
+          eliminada
+        </button>
+        <button type="button" onClick={props.onExited}>
+          salió
         </button>
       </div>
     );
@@ -70,6 +101,7 @@ function visit(search: string, path = "/") {
 beforeEach(() => {
   mocks.refresh.mockReset();
   mocks.sheet.mockReset();
+  mocks.editSheet.mockReset();
   atWidth(true);
   visit("");
 });
@@ -332,5 +364,148 @@ describe("the key N", () => {
     unmount();
     press();
     expect(window.location.search).toBe("");
+  });
+});
+
+describe("editing a movement (FE-23, KAN-83)", () => {
+  const ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020";
+  const OTHER = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0021";
+
+  it("opens the edit sheet on that movement for ?movimiento=editar&id=<uuid>, at any width", async () => {
+    for (const desktop of [true, false]) {
+      atWidth(desktop);
+      visit(`movimiento=editar&id=${ID}`);
+      const { unmount } = renderHost();
+      const sheet = await screen.findByTestId("edit-sheet");
+      expect(sheet.getAttribute("data-open")).toBe("true");
+      expect(sheet.getAttribute("data-id")).toBe(ID);
+      expect(mocks.editSheet.mock.calls.at(-1)?.[0]).toMatchObject({ open: true, movementId: ID });
+      // The sheet that registers is not asked for.
+      expect(screen.queryByTestId("sheet")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("reads the id in lowercase, whatever the case of the address", async () => {
+    visit(`movimiento=editar&id=${ID.toUpperCase()}`);
+    renderHost();
+    expect((await screen.findByTestId("edit-sheet")).getAttribute("data-id")).toBe(ID);
+  });
+
+  it("shows nothing, and does not load the edit sheet, while it is not asked for", () => {
+    visit("movimiento=nuevo");
+    renderHost();
+    expect(screen.queryByTestId("edit-sheet")).toBeNull();
+    expect(mocks.editSheet).not.toHaveBeenCalled();
+  });
+
+  it("takes the params out, in one write, if the id is missing or is not a UUID (it would be a 422)", async () => {
+    for (const search of [
+      "movimiento=editar",
+      "movimiento=editar&id=",
+      "movimiento=editar&id=m1",
+      `movimiento=editar&id=${ID}x`,
+    ]) {
+      visit(`mes=2026-09&${search}`, "/movimientos");
+      const { unmount } = renderHost();
+      await waitFor(() => expect(window.location.search).toBe("?mes=2026-09"));
+      expect(screen.queryByTestId("edit-sheet")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("opens nothing without a space, and stays out of the way of the panel of a new account", () => {
+    visit(`movimiento=editar&id=${ID}`);
+    renderHost({ space: undefined });
+    expect(screen.queryByTestId("edit-sheet")).toBeNull();
+    cleanup();
+    visit(`movimiento=editar&id=${ID}&cuenta=nueva`);
+    renderHost();
+    expect(screen.queryByTestId("edit-sheet")).toBeNull();
+  });
+
+  it("closing takes out ?movimiento and ?id and leaves the filters of the screen", async () => {
+    visit(`mes=2026-09&tipo=gastos&movimiento=editar&id=${ID}`, "/movimientos");
+    renderHost();
+    fireEvent.click(await screen.findByRole("button", { name: "cerrar la edición" }));
+    expect(window.location.pathname).toBe("/movimientos");
+    expect(window.location.search).toBe("?mes=2026-09&tipo=gastos");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("saving closes first and refreshes the server data after, so the refresh cannot bring it back", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    mocks.refresh.mockImplementation(() => {
+      // When the refresh runs the address has already lost its params.
+      expect(window.location.search).toBe("");
+    });
+    renderHost();
+    fireEvent.click(await screen.findByRole("button", { name: "guardada" }));
+    expect(window.location.search).toBe("");
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("deleting only closes: the hook that deletes refreshes after the toast", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    renderHost();
+    fireEvent.click(await screen.findByRole("button", { name: "eliminada" }));
+    expect(window.location.search).toBe("");
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the sheet mounted, closed, while it leaves, and drops it when it says it is gone", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    const { rerender } = renderHost();
+    await screen.findByTestId("edit-sheet");
+    visit("");
+    rerender(<MovementPanelHost space={SPACE} />);
+    expect(screen.getByTestId("edit-sheet").getAttribute("data-open")).toBe("false");
+    expect(screen.getByTestId("edit-sheet").getAttribute("data-id")).toBe(ID);
+    fireEvent.click(screen.getByRole("button", { name: "salió" }));
+    expect(screen.queryByTestId("edit-sheet")).toBeNull();
+  });
+
+  it("another movement is another sheet: the key changes, so nothing of the first one stays", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    const { rerender } = renderHost();
+    const first = await screen.findByTestId("edit-sheet");
+    visit(`movimiento=editar&id=${OTHER}`);
+    rerender(<MovementPanelHost space={SPACE} />);
+    const second = await screen.findByTestId("edit-sheet");
+    expect(second.getAttribute("data-id")).toBe(OTHER);
+    expect(second).not.toBe(first);
+    expect(screen.getAllByTestId("edit-sheet")).toHaveLength(1);
+  });
+
+  it("the same movement opened again after it left is mounted again", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    const { rerender } = renderHost();
+    await screen.findByTestId("edit-sheet");
+    visit("");
+    rerender(<MovementPanelHost space={SPACE} />);
+    fireEvent.click(screen.getByRole("button", { name: "salió" }));
+    expect(screen.queryByTestId("edit-sheet")).toBeNull();
+    visit(`movimiento=editar&id=${ID}`);
+    rerender(<MovementPanelHost space={SPACE} />);
+    expect((await screen.findByTestId("edit-sheet")).getAttribute("data-open")).toBe("true");
+  });
+
+  it("passes the scripted client to both sheets", async () => {
+    const api = { GET: vi.fn() } as unknown as ApiClient;
+    visit(`movimiento=editar&id=${ID}`);
+    renderHost({ api });
+    await screen.findByTestId("edit-sheet");
+    expect(mocks.editSheet.mock.calls.at(-1)?.[0]).toMatchObject({ api });
+  });
+
+  it("the key N does not open the sheet that registers over an open edit (a dialog is in the page)", async () => {
+    visit(`movimiento=editar&id=${ID}`);
+    renderHost();
+    await screen.findByTestId("edit-sheet");
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    document.body.append(dialog);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true }));
+    expect(window.location.search).toBe(`?movimiento=editar&id=${ID}`);
   });
 });

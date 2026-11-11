@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "./sonner";
@@ -95,6 +95,52 @@ describe("Toaster position", () => {
     expect(media.desktopListeners()).toBe(1);
     unmount();
     expect(media.desktopListeners()).toBe(0);
+  });
+});
+
+describe("Toaster as a region for the keyboard and assistive technology (FE-23)", () => {
+  it("is named in Spanish with the hotkey that takes the focus to it", async () => {
+    stubMatchMedia(true);
+    await showToast();
+    const region = document.querySelector("section[aria-label]") as HTMLElement;
+    expect(region.getAttribute("aria-label")).toBe("Notificaciones alt+T");
+    expect(region.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("Alt+T takes the focus to the toasts, where 'Deshacer' is a button that Enter presses", async () => {
+    stubMatchMedia(true);
+    render(<Toaster />);
+    const undo = vi.fn();
+    act(() => {
+      toast.success("Eliminaste «Café»", { action: { label: "Deshacer", onClick: undo } });
+    });
+    await screen.findByText("Eliminaste «Café»");
+    const action = screen.getByRole("button", { name: "Deshacer" });
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "KeyT", altKey: true, bubbles: true }),
+      );
+    });
+    const region = document.querySelector("section[aria-label]") as HTMLElement;
+    expect(region.querySelector("ol")?.contains(document.activeElement)).toBe(true);
+    // The action is a real button: Tab reaches it and Enter or Space press it like a click.
+    expect(action.tagName).toBe("BUTTON");
+    action.focus();
+    fireEvent.click(action);
+    expect(undo).toHaveBeenCalledTimes(1);
+  });
+
+  it("the action has the 44 px and the focus ring of the project", async () => {
+    stubMatchMedia(true);
+    render(<Toaster />);
+    act(() => {
+      toast.success("Eliminaste «Café»", { action: { label: "Deshacer", onClick: () => {} } });
+    });
+    await screen.findByText("Eliminaste «Café»");
+    // Sonner's own styles are unlayered, so the classes carry `!` (see `sonner.tsx`).
+    const className = screen.getByRole("button", { name: "Deshacer" }).className;
+    expect(className).toContain("h-11!");
+    expect(className).toContain("focus-visible:outline-ring");
   });
 });
 

@@ -69,10 +69,67 @@ describe("MovementRow", () => {
     expect(within(row).getByText("Comida", { selector: "span[title]" })).toBeTruthy();
   });
 
-  it("is read only: no link, no button, nothing to tab to", () => {
-    const row = renderRow();
-    expect(row.querySelector("a, button, input, select, [tabindex], [role='button']")).toBeNull();
+  it("is one link, the only tab stop of the row, to the edit of that movement", () => {
+    const row = renderRow(movementItem({ id: "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020" }));
+    const links = row.querySelectorAll("a");
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute("href")).toBe(
+      "/movimientos?movimiento=editar&id=0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020",
+    );
+    expect(links[0]!.getAttribute("aria-haspopup")).toBe("dialog");
+    // Nothing else to tab to: no button, field, hand-made tab stop or role that acts like a button.
+    expect(
+      row.querySelector("button, input, select, textarea, [tabindex], [role='button']"),
+    ).toBeNull();
+    // The row itself is not hidden from assistive technology, and the link is not the row's only text.
     expect(row.getAttribute("aria-hidden")).toBeNull();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("names the link by its content: the title, the line and the amount", () => {
+    renderRow();
+    const link = screen.getByRole("link");
+    expect(link.textContent).toContain("Tienda Inglesa");
+    expect(link.textContent).toContain("Supermercado · Visa Itaú");
+    expect(link.textContent).toContain("2.340,00");
+  });
+
+  it("links an adjustment, a pending and a skipped movement too: the sheet decides what to show", () => {
+    for (const item of [
+      adjustmentItem({ id: "a-1" }),
+      movementItem({ id: "p-1", status: "pending" }),
+      movementItem({ id: "s-1", status: "skipped" }),
+    ]) {
+      const row = renderRow(item);
+      expect(row.querySelector("a")!.getAttribute("href")).toBe(
+        `/movimientos?movimiento=editar&id=${item.id}`,
+      );
+      cleanup();
+    }
+  });
+
+  it("marks the link so the sheet can give the focus back to it", () => {
+    const row = renderRow(movementItem({ id: "m-7" }));
+    const link = row.querySelector("a")!;
+    expect(link.hasAttribute("data-movement-link")).toBe(true);
+    expect(link.getAttribute("data-movement-id")).toBe("m-7");
+  });
+
+  it("draws the focus ring inside the link: the card of the day cuts what overflows it", () => {
+    const link = renderRow().querySelector("a")!;
+    expect(link.className).toContain("focus-visible:-outline-offset-2");
+    expect(link.className).toContain("focus-visible:outline-solid");
+    expect(link.className).not.toContain("focus-visible:outline-offset-2 ");
+  });
+
+  it("tints the row under a mouse and while it is pressed: green in the light theme, darker in the dark one", () => {
+    const link = renderRow().querySelector("a")!;
+    expect(link.className).toContain("hover:bg-primary/10");
+    expect(link.className).toContain("active:bg-primary/10");
+    // Not the green of the table in the dark theme: over the glass card it would take the line under 4.5:1.
+    expect(link.className).toContain("dark:hover:bg-background/30");
+    expect(link.className).toContain("dark:active:bg-background/30");
+    expect(link.className).not.toContain("dark:hover:bg-primary");
   });
 
   it("hides the tile from assistive technology: the text says the same", () => {
@@ -83,9 +140,9 @@ describe("MovementRow", () => {
   });
 
   it("is 64 px tall at least and does not let the text push the amount out", () => {
-    const row = renderRow();
-    expect(row.className).toContain("min-h-16");
-    const [icon, text, amount] = Array.from(row.children);
+    const link = renderRow().querySelector("a")!;
+    expect(link.className).toContain("min-h-16");
+    const [icon, text, amount] = Array.from(link.children);
     expect(icon!.className).toContain("shrink-0");
     expect(text!.className).toContain("min-w-0");
     expect(text!.className).toContain("flex-1");
