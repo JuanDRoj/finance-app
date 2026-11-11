@@ -1,15 +1,19 @@
 """`GET /spaces/{id}/dashboard` (KAN-81): Available, card debt, net and the top of the month.
 
 The router takes the clock itself (`datetime.now(UTC)`), so the data here is dated relative to the
-current month of the space (Montevideo). The exact edges of the month and the timezones are
-covered with an injected clock in `tests/services/test_dashboard_service.py`.
+current month of the space (Montevideo). The `months` fixture reads the clock when each test starts,
+not when the module is imported, so the only window in which a change of month could surprise a
+test is that test's own few milliseconds. The exact edges of the month and the timezones are covered
+with an injected clock in `tests/services/test_dashboard_service.py`.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,12 +33,29 @@ COOKIE = {"Cookie": "session=valid-cookie"}
 SPACE_NOT_FOUND = {"detail": "Space not found", "code": "space_not_found"}
 NOT_AUTHENTICATED = {"detail": "Not authenticated", "code": "not_authenticated"}
 
-TODAY = datetime.now(UTC).astimezone(ZoneInfo("America/Montevideo")).date()
-FIRST = TODAY.replace(day=1)  # the first day of the current month: always inside it
-MONTH = FIRST.strftime("%Y-%m")
-LAST_MONTH = FIRST - timedelta(days=1)  # the last day of the previous month
-TWO_MONTHS_AGO = FIRST - timedelta(days=40)
-NEXT_MONTH = (FIRST + timedelta(days=32)).replace(day=1)
+
+@dataclass(frozen=True)
+class Months:
+    """The current month of the space and its neighbours, read from the clock once per test."""
+
+    first: date  # the first day of the current month: always inside it
+    month: str  # `YYYY-MM` of the current month, as the dashboard and the filters name it
+    last_month: date  # the last day of the previous month
+    two_months_ago: date
+    next_month: date  # the first day of the next month
+
+
+@pytest.fixture
+def months() -> Months:
+    today = datetime.now(UTC).astimezone(ZoneInfo("America/Montevideo")).date()
+    first = today.replace(day=1)
+    return Months(
+        first=first,
+        month=first.strftime("%Y-%m"),
+        last_month=first - timedelta(days=1),
+        two_months_ago=first - timedelta(days=40),
+        next_month=(first + timedelta(days=32)).replace(day=1),
+    )
 
 
 def _sign_in_as(fake: FakeFirebaseAuth, uid: str) -> None:
@@ -56,10 +77,12 @@ async def _dashboard(client: AsyncClient, space_id: uuid.UUID) -> dict[str, Any]
     return body
 
 
-async def _expense_total(client: AsyncClient, space_id: uuid.UUID, **params: Any) -> int:
+async def _expense_total(
+    client: AsyncClient, space_id: uuid.UUID, month: str, **params: Any
+) -> int:
     response = await client.get(
         f"/spaces/{space_id}/transactions/summary",
-        params={"month": MONTH, **params},
+        params={"month": month, **params},
         headers=COOKIE,
     )
     assert response.status_code == 200, response.text
@@ -75,7 +98,7 @@ def _rows(body: dict[str, Any]) -> list[tuple[str, int, int]]:
 
 
 async def test_a_space_without_movements_gets_zeros_an_empty_top_and_the_current_month(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     _, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
@@ -84,7 +107,7 @@ async def test_a_space_without_movements_gets_zeros_an_empty_top_and_the_current
 
     assert response.status_code == 200
     assert response.json() == {
-        "month": MONTH,
+        "month": months.month,
         "available_minor": 0,
         "card_debt_minor": 0,
         "net_minor": 0,
@@ -94,7 +117,7 @@ async def test_a_space_without_movements_gets_zeros_an_empty_top_and_the_current
 
 
 async def test_the_dashboard_of_a_space_with_movements_over_several_months(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_id, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
@@ -105,19 +128,21 @@ async def test_the_dashboard_of_a_space_with_movements_over_several_months(
     market = await make_category(session, space_id, name="Supermercado", parent_id=food.id)
     transport = await make_category(session, space_id, name="Transporte")
     salary = await make_category(session, space_id, name="Sueldo", kind="income")
-    await insert_adjustment(session, space_id, user_id, bank.id, 100_000, day=TWO_MONTHS_AGO)
-    await insert_adjustment(session, space_id, user_id, cash.id, 2_500, day=TWO_MONTHS_AGO)
-    await insert_income(session, space_id, user_id, bank.id, salary.id, 20_000, day=LAST_MONTH)
-    await insert_expense(session, space_id, user_id, card.id, food.id, 5_000, day=LAST_MONTH)
-    await insert_expense(session, space_id, user_id, bank.id, transport.id, 3_000, day=FIRST)
-    await insert_expense(session, space_id, user_id, card.id, market.id, 6_000, day=FIRST)
-    await insert_expense(session, space_id, user_id, cash.id, food.id, 1_000, day=FIRST)
-    await insert_transfer(session, space_id, user_id, bank.id, card.id, 500, day=FIRST)
+    await insert_adjustment(session, space_id, user_id, bank.id, 100_000, day=months.two_months_ago)
+    await insert_adjustment(session, space_id, user_id, cash.id, 2_500, day=months.two_months_ago)
+    await insert_income(
+        session, space_id, user_id, bank.id, salary.id, 20_000, day=months.last_month
+    )
+    await insert_expense(session, space_id, user_id, card.id, food.id, 5_000, day=months.last_month)
+    await insert_expense(session, space_id, user_id, bank.id, transport.id, 3_000, day=months.first)
+    await insert_expense(session, space_id, user_id, card.id, market.id, 6_000, day=months.first)
+    await insert_expense(session, space_id, user_id, cash.id, food.id, 1_000, day=months.first)
+    await insert_transfer(session, space_id, user_id, bank.id, card.id, 500, day=months.first)
 
     body = await _dashboard(api_client, space_id)
 
     assert body == {
-        "month": MONTH,
+        "month": months.month,
         # bank 100.000 + 20.000 - 3.000 - 500, cash 2.500 - 1.000
         "available_minor": 118_000,
         # card -(5.000 + 6.000) + 500 transfer in
@@ -147,7 +172,7 @@ async def test_the_dashboard_of_a_space_with_movements_over_several_months(
 
 
 async def test_available_debt_and_net_match_the_balance_summary_and_the_sum_of_the_accounts(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_id, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
@@ -155,8 +180,8 @@ async def test_available_debt_and_net_match_the_balance_summary_and_the_sum_of_t
     card = await make_account(session, space_id, type_="credit_card", name="Visa")
     food = await make_category(session, space_id, name="Comida")
     await insert_adjustment(session, space_id, user_id, bank.id, 80_000)
-    await insert_expense(session, space_id, user_id, card.id, food.id, 12_345, day=FIRST)
-    await insert_transfer(session, space_id, user_id, bank.id, card.id, 2_000, day=FIRST)
+    await insert_expense(session, space_id, user_id, card.id, food.id, 12_345, day=months.first)
+    await insert_transfer(session, space_id, user_id, bank.id, card.id, 2_000, day=months.first)
 
     body = await _dashboard(api_client, space_id)
 
@@ -175,7 +200,7 @@ async def test_available_debt_and_net_match_the_balance_summary_and_the_sum_of_t
 
 
 async def test_the_month_total_and_each_row_match_the_summary_of_movements(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     """`Ver todo` leads to Movimientos: its figures must be the ones the dashboard shows."""
     user_id, space_id = await make_user_and_space(session, "uid-a")
@@ -185,18 +210,28 @@ async def test_the_month_total_and_each_row_match_the_summary_of_movements(
     market = await make_category(session, space_id, name="Supermercado", parent_id=food.id)
     restaurants = await make_category(session, space_id, name="Restaurantes", parent_id=food.id)
     health = await make_category(session, space_id, name="Salud")
-    await insert_expense(session, space_id, user_id, account.id, food.id, 100, day=FIRST)
-    await insert_expense(session, space_id, user_id, account.id, market.id, 250, day=FIRST)
-    await insert_expense(session, space_id, user_id, account.id, restaurants.id, 75, day=FIRST)
-    await insert_expense(session, space_id, user_id, account.id, health.id, 400, day=FIRST)
-    await insert_expense(session, space_id, user_id, account.id, health.id, 9_999, day=LAST_MONTH)
+    await insert_expense(session, space_id, user_id, account.id, food.id, 100, day=months.first)
+    await insert_expense(session, space_id, user_id, account.id, market.id, 250, day=months.first)
+    await insert_expense(
+        session, space_id, user_id, account.id, restaurants.id, 75, day=months.first
+    )
+    await insert_expense(session, space_id, user_id, account.id, health.id, 400, day=months.first)
+    await insert_expense(
+        session, space_id, user_id, account.id, health.id, 9_999, day=months.last_month
+    )
 
     body = await _dashboard(api_client, space_id)
 
-    assert body["month_expense_minor"] == await _expense_total(api_client, space_id) == 825
+    assert (
+        body["month_expense_minor"]
+        == await _expense_total(api_client, space_id, months.month)
+        == 825
+    )
     assert len(body["top_expense_categories"]) == 2
     for row in body["top_expense_categories"]:
-        by_category = await _expense_total(api_client, space_id, category_id=row["category_id"])
+        by_category = await _expense_total(
+            api_client, space_id, months.month, category_id=row["category_id"]
+        )
         assert row["amount_minor"] == by_category
 
 
@@ -204,7 +239,7 @@ async def test_the_month_total_and_each_row_match_the_summary_of_movements(
 
 
 async def test_adjustments_transfers_incomes_pending_skipped_and_deleted_are_not_in_the_top(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_id, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
@@ -212,18 +247,25 @@ async def test_adjustments_transfers_incomes_pending_skipped_and_deleted_are_not
     cash = await make_account(session, space_id, type_="cash", name="Billetera")
     food = await make_category(session, space_id, name="Comida")
     salary = await make_category(session, space_id, name="Sueldo", kind="income")
-    await insert_expense(session, space_id, user_id, bank.id, food.id, 100, day=FIRST)
-    await insert_adjustment(session, space_id, user_id, bank.id, -9_000, day=FIRST)
-    await insert_transfer(session, space_id, user_id, bank.id, cash.id, 8_000, day=FIRST)
-    await insert_income(session, space_id, user_id, bank.id, salary.id, 70_000, day=FIRST)
+    await insert_expense(session, space_id, user_id, bank.id, food.id, 100, day=months.first)
+    await insert_adjustment(session, space_id, user_id, bank.id, -9_000, day=months.first)
+    await insert_transfer(session, space_id, user_id, bank.id, cash.id, 8_000, day=months.first)
+    await insert_income(session, space_id, user_id, bank.id, salary.id, 70_000, day=months.first)
     await insert_expense(
-        session, space_id, user_id, bank.id, food.id, 7, day=FIRST, status="pending"
+        session, space_id, user_id, bank.id, food.id, 7, day=months.first, status="pending"
     )
     await insert_expense(
-        session, space_id, user_id, bank.id, food.id, 70, day=FIRST, status="skipped"
+        session, space_id, user_id, bank.id, food.id, 70, day=months.first, status="skipped"
     )
     await insert_expense(
-        session, space_id, user_id, bank.id, food.id, 700, day=FIRST, deleted_at=datetime.now(UTC)
+        session,
+        space_id,
+        user_id,
+        bank.id,
+        food.id,
+        700,
+        day=months.first,
+        deleted_at=datetime.now(UTC),
     )
 
     body = await _dashboard(api_client, space_id)
@@ -233,7 +275,7 @@ async def test_adjustments_transfers_incomes_pending_skipped_and_deleted_are_not
 
 
 async def test_an_expense_registered_deleted_and_restored_through_the_api_follows_the_top(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     _, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
@@ -243,7 +285,7 @@ async def test_an_expense_registered_deleted_and_restored_through_the_api_follow
         f"/spaces/{space_id}/transactions",
         json={
             "type": "expense",
-            "date": FIRST.isoformat(),
+            "date": months.first.isoformat(),
             "account_id": str(account.id),
             "category_id": str(food.id),
             "amount_minor": 1_550,
@@ -282,14 +324,14 @@ async def test_the_dashboard_without_a_session_is_a_401(
 
 
 async def test_user_b_gets_404_on_the_dashboard_of_the_space_of_user_a(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_a, space_a = await make_user_and_space(session, "uid-a")
     await make_user_and_space(session, "uid-b")
     account = await make_account(session, space_a)
     food = await make_category(session, space_a, name="Comida secreta")
     await insert_adjustment(session, space_a, user_a, account.id, 424_242)
-    await insert_expense(session, space_a, user_a, account.id, food.id, 31_337, day=FIRST)
+    await insert_expense(session, space_a, user_a, account.id, food.id, 31_337, day=months.first)
     _sign_in_as(fake_firebase, "uid-b")
 
     response = await _get(api_client, space_a)
@@ -311,7 +353,7 @@ async def test_the_dashboard_of_a_space_that_does_not_exist_is_the_same_404(
 
 
 async def test_the_dashboard_of_user_b_never_includes_the_movements_of_user_a(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_a, space_a = await make_user_and_space(session, "uid-a")
     user_b, space_b = await make_user_and_space(session, "uid-b")
@@ -320,8 +362,8 @@ async def test_the_dashboard_of_user_b_never_includes_the_movements_of_user_a(
     food_a = await make_category(session, space_a, name="Comida")
     food_b = await make_category(session, space_b, name="Comida")
     await insert_adjustment(session, space_a, user_a, account_a.id, 5_000)
-    await insert_expense(session, space_a, user_a, account_a.id, food_a.id, 900, day=FIRST)
-    await insert_expense(session, space_b, user_b, account_b.id, food_b.id, 40, day=FIRST)
+    await insert_expense(session, space_a, user_a, account_a.id, food_a.id, 900, day=months.first)
+    await insert_expense(session, space_b, user_b, account_b.id, food_b.id, 40, day=months.first)
     _sign_in_as(fake_firebase, "uid-b")
 
     body = await _dashboard(api_client, space_b)
@@ -352,14 +394,16 @@ async def test_only_get_is_allowed_on_the_dashboard(
 
 
 async def test_movements_of_the_next_month_and_of_old_years_do_not_count_in_this_one(
-    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession
+    api_client: AsyncClient, fake_firebase: FakeFirebaseAuth, session: AsyncSession, months: Months
 ) -> None:
     user_id, space_id = await make_user_and_space(session, "uid-a")
     _sign_in_as(fake_firebase, "uid-a")
     account = await make_account(session, space_id)
     food = await make_category(session, space_id, name="Comida")
-    await insert_expense(session, space_id, user_id, account.id, food.id, 10, day=FIRST)
-    await insert_expense(session, space_id, user_id, account.id, food.id, 999, day=NEXT_MONTH)
+    await insert_expense(session, space_id, user_id, account.id, food.id, 10, day=months.first)
+    await insert_expense(
+        session, space_id, user_id, account.id, food.id, 999, day=months.next_month
+    )
     await insert_transaction(
         session,
         space_id,

@@ -451,7 +451,7 @@ async def test_the_current_month_is_the_one_of_the_space_timezone(
 # the queries ------------------------------------------------------------------------------------
 
 
-async def test_the_dashboard_runs_the_same_few_statements_whatever_the_amount_of_data(
+async def test_the_dashboard_runs_exactly_five_statements_whatever_the_amount_of_data(
     session: AsyncSession, db_connection: AsyncConnection
 ) -> None:
     user_id, space_id = await make_user_and_space(session, "uid-a")
@@ -482,8 +482,9 @@ async def test_the_dashboard_runs_the_same_few_statements_whatever_the_amount_of
     finally:
         event.remove(db_connection.sync_connection, "before_cursor_execute", count)
 
-    assert small == large
-    assert large <= 6
+    # The timezone of the space, the balances (the sums and the accounts), the spending of the
+    # month per category and the categories: five, with one category or with sixty.
+    assert (small, large) == (5, 5)
 
 
 async def test_a_movement_of_the_month_without_a_category_counts_in_the_total_only(
