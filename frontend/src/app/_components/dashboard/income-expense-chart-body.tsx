@@ -94,13 +94,20 @@ function buildRows(points: SeriesChartProps["points"], currency: SeriesChartProp
 }
 
 /** Recharts hands its own props to the element given as `content`; `onShownChange` is ours. */
-type BarsTooltipProps = Partial<TooltipContentProps> & { onShownChange: (shown: boolean) => void };
+type BarsTooltipProps = Partial<TooltipContentProps> & {
+  onShownChange: (index: string | null) => void;
+};
 
-function BarsTooltip({ active, payload, onShownChange }: BarsTooltipProps) {
+function BarsTooltip({ active, payload, activeIndex, onShownChange }: BarsTooltipProps) {
   const row = payload?.[0]?.payload as BarsRow | undefined;
   if (!active || !row) return null;
   return (
-    <ChartTooltipCard title={row.title} className="w-[190px]" onShownChange={onShownChange}>
+    <ChartTooltipCard
+      title={row.title}
+      className="w-[190px]"
+      shownAt={activeIndex}
+      onShownChange={onShownChange}
+    >
       <ChartTooltipRow label={SERIES_LABELS.income} value={row.incomeText} />
       <ChartTooltipRow label={SERIES_LABELS.expense} value={row.expenseText} />
       <ChartTooltipRow label={SERIES_LABELS.savings} value={row.savingsText} separated />
@@ -110,7 +117,7 @@ function BarsTooltip({ active, payload, onShownChange }: BarsTooltipProps) {
 
 export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
-  const { active, containerProps, onShownChange } = useDismissibleTooltip();
+  const { active, resetKey, containerProps, chartProps, onShownChange } = useDismissibleTooltip();
   const axis = useMemo(() => {
     const ticks = incomeExpenseTicks(points);
     const labels = new Map(ticks.map((tick) => [Number(tick), formatCompactMoney(tick, currency)]));
@@ -131,6 +138,7 @@ export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChar
         initialDimension={{ width: 640, height: CHART_HEIGHT_PX.bars }}
       >
         <BarChart
+          {...chartProps}
           data={rows}
           accessibilityLayer
           aria-label={describeIncomeExpenseChartLabel(points, currency)}
@@ -160,6 +168,7 @@ export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChar
             tick={AMOUNT_TICK}
           />
           <ChartTooltip
+            key={resetKey}
             active={active}
             content={<BarsTooltip onShownChange={onShownChange} />}
             cursor={<ColumnCursor />}

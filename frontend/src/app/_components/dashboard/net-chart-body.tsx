@@ -64,13 +64,15 @@ function buildRows(points: SeriesChartProps["points"], currency: SeriesChartProp
 }
 
 /** Recharts hands its own props to the element given as `content`; `onShownChange` is ours. */
-type NetTooltipProps = Partial<TooltipContentProps> & { onShownChange: (shown: boolean) => void };
+type NetTooltipProps = Partial<TooltipContentProps> & {
+  onShownChange: (index: string | null) => void;
+};
 
-function NetTooltip({ active, payload, onShownChange }: NetTooltipProps) {
+function NetTooltip({ active, payload, activeIndex, onShownChange }: NetTooltipProps) {
   const row = payload?.[0]?.payload as NetRow | undefined;
   if (!active || !row) return null;
   return (
-    <ChartTooltipCard title={row.title} onShownChange={onShownChange}>
+    <ChartTooltipCard title={row.title} shownAt={activeIndex} onShownChange={onShownChange}>
       <ChartTooltipRow label={SERIES_LABELS.net} value={row.text} />
     </ChartTooltipCard>
   );
@@ -119,7 +121,7 @@ const ACTIVE_DOT = {
 export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
   const domain = useMemo(() => netChartDomain(points), [points]);
-  const { active, containerProps, onShownChange } = useDismissibleTooltip();
+  const { active, resetKey, containerProps, chartProps, onShownChange } = useDismissibleTooltip();
 
   return (
     <>
@@ -129,6 +131,7 @@ export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
         initialDimension={{ width: 640, height: CHART_HEIGHT_PX.net }}
       >
         <AreaChart
+          {...chartProps}
           data={rows}
           accessibilityLayer
           aria-label={describeNetChartLabel(points, currency)}
@@ -148,6 +151,7 @@ export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
           />
           <YAxis hide domain={domain} />
           <ChartTooltip
+            key={resetKey}
             active={active}
             content={<NetTooltip onShownChange={onShownChange} />}
             cursor={false}

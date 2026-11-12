@@ -28,6 +28,23 @@ function chartOf(name: string | RegExp) {
   return screen.findByRole("application", { name }, LOAD);
 }
 
+/**
+ * jsdom has no layout, so Recharts cannot tell which month is under the pointer: the wrapper gets a
+ * size and a position, and the returned function moves the pointer to `x` (Recharts reads the
+ * position on the next animation frame, hence the wait).
+ */
+function hoverable(container: HTMLElement, height: number) {
+  const wrapper = container.querySelector(".recharts-wrapper") as HTMLElement;
+  Object.defineProperty(wrapper, "offsetWidth", { value: 640, configurable: true });
+  Object.defineProperty(wrapper, "offsetHeight", { value: height, configurable: true });
+  wrapper.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 640, height, right: 640, bottom: height, x: 0, y: 0 }) as DOMRect;
+  return async (x: number) => {
+    fireEvent.mouseMove(wrapper, { clientX: x, clientY: height / 2 });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  };
+}
+
 beforeEach(() => {
   mocks.desktop = true;
 });
@@ -203,19 +220,65 @@ describe("NetChart, Escape closes the tooltip (WCAG 2.2 1.4.13)", () => {
     expect((await screen.findByRole("status")).textContent).toBe("MayoNeto$\u00A071.200,00");
   });
 
-  it("shows it again with a mouse move over the chart, and Escape does not leave it stuck after leaving the chart", async () => {
+  it("brings back a tooltip closed with Escape only on another month: not with a tremor in the same column", async () => {
     const { container } = renderChart();
+    await chartOf(CANVAS_LABEL);
+    const hover = hoverable(container, 130);
+    const closed = () => container.querySelector('[data-slot="chart-tooltip"]') === null;
+
+    await hover(140);
+    expect((await screen.findByRole("status")).textContent).toContain("Junio");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(closed()).toBe(true);
+
+    // The pointer moves, but stays on June: nothing comes back (neither the card nor the highlight).
+    await hover(143);
+    await hover(140);
+    expect(closed()).toBe(true);
+
+    // On another month it does.
+    await hover(380);
+    expect((await screen.findByRole("status")).textContent).toContain("Agosto");
+  });
+
+  it("brings it back on the same month once the pointer has left the chart and come in again", async () => {
+    const { container } = renderChart();
+    await chartOf(CANVAS_LABEL);
+    const hover = hoverable(container, 130);
+
+    await hover(140);
+    await screen.findByRole("status");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(container.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+
+    // Leaving alone shows nothing.
+    fireEvent.mouseLeave(container.querySelector('[data-slot="chart"]') as HTMLElement);
+    expect(container.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+
+    await hover(140);
+    expect((await screen.findByRole("status")).textContent).toContain("Junio");
+  });
+
+  it("shows the same month again with an arrow at the first month, where the arrow cannot move", async () => {
+    renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    expect((await screen.findByRole("status")).textContent).toContain("Mayo");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect((await screen.findByRole("status")).textContent).toContain("Mayo");
+  });
+
+  it("does not leave the tooltip stuck after leaving the chart: an arrow shows it again", async () => {
+    renderChart();
     const chart = await chartOf(CANVAS_LABEL);
     act(() => chart.focus());
     await screen.findByRole("status");
 
     fireEvent.keyDown(chart, { key: "Escape" });
-    expect(screen.queryByRole("status")).toBeNull();
-    fireEvent.mouseMove(container.querySelector('[data-slot="chart"]') as HTMLElement);
-    expect(await screen.findByRole("status")).toBeTruthy();
-
-    fireEvent.keyDown(chart, { key: "Escape" });
-    expect(screen.queryByRole("status")).toBeNull();
     // Leaving the chart and coming back: Recharts shows nothing until an arrow, and the arrow does.
     act(() => chart.blur());
     act(() => chart.focus());
@@ -280,19 +343,29 @@ describe("NetChart, Escape closes the tooltip (WCAG 2.2 1.4.13)", () => {
     }
   });
 
-  it("stops hearing the page once the chart is gone, and a later Escape does nothing", async () => {
-    // How many listeners there are is checked on the hook alone (`use-dismissible-tooltip.test.tsx`):
-    // Recharts adds and removes its own `keydown` listeners on the document as the tooltip moves.
+  it("leaves no keydown listener on the page once the chart is gone", async () => {
+    // Which listener is the hook's cannot be told apart from the ones Recharts adds and removes as
+    // its tooltip moves, so every `keydown` listener that was added (by exact reference) must have
+    // been removed. The hook's own add and remove, one by one, are in `use-dismissible-tooltip.test.tsx`.
+    const add = vi.spyOn(document, "addEventListener");
+    const remove = vi.spyOn(document, "removeEventListener");
+    const keydownListeners = (spy: typeof add) =>
+      spy.mock.calls.filter(([type]) => type === "keydown").map(([, listener]) => listener);
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const { unmount } = renderChart();
     const chart = await chartOf(CANVAS_LABEL);
     act(() => chart.focus());
     await screen.findByRole("status");
+    expect(keydownListeners(add).length).toBeGreaterThan(0);
 
     unmount();
+    const removed = new Set(keydownListeners(remove));
+    expect(keydownListeners(add).filter((listener) => !removed.has(listener))).toEqual([]);
+
+    // And an Escape now has nobody to reach.
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(logged).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
   });
 
   it("lets Escape through when the chart shows no tooltip, and leaves Tab and the arrows alone", async () => {

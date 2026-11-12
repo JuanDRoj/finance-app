@@ -48,6 +48,7 @@ function BrokenChart(): never {
   throw new Error("El gráfico de prueba falla a propósito");
 }
 
+// `text-[42px]` and `text-[19px]` are the canvas' sizes and have no token yet: the real cards (KAN-84) must use tokens.
 export function DashboardChartsDemo({ initial = "canvas" }: Readonly<{ initial?: ScenarioId }>) {
   const [scenarioId, setScenarioId] = useState<ScenarioId>(initial);
   const [frame, setFrame] = useState<FrameWidth>("w744");

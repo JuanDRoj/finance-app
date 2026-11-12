@@ -10,24 +10,29 @@ import { cn } from "@/lib/utils";
 
 /**
  * The card. `className` sets its width (the bars' is 190 px). The charts draw it only while their
- * tooltip is showing, so it mounts when the tooltip appears and unmounts when it goes: that is what
- * `onShownChange` reports (`use-dismissible-tooltip.ts` listens for Escape only in between).
+ * tooltip is showing, so it mounts when the tooltip appears and unmounts when it goes. That is what
+ * `onShownChange` reports, with the index of the month it shows (`shownAt`, `""` if unknown) and
+ * `null` when it goes: `use-dismissible-tooltip.ts` listens for Escape only in between, and
+ * remembers which month was showing when it was dismissed.
  */
 export function ChartTooltipCard({
   title,
   className,
+  shownAt,
   onShownChange,
   children,
 }: Readonly<{
   title: string;
   className?: string;
-  onShownChange?: (shown: boolean) => void;
+  shownAt?: string | null;
+  onShownChange?: (index: string | null) => void;
   children: ReactNode;
 }>) {
+  const index = shownAt ?? "";
   useEffect(() => {
-    onShownChange?.(true);
-    return () => onShownChange?.(false);
-  }, [onShownChange]);
+    onShownChange?.(index);
+    return () => onShownChange?.(null);
+  }, [onShownChange, index]);
 
   return (
     <div
