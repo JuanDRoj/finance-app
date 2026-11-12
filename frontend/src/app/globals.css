@@ -36,6 +36,9 @@
   --income: var(--primary);
   --expense: var(--foreground);
   --debt: #96560a;
+  /* Series of the Inicio's charts (docs/diseno.md D9 and D14): the income and the expense bars. */
+  --chart-income: #23895f;
+  --chart-expense: #b5652a;
   --glass: rgba(255, 255, 255, 0.58);
   --glass-strong: rgba(255, 255, 255, 0.74);
   --glass-border: rgba(255, 255, 255, 0.9);
@@ -104,6 +107,8 @@
     --input: rgba(255, 255, 255, 0.4);
     --ring: #6eddaa;
     --debt: #f0b45a;
+    --chart-income: #3aa97a;
+    --chart-expense: #c27535;
     --glass: rgba(20, 32, 26, 0.6);
     --glass-strong: rgba(16, 28, 22, 0.82);
     --glass-border: rgba(255, 255, 255, 0.1);
@@ -212,6 +217,8 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-debt: var(--debt);
+  --color-chart-income: var(--chart-income);
+  --color-chart-expense: var(--chart-expense);
   --color-glass: var(--glass);
   --color-glass-strong: var(--glass-strong);
   --color-glass-border: var(--glass-border);
