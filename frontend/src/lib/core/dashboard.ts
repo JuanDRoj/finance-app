@@ -187,10 +187,13 @@ export type ExpenseComparison = {
 
 /**
  * The note of "Gastos de octubre": what was spent this month against the month before, from the
- * series (the dashboard does not bring it): the last point's `expense_minor` (the whole current
- * month, which is `month_expense_minor`) and the one before it. The percent is an integer rounded to
- * the nearest with the half up, with the formula of the backend's percentages (`(200·part + total)
- * // (2·total)`), so 12,5 is 13. A change that rounds to 0 % reads "Igual que en…".
+ * series (the dashboard does not bring it). The month before is the series' point before the last;
+ * this month is `monthExpenseMinor`, the `month_expense_minor` of `/dashboard` (the figure the card
+ * shows, so the card and its note never contradict each other, as `describeNetChange` does with the
+ * net), or, if it is not given, the last point's `expense_minor` (the whole current month, which is
+ * the same figure unless a movement landed between the two requests). The percent is an integer
+ * rounded to the nearest with the half up, with the formula of the backend's percentages (`(200·part
+ * + total) // (2·total)`), so 12,5 is 13. A change that rounds to 0 % reads "Igual que en…".
  *
  * `null` (no note) when: the day is before `EXPENSE_COMPARISON_FROM_DAY`; `today` (the space's day,
  * `YYYY-MM-DD`) is not in the month of the last point; the month before had no expenses (nothing to
@@ -199,16 +202,18 @@ export type ExpenseComparison = {
 export function compareExpense(
   points: readonly MonthlySeriesPoint[],
   today: string,
+  monthExpenseMinor?: number,
 ): ExpenseComparison | null {
   const current = points[points.length - 1];
   const previous = points[points.length - 2];
   if (!current || !previous) return null;
   if (!isLocalDate(today) || today.slice(0, 7) !== current.month) return null;
   if (Number(today.slice(8, 10)) < EXPENSE_COMPARISON_FROM_DAY) return null;
-  if (!Number.isSafeInteger(current.expense_minor)) return null;
+  const thisMonth = monthExpenseMinor ?? current.expense_minor;
+  if (!Number.isSafeInteger(thisMonth)) return null;
   if (!Number.isSafeInteger(previous.expense_minor) || previous.expense_minor <= 0) return null;
 
-  const spent = BigInt(current.expense_minor);
+  const spent = BigInt(thisMonth);
   const before = BigInt(previous.expense_minor);
   const change = spent - before;
   const size = change < ZERO ? -change : change;
@@ -325,21 +330,25 @@ function movementsHref(filters: MovementFilters, currentMonth: string): string {
 }
 
 /**
- * Where "Ver todo" of the top 5 goes: Movimientos with the expenses of the month
- * (`/movimientos?tipo=gastos`; the month is the screen's own when it is the current one).
+ * Where "Ver todo" of the top 5 goes: Movimientos with the expenses of the dashboard's `month`
+ * (`/movimientos?tipo=gastos`). `currentMonth` is the screen's own current month (today's, in the
+ * space's time zone), which is the month Movimientos opens in when the address has none: when the two
+ * are the same the month is left out of the address, and when they are not (a dashboard kept from the
+ * month before, near midnight) the address says `mes=` so the list is the one the card is about.
  */
-export function expensesHref(month: string): string {
-  return movementsHref({ month, type: "expense" }, month);
+export function expensesHref(month: string, currentMonth: string): string {
+  return movementsHref({ month, type: "expense" }, currentMonth);
 }
 
 /**
- * Where a row of the top 5 goes: the expenses of the month in that category
- * (`/movimientos?tipo=gastos&categoria_id=<id>`). `category_id` of the dashboard is the main
- * category and the list's `categoria_id` includes its subcategories, so the movements it shows add
- * up to the row's amount.
+ * Where a row of the top 5 goes: the expenses of the dashboard's `month` in that category
+ * (`/movimientos?tipo=gastos&categoria_id=<id>`, with `mes=` first when `month` is not
+ * `currentMonth`, see `expensesHref`). `category_id` of the dashboard is the main category and the
+ * list's `categoria_id` includes its subcategories, so the movements it shows add up to the row's
+ * amount.
  */
-export function topCategoryHref(categoryId: string, month: string): string {
-  return movementsHref({ month, type: "expense", categoryId }, month);
+export function topCategoryHref(categoryId: string, month: string, currentMonth: string): string {
+  return movementsHref({ month, type: "expense", categoryId }, currentMonth);
 }
 
 // --- The notes of the cards ------------------------------------------------------------------------

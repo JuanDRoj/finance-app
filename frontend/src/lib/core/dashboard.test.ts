@@ -393,6 +393,62 @@ describe("compareExpense", () => {
     expect(compareExpense(previous, "2026-10-21")).toBeNull();
   });
 
+  describe("with the month's expenses of the dashboard (the figure the card shows)", () => {
+    it("uses it as this month's expenses instead of the last point's, so the card and its note agree", () => {
+      // The series says 36.770 (October's point) but the card shows 30.000: the note is about 30.000.
+      expect(compareExpense(CANVAS, "2026-10-21", 3000000)).toEqual({
+        direction: "less",
+        percent: BigInt(25),
+        text: "25\u00A0% menos que en setiembre",
+      });
+      // And the other way: a movement landed after the series was read.
+      expect(compareExpense(CANVAS, "2026-10-21", 4377500)?.text).toBe(
+        "10\u00A0% más que en setiembre",
+      );
+      expect(compareExpense(CANVAS, "2026-10-21", 3980000)?.text).toBe("Igual que en setiembre");
+    });
+
+    it("is the same note as without it when the two figures are the same", () => {
+      const last = CANVAS.at(-1)!.expense_minor;
+      expect(compareExpense(CANVAS, "2026-10-21", last)).toEqual(
+        compareExpense(CANVAS, "2026-10-21"),
+      );
+    });
+
+    it("behaves as before when it is not given, or given as undefined", () => {
+      expect(compareExpense(CANVAS, "2026-10-21", undefined)).toEqual({
+        direction: "less",
+        percent: BigInt(8),
+        text: "8\u00A0% menos que en setiembre",
+      });
+    });
+
+    it("accepts a month with no expenses at all: 100 % menos, whatever the last point says", () => {
+      expect(compareExpense(CANVAS, "2026-10-21", 0)?.text).toBe(
+        "100\u00A0% menos que en setiembre",
+      );
+    });
+
+    it("keeps the rest of the rules: the day, the month of today, the month before and exact figures", () => {
+      expect(compareExpense(CANVAS, "2026-10-14", 3000000)).toBeNull();
+      expect(compareExpense(CANVAS, "2026-11-20", 3000000)).toBeNull();
+      expect(compareExpense(CANVAS, "not a date", 3000000)).toBeNull();
+      expect(compareExpense(ONE_MONTH, "2026-10-21", 3000000)).toBeNull();
+      expect(compareExpense([], "2026-10-21", 3000000)).toBeNull();
+      // Not an exact integer, though the last point's is: the figure the card shows rules.
+      expect(compareExpense(CANVAS, "2026-10-21", MAX_SAFE + 2)).toBeNull();
+      expect(compareExpense(CANVAS, "2026-10-21", Number.NaN)).toBeNull();
+      // The month before is not exact: no note, whatever this month is.
+      const previous = [point("2026-09", 0, MAX_SAFE + 2, 0), point("2026-10", 0, 100, 0)];
+      expect(compareExpense(previous, "2026-10-21", 100)).toBeNull();
+    });
+
+    it("is exact with the largest amounts", () => {
+      const large = [point("2026-09", 0, MAX_SAFE, 0), point("2026-10", 0, 1, 0)];
+      expect(compareExpense(large, "2026-10-21", MAX_SAFE - 1)?.direction).toBe("same");
+    });
+  });
+
   it("is exact with the largest amounts and with an enormous rise", () => {
     const large = [point("2026-09", 0, MAX_SAFE, 0), point("2026-10", 0, MAX_SAFE - 1, 0)];
     expect(compareExpense(large, "2026-10-21")?.direction).toBe("same");
@@ -538,25 +594,51 @@ describe("the links of the top 5", () => {
   const CATEGORY = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0011";
 
   it("'Ver todo' goes to the expenses of the month in Movimientos", () => {
-    expect(expensesHref("2026-10")).toBe("/movimientos?tipo=gastos");
+    expect(expensesHref("2026-10", "2026-10")).toBe("/movimientos?tipo=gastos");
   });
 
   it("a row goes to the expenses of the month in its category", () => {
-    expect(topCategoryHref(CATEGORY, "2026-10")).toBe(
+    expect(topCategoryHref(CATEGORY, "2026-10", "2026-10")).toBe(
       `/movimientos?tipo=gastos&categoria_id=${CATEGORY}`,
     );
   });
 
-  it("are what Movimientos reads back: the type and the category, in the current month", () => {
-    const query = topCategoryHref(CATEGORY, "2026-10").split("?")[1]!;
-    expect(parseMovementFilters(new URLSearchParams(query), "2026-10")).toEqual({
+  it("leave the month out when the dashboard's is the current one, as Movimientos opens in it", () => {
+    expect(expensesHref("2026-10", "2026-10")).not.toContain("mes=");
+    expect(topCategoryHref(CATEGORY, "2026-10", "2026-10")).not.toContain("mes=");
+  });
+
+  it("say the month when the dashboard's is not the current one: a dashboard kept from the month before, near midnight", () => {
+    expect(expensesHref("2026-09", "2026-10")).toBe("/movimientos?mes=2026-09&tipo=gastos");
+    expect(topCategoryHref(CATEGORY, "2026-09", "2026-10")).toBe(
+      `/movimientos?mes=2026-09&tipo=gastos&categoria_id=${CATEGORY}`,
+    );
+    // Across a year too.
+    expect(expensesHref("2025-12", "2026-01")).toBe("/movimientos?mes=2025-12&tipo=gastos");
+  });
+
+  it("are what Movimientos reads back: the type, the category and the dashboard's month", () => {
+    const read = (href: string, currentMonth: string) =>
+      parseMovementFilters(new URLSearchParams(href.split("?")[1]!), currentMonth);
+
+    // Same month: it is the current one, so the list is the dashboard's month.
+    expect(read(topCategoryHref(CATEGORY, "2026-10", "2026-10"), "2026-10")).toEqual({
       month: "2026-10",
       type: "expense",
       categoryId: CATEGORY,
     });
-    const all = expensesHref("2026-10").split("?")[1]!;
-    expect(parseMovementFilters(new URLSearchParams(all), "2026-10")).toEqual({
+    expect(read(expensesHref("2026-10", "2026-10"), "2026-10")).toEqual({
       month: "2026-10",
+      type: "expense",
+    });
+    // Another month: the list is still the dashboard's, not the current one.
+    expect(read(topCategoryHref(CATEGORY, "2026-09", "2026-10"), "2026-10")).toEqual({
+      month: "2026-09",
+      type: "expense",
+      categoryId: CATEGORY,
+    });
+    expect(read(expensesHref("2026-09", "2026-10"), "2026-10")).toEqual({
+      month: "2026-09",
       type: "expense",
     });
   });
@@ -595,7 +677,7 @@ describe("the notes of Disponible and Deuda de tarjetas", () => {
     expect(describeDebtNote([])).toBe("Sin tarjetas");
   });
 
-  it("leave the archived accounts out, as the totals do", () => {
+  it("name only the active accounts: an archived one has no balance, so the totals do not change without it", () => {
     const archived = "2026-09-01T10:00:00Z";
     const oldBank = account({ id: "7", type: "bank", archived_at: archived });
     const oldCard = account({ id: "8", type: "credit_card", archived_at: archived });
