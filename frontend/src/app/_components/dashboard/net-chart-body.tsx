@@ -20,6 +20,7 @@ import {
 } from "@/lib/core/dashboard";
 import { ChartDataTable } from "./chart-data-table";
 import { ChartTooltipCard, ChartTooltipRow } from "./chart-tooltip-card";
+import { useDismissibleTooltip } from "./use-dismissible-tooltip";
 import {
   CHART_HEIGHT_CLASS,
   CHART_HEIGHT_PX,
@@ -115,10 +116,12 @@ const ACTIVE_DOT = {
 export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
   const domain = useMemo(() => netChartDomain(points), [points]);
+  const { active, containerProps } = useDismissibleTooltip();
 
   return (
     <>
       <ChartContainer
+        {...containerProps}
         className={CHART_HEIGHT_CLASS.net}
         initialDimension={{ width: 640, height: CHART_HEIGHT_PX.net }}
       >
@@ -142,6 +145,7 @@ export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
           />
           <YAxis hide domain={domain} />
           <ChartTooltip
+            active={active}
             content={NetTooltip}
             cursor={false}
             isAnimationActive={false}

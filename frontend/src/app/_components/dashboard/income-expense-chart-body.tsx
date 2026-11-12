@@ -14,6 +14,7 @@ import {
 } from "@/lib/core/dashboard";
 import { ChartDataTable } from "./chart-data-table";
 import { ChartTooltipCard, ChartTooltipRow } from "./chart-tooltip-card";
+import { useDismissibleTooltip } from "./use-dismissible-tooltip";
 import {
   CHART_HEIGHT_CLASS,
   CHART_HEIGHT_PX,
@@ -106,6 +107,7 @@ function BarsTooltip({ active, payload }: TooltipContentProps) {
 
 export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
+  const { active, containerProps } = useDismissibleTooltip();
   const axis = useMemo(() => {
     const ticks = incomeExpenseTicks(points);
     const labels = new Map(ticks.map((tick) => [Number(tick), formatCompactMoney(tick, currency)]));
@@ -121,6 +123,7 @@ export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChar
   return (
     <>
       <ChartContainer
+        {...containerProps}
         className={CHART_HEIGHT_CLASS.bars}
         initialDimension={{ width: 640, height: CHART_HEIGHT_PX.bars }}
       >
@@ -154,6 +157,7 @@ export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChar
             tick={AMOUNT_TICK}
           />
           <ChartTooltip
+            active={active}
             content={BarsTooltip}
             cursor={<ColumnCursor />}
             isAnimationActive={false}

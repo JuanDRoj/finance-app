@@ -168,6 +168,90 @@ describe("NetChart, from 1024 px", () => {
   });
 });
 
+describe("NetChart, Escape closes the tooltip (WCAG 2.2 1.4.13)", () => {
+  /** The chart inside a parent that records the keys that reach it, like a dialog around it would. */
+  function renderInside() {
+    const keys: string[] = [];
+    const view = render(
+      <div onKeyDown={(event) => keys.push(event.key)}>
+        <NetChart points={CANVAS.series} currency={CANVAS.currency} />
+      </div>,
+    );
+    return { ...view, keys };
+  }
+
+  it("hides the tooltip without moving the focus, and an arrow shows the next month's again", async () => {
+    renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    expect((await screen.findByRole("status")).textContent).toBe("MayoNeto$\u00A071.200,00");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(document.activeElement).toBe(chart);
+
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect((await screen.findByRole("status")).textContent).toBe("JunioNeto$\u00A076.900,00");
+
+    // It can be closed again, and the arrow that comes back goes the other way.
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect((await screen.findByRole("status")).textContent).toBe("MayoNeto$\u00A071.200,00");
+  });
+
+  it("shows it again with a mouse move over the chart, and Escape does not leave it stuck after leaving the chart", async () => {
+    const { container } = renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.mouseMove(container.querySelector('[data-slot="chart"]') as HTMLElement);
+    expect(await screen.findByRole("status")).toBeTruthy();
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    // Leaving the chart and coming back: Recharts shows nothing until an arrow, and the arrow does.
+    act(() => chart.blur());
+    act(() => chart.focus());
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(await screen.findByRole("status")).toBeTruthy();
+  });
+
+  it("swallows the Escape that closes the tooltip, so a dialog around the chart stays open", async () => {
+    const { keys } = renderInside();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(keys).toEqual([]);
+
+    // With no tooltip left to close, Escape goes on its way: the dialog may close with it.
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(keys).toEqual(["Escape"]);
+  });
+
+  it("lets Escape through when the chart shows no tooltip, and leaves Tab and the arrows alone", async () => {
+    const { keys } = renderInside();
+    const chart = await chartOf(CANVAS_LABEL);
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(keys).toEqual(["Escape"]);
+
+    act(() => chart.focus());
+    await screen.findByRole("status");
+    // Not prevented (the browser moves the focus out of the chart) and it reaches the parent.
+    expect(fireEvent.keyDown(chart, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(chart, { key: "ArrowRight" })).toBe(true);
+    expect(keys).toEqual(["Escape", "Tab", "ArrowRight"]);
+    expect(screen.getByRole("status")).toBeTruthy();
+  });
+});
+
 describe("NetChart, with little history", () => {
   it.each(["one-month", "no-movements"] as const)(
     "says there is nothing to draw yet in %s instead of drawing a line from 0",

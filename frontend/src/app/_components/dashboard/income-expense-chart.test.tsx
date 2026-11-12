@@ -212,6 +212,95 @@ describe("IncomeExpenseChart, from 1024 px", () => {
   });
 });
 
+describe("IncomeExpenseChart, Escape closes the tooltip (WCAG 2.2 1.4.13)", () => {
+  const COLUMN = "path.fill-primary\\/10";
+
+  function renderInside() {
+    const keys: string[] = [];
+    const view = render(
+      <div onKeyDown={(event) => keys.push(event.key)}>
+        <IncomeExpenseChart points={CANVAS.series} currency={CANVAS.currency} />
+      </div>,
+    );
+    return { ...view, keys };
+  }
+
+  it("hides the tooltip and the highlighted column without moving the focus, and an arrow brings back the next month's", async () => {
+    const { container } = renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "MayoIngresos$\u00A065.000,00Gastos$\u00A041.200,00Ahorro$\u00A023.800,00",
+    );
+    expect(container.querySelector(COLUMN)).not.toBeNull();
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector(COLUMN)).toBeNull();
+    expect(document.activeElement).toBe(chart);
+
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "JunioIngresos$\u00A065.000,00Gastos$\u00A038.900,00Ahorro$\u00A026.100,00",
+    );
+    expect(container.querySelector(COLUMN)).not.toBeNull();
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect((await screen.findByRole("status")).textContent).toContain("Mayo");
+  });
+
+  it("shows it again with a mouse move over the chart, and Escape does not leave it stuck after leaving the chart", async () => {
+    const { container } = renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.mouseMove(container.querySelector('[data-slot="chart"]') as HTMLElement);
+    expect(await screen.findByRole("status")).toBeTruthy();
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    // Leaving the chart and coming back: Recharts shows nothing until an arrow, and the arrow does.
+    act(() => chart.blur());
+    act(() => chart.focus());
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(await screen.findByRole("status")).toBeTruthy();
+  });
+
+  it("swallows the Escape that closes the tooltip, so a dialog around the chart stays open", async () => {
+    const { keys } = renderInside();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(keys).toEqual([]);
+
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(keys).toEqual(["Escape"]);
+  });
+
+  it("lets Escape through when the chart shows no tooltip, and leaves Tab and the arrows alone", async () => {
+    const { keys } = renderInside();
+    const chart = await chartOf(CANVAS_LABEL);
+    fireEvent.keyDown(chart, { key: "Escape" });
+    expect(keys).toEqual(["Escape"]);
+
+    act(() => chart.focus());
+    await screen.findByRole("status");
+    expect(fireEvent.keyDown(chart, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(chart, { key: "ArrowRight" })).toBe(true);
+    expect(keys).toEqual(["Escape", "Tab", "ArrowRight"]);
+    expect(screen.getByRole("status")).toBeTruthy();
+  });
+});
+
 describe("IncomeExpenseChart, with little or nothing to draw", () => {
   it("draws the six months when only the last one has something: the other five are empty", async () => {
     const { container } = renderChart(DASHBOARD_SCENARIOS["one-month"]);

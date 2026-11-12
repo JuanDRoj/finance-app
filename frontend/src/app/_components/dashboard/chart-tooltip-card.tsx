@@ -14,6 +14,7 @@ export function ChartTooltipCard({
 }: Readonly<{ title: string; className?: string; children: ReactNode }>) {
   return (
     <div
+      data-slot="chart-tooltip"
       role="status"
       aria-live="polite"
       className={cn(
