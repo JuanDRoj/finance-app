@@ -1029,10 +1029,12 @@
         "description": "One month of the series, in the minor unit of the currency of the space.\n\n`income_minor` and `expense_minor` (both positive) are the confirmed, not deleted incomes and\nexpenses of the whole month, also the days after today in the current one (adjustments,\ntransfers, pending, skipped and deleted movements do not count): the same figures the\nmovements summary gives for that `month`. A month without movements has 0 in both.\n\n`net_minor` is the net (available - card debt = the sum of every balance) at the close of the\nmonth; in the current month, the net of today, the same as `DashboardRead.net_minor`. It does\ncount adjustments (the initial balance and the reconciliations are balance) and it does not\ncount pending, skipped and deleted movements. A month without movements keeps the net of the\nmonth before, and the months before the first movement are 0.",
         "properties": {
           "expense_minor": {
+            "minimum": 0.0,
             "title": "Expense Minor",
             "type": "integer"
           },
           "income_minor": {
+            "minimum": 0.0,
             "title": "Income Minor",
             "type": "integer"
           },

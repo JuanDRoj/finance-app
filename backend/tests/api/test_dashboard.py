@@ -1,23 +1,21 @@
 """`GET /spaces/{id}/dashboard` (KAN-81): Available, card debt, net and the top of the month.
 
 The router takes the clock itself (`datetime.now(UTC)`), so the data here is dated relative to the
-current month of the space (Montevideo). The `months` fixture reads the clock when each test starts,
-not when the module is imported, so the only window in which a change of month could surprise a
-test is that test's own few milliseconds. The exact edges of the month and the timezones are covered
-with an injected clock in `tests/services/test_dashboard_service.py`.
+current month of the space (Montevideo). The `months` fixture (`tests/api/conftest.py`) reads the
+clock when each test starts, not when the module is imported, so the only window in which a change
+of month could surprise a test is that test's own few milliseconds. The exact edges of the month
+and the timezones are covered with an injected clock in `tests/services/test_dashboard_service.py`.
 """
 
 import uuid
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
-import pytest
 from httpx import AsyncClient, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.fakes import FakeFirebaseAuth, make_identity
+from tests.months import Months
 from tests.transactions_helpers import (
     insert_adjustment,
     insert_expense,
@@ -32,30 +30,6 @@ from tests.transactions_helpers import (
 COOKIE = {"Cookie": "session=valid-cookie"}
 SPACE_NOT_FOUND = {"detail": "Space not found", "code": "space_not_found"}
 NOT_AUTHENTICATED = {"detail": "Not authenticated", "code": "not_authenticated"}
-
-
-@dataclass(frozen=True)
-class Months:
-    """The current month of the space and its neighbours, read from the clock once per test."""
-
-    first: date  # the first day of the current month: always inside it
-    month: str  # `YYYY-MM` of the current month, as the dashboard and the filters name it
-    last_month: date  # the last day of the previous month
-    two_months_ago: date
-    next_month: date  # the first day of the next month
-
-
-@pytest.fixture
-def months() -> Months:
-    today = datetime.now(UTC).astimezone(ZoneInfo("America/Montevideo")).date()
-    first = today.replace(day=1)
-    return Months(
-        first=first,
-        month=first.strftime("%Y-%m"),
-        last_month=first - timedelta(days=1),
-        two_months_ago=first - timedelta(days=40),
-        next_month=(first + timedelta(days=32)).replace(day=1),
-    )
 
 
 def _sign_in_as(fake: FakeFirebaseAuth, uid: str) -> None:

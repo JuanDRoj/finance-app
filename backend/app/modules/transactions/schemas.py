@@ -173,9 +173,9 @@ class MonthlyTotals(ReadModel):
     transfers), so it is how much the net of the space moved: it is not `income - expense`.
     """
 
-    income_minor: int
-    expense_minor: int
-    net_change_minor: int
+    income_minor: Annotated[int, Field(ge=0)]
+    expense_minor: Annotated[int, Field(ge=0)]
+    net_change_minor: int  # with sign
 
 
 # The movements list ------------------------------------------------------------------------------

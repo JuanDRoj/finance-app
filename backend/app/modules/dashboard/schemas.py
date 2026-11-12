@@ -73,9 +73,9 @@ class MonthlySeriesPoint(ReadModel):
     """
 
     month: Month
-    income_minor: int
-    expense_minor: int
-    net_minor: int
+    income_minor: Annotated[int, Field(ge=0)]
+    expense_minor: Annotated[int, Field(ge=0)]
+    net_minor: int  # with sign: negative when the debt is larger than what is available
 
 
 class DashboardSeriesRead(ReadModel):

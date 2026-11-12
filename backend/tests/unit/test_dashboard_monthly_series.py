@@ -3,6 +3,7 @@
 import re
 
 import pytest
+from pydantic import ValidationError
 
 from app.modules.dashboard.monthly_series import build_points, month_window
 from app.modules.dashboard.schemas import MAX_SERIES_MONTHS, MonthlySeriesPoint
@@ -175,3 +176,36 @@ def test_a_window_of_one_month_has_the_opening_and_the_future_in_its_net() -> No
     points = build_points(totals, ["2026-11"])
 
     assert [_row(p) for p in points] == [("2026-11", 5, 0, 78)]
+
+
+# the schemas -----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("field", ["income_minor", "expense_minor"])
+def test_a_point_does_not_take_a_negative_income_or_expense_but_a_negative_net(field: str) -> None:
+    valid = {"month": "2026-11", "income_minor": 0, "expense_minor": 0, "net_minor": -5}
+    assert MonthlySeriesPoint.model_validate(valid).net_minor == -5
+
+    with pytest.raises(ValidationError) as error:
+        MonthlySeriesPoint.model_validate({**valid, field: -1})
+
+    assert [(issue["type"], issue["loc"]) for issue in error.value.errors()] == [
+        ("greater_than_equal", (field,))
+    ]
+
+
+@pytest.mark.parametrize("field", ["income_minor", "expense_minor"])
+def test_the_totals_of_a_month_do_not_take_a_negative_income_or_expense(field: str) -> None:
+    valid = {"income_minor": 0, "expense_minor": 0, "net_change_minor": -5}
+    assert MonthlyTotals.model_validate(valid).net_change_minor == -5
+
+    with pytest.raises(ValidationError):
+        MonthlyTotals.model_validate({**valid, field: -1})
+
+
+def test_the_contract_publishes_a_minimum_of_zero_for_income_and_expense_only() -> None:
+    properties = MonthlySeriesPoint.model_json_schema()["properties"]
+
+    assert properties["income_minor"]["minimum"] == 0
+    assert properties["expense_minor"]["minimum"] == 0
+    assert "minimum" not in properties["net_minor"]
