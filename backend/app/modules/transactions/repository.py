@@ -3,7 +3,19 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import ColumnElement, Select, and_, exists, func, select, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    DateTime,
+    Select,
+    and_,
+    cast,
+    exists,
+    func,
+    literal_column,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -201,6 +213,46 @@ async def expense_by_category(
     )
     # SUM(bigint) is numeric in PostgreSQL: asyncpg returns a Decimal. Money here is always `int`.
     return {category_id: -int(total) for category_id, total in await session.execute(stmt)}
+
+
+async def monthly_totals(
+    session: AsyncSession, *, space_id: uuid.UUID
+) -> dict[str, tuple[int, int, int]]:
+    """Per month of the whole history: `(income, expense, net change)`, keyed by `"YYYY-MM"`.
+
+    One pass over `_counted_entries` grouped by the month of `transactions.date`, the local date of
+    the space, so no timezone is involved. Only months with counted entries are in the answer (one
+    row per month of use: about a hundred for eight years); the caller fills the gaps. `income` and
+    `expense` are positive and sum only confirmed incomes and expenses (the expense entries are
+    negative: the sign is flipped here). `net change` is the signed sum of every counted entry of
+    the month, whatever its type: adjustments move it and a transfer, which adds up to zero, does
+    not. The sum of all the net changes is therefore the net of the space (`balances_by_account`
+    added up).
+
+    The month is cut with `to_char(date::timestamp, 'YYYY-MM')`. The explicit cast to a plain
+    `timestamp` matters: PostgreSQL would otherwise read the `date` as a `timestamptz` in the
+    timezone of the database session (which is also what `date_trunc` does on a `date`), and a
+    calendar day must not depend on it. The format is a SQL literal and not a bind parameter, so
+    the `GROUP BY` is the very same expression as the one selected.
+    """
+    month = func.to_char(cast(Transaction.date, DateTime), literal_column("'YYYY-MM'"))
+    stmt = (
+        _counted_entries(space_id)
+        .with_only_columns(
+            month,
+            func.sum(Entry.amount_minor).filter(Transaction.type == "income"),
+            func.sum(Entry.amount_minor).filter(Transaction.type == "expense"),
+            func.sum(Entry.amount_minor),
+            maintain_column_froms=True,
+        )
+        .group_by(month)
+    )
+    # SUM(bigint) is numeric in PostgreSQL (asyncpg returns a Decimal) and a FILTER with no row
+    # gives NULL. Money here is always `int`.
+    return {
+        key: (int(income or 0), -int(expense or 0), int(net))
+        for key, income, expense, net in await session.execute(stmt)
+    }
 
 
 async def balance_change(

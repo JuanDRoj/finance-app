@@ -32,6 +32,7 @@ from app.modules.transactions.schemas import (
     BalanceSummaryRead,
     ExpenseCreate,
     IncomeCreate,
+    MonthlyTotals,
     MovementCreate,
     MovementPage,
     MovementRead,
@@ -390,6 +391,26 @@ async def get_expense_by_category(
     return await repository.expense_by_category(
         session, space_id=space_id, month=month_bounds(month)
     )
+
+
+async def get_monthly_totals(
+    session: AsyncSession, space_id: uuid.UUID
+) -> dict[str, MonthlyTotals]:
+    """Income, expense and net change of every month of the space that has movements.
+
+    Keyed by the local month (`"2026-11"`, as `transactions.date` is the local day of the space);
+    months with nothing are not there. Only confirmed, not deleted movements count. Income and
+    expense are positive and are the same figures `get_movements_summary` gives for that month
+    (adjustments, transfers, pending, skipped and deleted ones add nothing). The net change is the
+    signed sum of every counted entry, adjustments included: adding all of them up gives
+    `get_balance_summary().net_minor`, and adding up to a month gives the net at its close. Turning
+    that into a window of months is the caller's job (the dashboard, `dashboard/monthly_series`).
+    """
+    totals = await repository.monthly_totals(session, space_id=space_id)
+    return {
+        month: MonthlyTotals(income_minor=income, expense_minor=expense, net_change_minor=net)
+        for month, (income, expense, net) in totals.items()
+    }
 
 
 async def list_movements(

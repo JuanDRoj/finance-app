@@ -163,6 +163,21 @@ class BalanceSummaryRead(ReadModel):
     net_minor: int  # available - debt = the sum of every balance
 
 
+class MonthlyTotals(ReadModel):
+    """What one month of the space adds up to, for the series of the dashboard.
+
+    `income_minor` and `expense_minor` are the confirmed, not deleted incomes and expenses of the
+    month, both as positive amounts: adjustments, transfers, pending, skipped and deleted
+    movements do not count in them. `net_change_minor` is the signed sum of **every** entry that
+    counts for a balance in the month (the same rule as the balances, with adjustments and
+    transfers), so it is how much the net of the space moved: it is not `income - expense`.
+    """
+
+    income_minor: Annotated[int, Field(ge=0)]
+    expense_minor: Annotated[int, Field(ge=0)]
+    net_change_minor: int  # with sign
+
+
 # The movements list ------------------------------------------------------------------------------
 
 # `YYYY-MM`, from 1900 to 2199: a real month, and a year whose following month is a valid `date`.

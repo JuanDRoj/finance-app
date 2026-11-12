@@ -817,6 +817,23 @@
         "title": "DashboardRead",
         "type": "object"
       },
+      "DashboardSeriesRead": {
+        "description": "The months of the home charts, oldest first; the last one is the current month.\n\nThere are exactly as many points as the `months` asked, ending in the current month of the\nspace (in its timezone), whatever the movements are. The amounts are in the minor unit of the\ncurrency of the space (`SpaceRead.currency`, as everywhere else in the API).",
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/MonthlySeriesPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "title": "DashboardSeriesRead",
+        "type": "object"
+      },
       "EntryRead": {
         "properties": {
           "account_id": {
@@ -1006,6 +1023,38 @@
           "amount_minor"
         ],
         "title": "IncomeCreate",
+        "type": "object"
+      },
+      "MonthlySeriesPoint": {
+        "description": "One month of the series, in the minor unit of the currency of the space.\n\n`income_minor` and `expense_minor` (both positive) are the confirmed, not deleted incomes and\nexpenses of the whole month, also the days after today in the current one (adjustments,\ntransfers, pending, skipped and deleted movements do not count): the same figures the\nmovements summary gives for that `month`. A month without movements has 0 in both.\n\n`net_minor` is the net (available - card debt = the sum of every balance) at the close of the\nmonth; in the current month, the net of today, the same as `DashboardRead.net_minor`. It does\ncount adjustments (the initial balance and the reconciliations are balance) and it does not\ncount pending, skipped and deleted movements. A month without movements keeps the net of the\nmonth before, and the months before the first movement are 0.",
+        "properties": {
+          "expense_minor": {
+            "minimum": 0.0,
+            "title": "Expense Minor",
+            "type": "integer"
+          },
+          "income_minor": {
+            "minimum": 0.0,
+            "title": "Income Minor",
+            "type": "integer"
+          },
+          "month": {
+            "pattern": "^(19|20|21)[0-9]{2}-(0[1-9]|1[0-2])$",
+            "title": "Month",
+            "type": "string"
+          },
+          "net_minor": {
+            "title": "Net Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "income_minor",
+          "expense_minor",
+          "net_minor"
+        ],
+        "title": "MonthlySeriesPoint",
         "type": "object"
       },
       "MovementListItem": {
@@ -3112,6 +3161,82 @@
           }
         },
         "summary": "Read Dashboard",
+        "tags": [
+          "dashboard"
+        ]
+      }
+    },
+    "/spaces/{space_id}/dashboard/series": {
+      "get": {
+        "description": "Income, expense and net at the close of each month, for the charts of the home screen.\n\n`months` (1 to 12, 6 by default) is how many months to return, counting the current one in the\ntimezone of the space, which is the last point; they come oldest first and there are always\nexactly that many, with 0 where there is nothing. Amounts are in the minor unit of the currency\nof the space. `income_minor` and `expense_minor` (positive) are the confirmed, not deleted\nincomes and expenses of the whole month, the same as the movements summary of that `month`;\nadjustments, transfers, pending, skipped and deleted movements are not in them. `net_minor` is\nthe net (available minus card debt) at the close of the month, adjustments included; in the\ncurrent month it is the net of today, the one of `/dashboard` and `balance-summary` (a\nconfirmed movement dated after today counts there, and in no flow). A month without movements\nkeeps the net of the one before.",
+        "operationId": "read_dashboard_series_spaces__space_id__dashboard_series_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 12,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSeriesRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Dashboard Series",
         "tags": [
           "dashboard"
         ]
