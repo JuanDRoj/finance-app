@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // The tooltip of both charts (K-V2-Escritorio): inverted against the page (`tooltip` tokens, as the
@@ -6,12 +8,27 @@ import { cn } from "@/lib/utils";
 // moves from one month to the next. The color of a series is not repeated in it (the legend says
 // it, and a swatch of `chart-income` on the light tooltip of the dark theme would not reach 3:1).
 
-/** The card. `className` sets its width (the bars' is 190 px). */
+/**
+ * The card. `className` sets its width (the bars' is 190 px). The charts draw it only while their
+ * tooltip is showing, so it mounts when the tooltip appears and unmounts when it goes: that is what
+ * `onShownChange` reports (`use-dismissible-tooltip.ts` listens for Escape only in between).
+ */
 export function ChartTooltipCard({
   title,
   className,
+  onShownChange,
   children,
-}: Readonly<{ title: string; className?: string; children: ReactNode }>) {
+}: Readonly<{
+  title: string;
+  className?: string;
+  onShownChange?: (shown: boolean) => void;
+  children: ReactNode;
+}>) {
+  useEffect(() => {
+    onShownChange?.(true);
+    return () => onShownChange?.(false);
+  }, [onShownChange]);
+
   return (
     <div
       data-slot="chart-tooltip"

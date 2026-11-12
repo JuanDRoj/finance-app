@@ -63,11 +63,14 @@ function buildRows(points: SeriesChartProps["points"], currency: SeriesChartProp
   }));
 }
 
-function NetTooltip({ active, payload }: TooltipContentProps) {
-  const row = payload[0]?.payload as NetRow | undefined;
+/** Recharts hands its own props to the element given as `content`; `onShownChange` is ours. */
+type NetTooltipProps = Partial<TooltipContentProps> & { onShownChange: (shown: boolean) => void };
+
+function NetTooltip({ active, payload, onShownChange }: NetTooltipProps) {
+  const row = payload?.[0]?.payload as NetRow | undefined;
   if (!active || !row) return null;
   return (
-    <ChartTooltipCard title={row.title}>
+    <ChartTooltipCard title={row.title} onShownChange={onShownChange}>
       <ChartTooltipRow label={SERIES_LABELS.net} value={row.text} />
     </ChartTooltipCard>
   );
@@ -116,7 +119,7 @@ const ACTIVE_DOT = {
 export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
   const domain = useMemo(() => netChartDomain(points), [points]);
-  const { active, containerProps } = useDismissibleTooltip();
+  const { active, containerProps, onShownChange } = useDismissibleTooltip();
 
   return (
     <>
@@ -146,7 +149,7 @@ export function NetChartBody({ points, currency }: Readonly<SeriesChartProps>) {
           <YAxis hide domain={domain} />
           <ChartTooltip
             active={active}
-            content={NetTooltip}
+            content={<NetTooltip onShownChange={onShownChange} />}
             cursor={false}
             isAnimationActive={false}
             allowEscapeViewBox={{ x: false, y: true }}

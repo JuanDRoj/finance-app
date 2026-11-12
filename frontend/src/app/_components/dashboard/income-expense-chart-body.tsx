@@ -93,11 +93,14 @@ function buildRows(points: SeriesChartProps["points"], currency: SeriesChartProp
   }));
 }
 
-function BarsTooltip({ active, payload }: TooltipContentProps) {
-  const row = payload[0]?.payload as BarsRow | undefined;
+/** Recharts hands its own props to the element given as `content`; `onShownChange` is ours. */
+type BarsTooltipProps = Partial<TooltipContentProps> & { onShownChange: (shown: boolean) => void };
+
+function BarsTooltip({ active, payload, onShownChange }: BarsTooltipProps) {
+  const row = payload?.[0]?.payload as BarsRow | undefined;
   if (!active || !row) return null;
   return (
-    <ChartTooltipCard title={row.title} className="w-[190px]">
+    <ChartTooltipCard title={row.title} className="w-[190px]" onShownChange={onShownChange}>
       <ChartTooltipRow label={SERIES_LABELS.income} value={row.incomeText} />
       <ChartTooltipRow label={SERIES_LABELS.expense} value={row.expenseText} />
       <ChartTooltipRow label={SERIES_LABELS.savings} value={row.savingsText} separated />
@@ -107,7 +110,7 @@ function BarsTooltip({ active, payload }: TooltipContentProps) {
 
 export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChartProps>) {
   const rows = useMemo(() => buildRows(points, currency), [points, currency]);
-  const { active, containerProps } = useDismissibleTooltip();
+  const { active, containerProps, onShownChange } = useDismissibleTooltip();
   const axis = useMemo(() => {
     const ticks = incomeExpenseTicks(points);
     const labels = new Map(ticks.map((tick) => [Number(tick), formatCompactMoney(tick, currency)]));
@@ -158,7 +161,7 @@ export function IncomeExpenseChartBody({ points, currency }: Readonly<SeriesChar
           />
           <ChartTooltip
             active={active}
-            content={BarsTooltip}
+            content={<BarsTooltip onShownChange={onShownChange} />}
             cursor={<ColumnCursor />}
             isAnimationActive={false}
             allowEscapeViewBox={{ x: false, y: true }}

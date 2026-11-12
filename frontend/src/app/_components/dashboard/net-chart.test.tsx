@@ -31,7 +31,10 @@ function chartOf(name: string | RegExp) {
 beforeEach(() => {
   mocks.desktop = true;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("NetChart, from 1024 px", () => {
   it("draws the area with the summary as its name and says it is a chart", async () => {
@@ -234,6 +237,62 @@ describe("NetChart, Escape closes the tooltip (WCAG 2.2 1.4.13)", () => {
     // With no tooltip left to close, Escape goes on its way: the dialog may close with it.
     fireEvent.keyDown(chart, { key: "Escape" });
     expect(keys).toEqual(["Escape"]);
+  });
+
+  it("also closes a tooltip that is showing while the focus is elsewhere: Escape on the page", async () => {
+    const { container } = renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    // The key does not go through the chart: only the listeners of the document hear it. Recharts'
+    // own only hides the box of its tooltip; ours takes the card out (and the column behind it).
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
+    expect(document.activeElement).toBe(chart);
+
+    // And it comes back with an arrow, as after any other Escape.
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+    expect(await screen.findByRole("status")).toBeTruthy();
+  });
+
+  it("does not close it twice when the focus is in the chart, and leaves the page its Escape when there is no tooltip", async () => {
+    const onDocument = vi.fn();
+    document.addEventListener("keydown", onDocument);
+    try {
+      renderChart();
+      const chart = await chartOf(CANVAS_LABEL);
+      act(() => chart.focus());
+      await screen.findByRole("status");
+
+      // Closed by the chart, which swallows the key: the document never hears it.
+      fireEvent.keyDown(chart, { key: "Escape" });
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(onDocument).not.toHaveBeenCalled();
+
+      // Nothing left to close: the key goes on to the page and the tooltip stays hidden.
+      fireEvent.keyDown(chart, { key: "Escape" });
+      expect(onDocument).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("status")).toBeNull();
+    } finally {
+      document.removeEventListener("keydown", onDocument);
+    }
+  });
+
+  it("stops hearing the page once the chart is gone, and a later Escape does nothing", async () => {
+    // How many listeners there are is checked on the hook alone (`use-dismissible-tooltip.test.tsx`):
+    // Recharts adds and removes its own `keydown` listeners on the document as the tooltip moves.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = renderChart();
+    const chart = await chartOf(CANVAS_LABEL);
+    act(() => chart.focus());
+    await screen.findByRole("status");
+
+    unmount();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(logged).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-slot="chart-tooltip"]')).toBeNull();
   });
 
   it("lets Escape through when the chart shows no tooltip, and leaves Tab and the arrows alone", async () => {
