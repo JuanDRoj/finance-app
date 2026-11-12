@@ -402,4 +402,105 @@ describe("MovementsTable", () => {
     expect(screen.getAllByRole("columnheader")).toHaveLength(6);
     expect(screen.queryAllByRole("rowheader")).toHaveLength(0);
   });
+
+  describe('variant="compact": the short table of the Inicio (FE-35)', () => {
+    const ID = "0b0f1a5e-6f0b-4c7c-9d3a-2f4a9b9c0020";
+
+    it("has the five columns of the canvas and no 'Acciones'", () => {
+      render(
+        <MovementsTable
+          items={[movementItem()]}
+          currency={UYU}
+          variant="compact"
+          caption="Últimos movimientos"
+        />,
+      );
+      const table = screen.getByRole("table", { name: "Últimos movimientos" });
+      expect(
+        within(table)
+          .getAllByRole("columnheader")
+          .map((h) => h.textContent),
+      ).toEqual(["Fecha", "Descripción", "Categoría", "Cuenta", "Monto"]);
+      expect(table.querySelector("th.sticky, td.sticky")).toBeNull();
+    });
+
+    it("has a floor of 620 px, not 760, and the default variant is not changed", () => {
+      const compact = render(<MovementsTable items={[]} currency={UYU} variant="compact" />);
+      const scroller = compact.container.firstElementChild!;
+      expect(scroller.getAttribute("data-variant")).toBe("compact");
+      expect(scroller.className).toContain("overflow-x-auto");
+      expect(scroller.querySelector("table")!.className).toContain("min-w-155");
+      expect(scroller.querySelector("table")!.className).not.toContain("min-w-190");
+      cleanup();
+
+      const full = render(<MovementsTable items={[]} currency={UYU} />);
+      const table = full.container.querySelector("table")!;
+      expect(full.container.firstElementChild!.getAttribute("data-variant")).toBe("full");
+      expect(table.className).toContain("min-w-190");
+      expect(table.className).not.toContain("min-w-155");
+    });
+
+    it("a row has five cells and only the description as a control, whatever onRemove says", () => {
+      render(
+        <MovementsTable
+          items={[movementItem({ id: ID, description: "Uber" })]}
+          currency={UYU}
+          variant="compact"
+          onRemove={() => {}}
+          pendingIds={new Set([ID])}
+        />,
+      );
+      const row = bodyRows()[0]!;
+      expect(row.querySelectorAll("td, th")).toHaveLength(5);
+      const controls = Array.from(row.querySelectorAll("a, button, input, select, textarea"));
+      expect(controls.map((control) => [control.tagName, control.textContent])).toEqual([
+        ["A", "Uber"],
+      ]);
+      expect(controls[0]!.getAttribute("href")).toBe(`/movimientos?movimiento=editar&id=${ID}`);
+      expect(screen.queryByRole("button")).toBeNull();
+      expect(screen.queryByLabelText(/Eliminar|Editar|Ver /)).toBeNull();
+    });
+
+    it("tells a subcategory by its principal alone, and the full table still writes both", () => {
+      render(<MovementsTable items={[movementItem()]} currency={UYU} variant="compact" />);
+      const chip = within(bodyRows()[0]!).getByTitle("Comida");
+      expect(chip.textContent).toBe("Comida");
+      cleanup();
+      render(<MovementsTable items={[movementItem()]} currency={UYU} />);
+      expect(within(bodyRows()[0]!).getByTitle("Comida › Supermercado")).toBeTruthy();
+    });
+
+    it("writes the same amounts, quiet chips and dates as the full table", () => {
+      const items = [
+        incomeItem({ description: "Sueldo" }),
+        transferItem({ description: "Pago de Visa Itaú" }),
+        adjustmentItem(),
+      ];
+      render(<MovementsTable items={items} currency={UYU} today="2026-10-21" variant="compact" />);
+      const [income, transfer, adjustment] = bodyRows();
+      expect(within(income!).getByText(/\+\$/).textContent).toBe("+$\u00A068.000,00");
+      expect(within(income!).getByText(/\+\$/).className).toContain("text-income");
+      expect(within(transfer!).getByText("Transferencia").className).toContain(
+        "text-muted-foreground",
+      );
+      expect(transfer!.textContent).toContain("Itaú → Visa Itaú");
+      expect(within(adjustment!).getByText("Ajuste")).toBeTruthy();
+      expect(income!.textContent).toContain("20 oct.");
+    });
+
+    it("holds the worst case like the full table: a long description wraps, the whole text in title", () => {
+      const long = "x".repeat(200);
+      render(
+        <MovementsTable
+          items={[movementItem({ description: long, amount_minor: -Number.MAX_SAFE_INTEGER })]}
+          currency={UYU}
+          variant="compact"
+        />,
+      );
+      const title = within(bodyRows()[0]!).getByTitle(long);
+      expect(title.className).toContain("line-clamp-2");
+      const amount = within(bodyRows()[0]!).getByText(/90\.071\.992\.547\.409,91/);
+      expect(amount.className).toContain("whitespace-nowrap");
+    });
+  });
 });

@@ -411,16 +411,23 @@ export function describeMovementSubline(item: MovementLike): string {
 
 /**
  * The "Categoría" cell of the table: "Comida › Supermercado" for a subcategory, the name of a
- * principal, and "Transferencia" or "Ajuste" (which have no category), the last two `quiet`.
+ * principal, and "Transferencia" or "Ajuste" (which have no category), the last two `quiet`. With
+ * `principalOnly` a subcategory is told by its principal alone ("Comida"), as the short table of the
+ * Inicio draws it (K-V2-Escritorio, FE-35).
  */
-export function describeMovementCategory(item: MovementLike): { label: string; quiet: boolean } {
+export function describeMovementCategory(
+  item: MovementLike,
+  options: { principalOnly?: boolean } = {},
+): { label: string; quiet: boolean } {
   if (item.type === "transfer" || item.type === "adjustment") {
     return { label: describeTransactionType(item.type), quiet: true };
   }
   const category = item.category;
   if (!category) return { label: "Sin categoría", quiet: true };
+  const parent = category.parent;
+  if (!parent) return { label: category.name, quiet: false };
   return {
-    label: category.parent ? `${category.parent.name} › ${category.name}` : category.name,
+    label: options.principalOnly ? parent.name : `${parent.name} › ${category.name}`,
     quiet: false,
   };
 }

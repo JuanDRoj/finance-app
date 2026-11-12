@@ -323,6 +323,13 @@ export function scriptedMovementsApi({
       return ok(summarize(filtered, change));
     }
 
+    // `limit` is a whole number from 1 to 100 (the real endpoint answers a 422 otherwise); 50 if omitted.
+    if (query.limit !== undefined) {
+      if (typeof query.limit !== "number" || !Number.isInteger(query.limit) || query.limit < 1) {
+        return unprocessable("greater_than_equal", ["query", "limit"]);
+      }
+      if (query.limit > 100) return unprocessable("less_than_equal", ["query", "limit"]);
+    }
     const offset = query.cursor === undefined ? 0 : decodeCursor(query.cursor);
     if (offset === null) return unprocessable("cursor_invalid", ["query", "cursor"]);
     const limit = typeof query.limit === "number" ? query.limit : 50;
