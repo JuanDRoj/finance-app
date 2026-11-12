@@ -46,6 +46,13 @@ type MovementsTableProps = {
    * list did not load) every confirmed expense, income and transfer offers both.
    */
   archivedAccountIds?: ReadonlySet<string>;
+  /**
+   * `full` (the default) is the table of Movimientos and the detail of an account. `compact` is the
+   * short one of the Inicio, "Últimos movimientos" (FE-35, K-V2-Escritorio): no "Acciones" column (the
+   * description already opens the movement), a floor of 620 px instead of 760 and a subcategory told
+   * by its principal alone ("Comida"). It never has "Eliminar", whatever `onRemove` says.
+   */
+  variant?: "full" | "compact";
 };
 
 const HEAD = "px-2 py-2.5 text-left font-bold";
@@ -86,6 +93,8 @@ const STICKY_END = "sticky right-0 w-21 bg-surface";
  *   amount of 16 digits in a narrow window makes the scroller scroll. At 1024 px the content
  *   is about 720 px wide, so it may scroll a little there; from 1280 px it does not.
  * - A transfer and an adjustment are quiet: a neutral chip and `muted-foreground` amount.
+ * - `variant="compact"` (the Inicio's "Últimos movimientos"): the same rows without the "Acciones"
+ *   column and with a floor of 620 px, as the canvas draws that table (see `variant`).
  */
 export const MovementsTable = memo(function MovementsTable({
   items,
@@ -96,10 +105,18 @@ export const MovementsTable = memo(function MovementsTable({
   onRemove,
   pendingIds,
   archivedAccountIds,
+  variant = "full",
 }: MovementsTableProps) {
+  const compact = variant === "compact";
   return (
-    <div data-slot="movements-table" className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-190 border-collapse text-item">
+    <div
+      data-slot="movements-table"
+      data-variant={variant}
+      className={cn("overflow-x-auto", className)}
+    >
+      <table
+        className={cn("w-full border-collapse text-item", compact ? "min-w-155" : "min-w-190")}
+      >
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="text-caption text-muted-foreground">
@@ -121,9 +138,11 @@ export const MovementsTable = memo(function MovementsTable({
             <th scope="col" className={cn(HEAD, "text-right")}>
               Monto
             </th>
-            <th scope="col" className={cn(STICKY_END, "p-0")}>
-              <span className="sr-only">Acciones</span>
-            </th>
+            {compact ? null : (
+              <th scope="col" className={cn(STICKY_END, "p-0")}>
+                <span className="sr-only">Acciones</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -136,6 +155,7 @@ export const MovementsTable = memo(function MovementsTable({
               onRemove={onRemove}
               pending={pendingIds?.has(item.id) === true}
               archivedAccountIds={archivedAccountIds}
+              compact={compact}
             />
           ))}
         </tbody>
@@ -157,6 +177,7 @@ const MovementTableRow = memo(function MovementTableRow({
   onRemove,
   pending,
   archivedAccountIds,
+  compact,
 }: Readonly<{
   item: MovementListItem;
   currency: Currency;
@@ -164,13 +185,14 @@ const MovementTableRow = memo(function MovementTableRow({
   onRemove?: (item: MovementListItem) => void;
   pending: boolean;
   archivedAccountIds?: ReadonlySet<string>;
+  compact: boolean;
 }>) {
   const title = describeMovementTitle(item);
-  const category = describeMovementCategory(item);
+  const category = describeMovementCategory(item, { principalOnly: compact });
   const account = describeMovementAccount(item);
   const amount = movementAmountView(item, currency);
   const status = describeMovementStatusNote(item);
-  const actions = describeMovementRowActions(item, archivedAccountIds);
+  const actions = compact ? null : describeMovementRowActions(item, archivedAccountIds);
   return (
     <tr
       data-slot="movement-row"
@@ -210,37 +232,39 @@ const MovementTableRow = memo(function MovementTableRow({
       >
         {amount.text}
       </td>
-      <td
-        className={cn(
-          STICKY_END,
-          "py-0 pr-0 pl-1 text-right whitespace-nowrap",
-          "after:pointer-events-none after:absolute after:inset-0 after:bg-primary/10 after:opacity-0 group-hover:after:opacity-100 dark:after:bg-primary/12",
-        )}
-      >
-        <span className="inline-flex items-center gap-0.5">
-          <MovementLink
-            movementId={item.id}
-            aria-haspopup="dialog"
-            aria-label={actions.open.label}
-            className={ACTION}
-          >
-            {actions.open.kind === "edit" ? <PencilSimple aria-hidden /> : <Eye aria-hidden />}
-          </MovementLink>
-          {actions.remove && onRemove ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={actions.remove.label}
-              loading={pending}
-              onClick={() => onRemove(item)}
+      {actions ? (
+        <td
+          className={cn(
+            STICKY_END,
+            "py-0 pr-0 pl-1 text-right whitespace-nowrap",
+            "after:pointer-events-none after:absolute after:inset-0 after:bg-primary/10 after:opacity-0 group-hover:after:opacity-100 dark:after:bg-primary/12",
+          )}
+        >
+          <span className="inline-flex items-center gap-0.5">
+            <MovementLink
+              movementId={item.id}
+              aria-haspopup="dialog"
+              aria-label={actions.open.label}
               className={ACTION}
             >
-              {pending ? null : <Trash aria-hidden />}
-            </Button>
-          ) : null}
-        </span>
-      </td>
+              {actions.open.kind === "edit" ? <PencilSimple aria-hidden /> : <Eye aria-hidden />}
+            </MovementLink>
+            {actions.remove && onRemove ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={actions.remove.label}
+                loading={pending}
+                onClick={() => onRemove(item)}
+                className={ACTION}
+              >
+                {pending ? null : <Trash aria-hidden />}
+              </Button>
+            ) : null}
+          </span>
+        </td>
+      ) : null}
     </tr>
   );
 });

@@ -157,14 +157,17 @@ export function transactionsSummaryKey(spaceId: string, filters: TransactionFilt
 /**
  * One page of the movements of a space, newest first (`GET /spaces/{space_id}/transactions`):
  * `date` descending, then `id` descending. `cursor` is the opaque `next_cursor` of the previous
- * page, sent back with the **same filters**; without it, the first page. Throws an `ApiError`:
- * `space_not_found` (404), a 401, or a 422 (`cursor_invalid` when the cursor cannot be read).
+ * page, sent back with the **same filters**; without it, the first page. `limit` (1 to 100) is how
+ * many items the page has: `TRANSACTIONS_PAGE_SIZE` unless the caller wants fewer, like the six of
+ * the Inicio (`recentTransactionsQueryOptions`). Throws an `ApiError`: `space_not_found` (404), a
+ * 401, or a 422 (`cursor_invalid` when the cursor cannot be read).
  */
 export async function listTransactions(
   api: ApiClient,
   spaceId: string,
   filters: TransactionFilters,
   cursor?: string | null,
+  limit: number = TRANSACTIONS_PAGE_SIZE,
 ): Promise<MovementPage> {
   return unwrap(
     api.GET("/spaces/{space_id}/transactions", {
@@ -172,7 +175,7 @@ export async function listTransactions(
         path: { space_id: spaceId },
         query: {
           ...filterQuery(filters),
-          limit: TRANSACTIONS_PAGE_SIZE,
+          limit,
           ...(cursor ? { cursor } : {}),
         },
       },
@@ -216,6 +219,32 @@ export function transactionsListQueryOptions(
     queryFn: ({ pageParam }) => listTransactions(api, spaceId, filters, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage: MovementPage) => lastPage.next_cursor,
+  });
+}
+
+/** How many movements "Últimos movimientos" of the Inicio shows (docs/diseno.md D17 › Escritorio v2). */
+export const RECENT_TRANSACTIONS_LIMIT = 6;
+
+/**
+ * Key of the latest movements of the Inicio (`["spaces", id, "transactions", "recent"]`), under the
+ * root of the movements: registering, editing, deleting or restoring one invalidates it. It is not
+ * under `"list"`, so the lists of Movimientos and `removeMovementFromListCache` do not mix with it.
+ */
+export function recentTransactionsKey(spaceId: string) {
+  return [...transactionsQueryKey(spaceId), "recent"] as const;
+}
+
+/**
+ * The latest movements of the space, newest first, for "Últimos movimientos" of the Inicio: the first
+ * `RECENT_TRANSACTIONS_LIMIT` of the whole history, **with no month filter** (on the first of a month
+ * a filter would leave the card empty although there is history). The data is the items alone: there is
+ * no cursor, the card links to Movimientos for the rest.
+ */
+export function recentTransactionsQueryOptions(api: ApiClient, spaceId: string) {
+  return queryOptions({
+    queryKey: recentTransactionsKey(spaceId),
+    queryFn: async (): Promise<MovementListItem[]> =>
+      (await listTransactions(api, spaceId, {}, null, RECENT_TRANSACTIONS_LIMIT)).items,
   });
 }
 
@@ -362,9 +391,10 @@ export function transactionDetailQueryOptions(
 
 /**
  * Takes a movement out of every list of the space that is in the cache (every filter, every loaded
- * page), so a row that was deleted leaves the screen at once, without waiting for the lists to be
- * asked again. The caller still invalidates them: the cache is only a head start, and the summary and
- * the counts come from the server. A list that is not in the cache is left alone.
+ * page) and out of the latest movements of the Inicio, so a row that was deleted leaves the screen at
+ * once, without waiting for the lists to be asked again. The caller still invalidates them: the cache
+ * is only a head start, and the summary and the counts come from the server. A list that is not in
+ * the cache is left alone.
  */
 export function removeMovementFromListCache(
   queryClient: QueryClient,
@@ -383,5 +413,8 @@ export function removeMovementFromListCache(
         })),
       };
     },
+  );
+  queryClient.setQueryData<MovementListItem[]>(recentTransactionsKey(spaceId), (items) =>
+    items?.filter((item) => item.id !== transactionId),
   );
 }

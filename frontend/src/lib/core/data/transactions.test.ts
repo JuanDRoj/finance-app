@@ -5,12 +5,15 @@ import type { paths } from "@/lib/api/schema";
 import { ApiError } from "./errors";
 import { spaceQueryKey } from "./spaces";
 import {
+  RECENT_TRANSACTIONS_LIMIT,
   TRANSACTIONS_PAGE_SIZE,
   createTransaction,
   deleteTransaction,
   getTransaction,
   getTransactionsSummary,
   listTransactions,
+  recentTransactionsKey,
+  recentTransactionsQueryOptions,
   removeMovementFromListCache,
   restoreTransaction,
   transactionDetailKey,
@@ -352,6 +355,16 @@ describe("listTransactions", () => {
     });
   });
 
+  it("asks for as many items as the caller says, with the filters and the cursor as usual", async () => {
+    const { api, fetch } = clientAnswering(Response.json(pageOf(null)));
+    await listTransactions(api, SPACE_ID, { month: "2026-10" }, "MjAyNi0xMC0yMHx4", 6);
+    expect(queryOf(fetch.mock.calls[0]![0])).toEqual({
+      month: "2026-10",
+      limit: "6",
+      cursor: "MjAyNi0xMC0yMHx4",
+    });
+  });
+
   it("throws an ApiError with the body of a 422 (cursor_invalid) and of a 404", async () => {
     const body = {
       detail: [{ type: "cursor_invalid", loc: ["query", "cursor"], msg: "Invalid cursor" }],
@@ -418,6 +431,34 @@ describe("transactionsListQueryOptions", () => {
     expect(
       options.getNextPageParam(all.pages[2]!, all.pages, "cursor-3", all.pageParams),
     ).toBeNull();
+  });
+});
+
+describe("recentTransactionsQueryOptions", () => {
+  it("hangs the latest movements from the root of the movements, apart from the lists", () => {
+    expect(recentTransactionsKey(SPACE_ID)).toEqual(["spaces", SPACE_ID, "transactions", "recent"]);
+    expect(recentTransactionsKey(SPACE_ID).slice(0, 3)).toEqual(transactionsQueryKey(SPACE_ID));
+    // Not under "list": the lists of Movimientos (and their cache helpers) never meet it.
+    expect(recentTransactionsKey(SPACE_ID)[3]).not.toBe("list");
+  });
+
+  it("asks for the first six of the whole history: no month, no other filter, no cursor", async () => {
+    const { api, fetch } = clientAnswering(Response.json(pageOf("cursor-2")));
+    const items = await new QueryClient().fetchQuery(recentTransactionsQueryOptions(api, SPACE_ID));
+    expect(RECENT_TRANSACTIONS_LIMIT).toBe(6);
+    expect(queryOf(fetch.mock.calls[0]![0])).toEqual({ limit: "6" });
+    expect(new URL(fetch.mock.calls[0]![0].url).pathname).toBe(`/spaces/${SPACE_ID}/transactions`);
+    // The data is the items alone: the card has no "load more".
+    expect(items).toEqual([ITEM]);
+  });
+
+  it("throws the ApiError of the list", async () => {
+    const { api } = clientAnswering(
+      Response.json({ code: "space_not_found", detail: "x" }, { status: 404 }),
+    );
+    await expect(
+      new QueryClient().fetchQuery({ ...recentTransactionsQueryOptions(api, SPACE_ID), retry: 0 }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });
 
@@ -661,6 +702,17 @@ describe("removeMovementFromListCache", () => {
     expect(client.getQueryData(summary)).toEqual({ count: 2 });
     expect(client.getQueryData(detail)).toEqual(MOVEMENT);
     expect(client.getQueryData<InfiniteData<MovementPage>>(other)?.pages[0]?.items).toHaveLength(1);
+  });
+
+  it("takes it out of the latest movements of the Inicio too, and only of the space's own", () => {
+    const client = new QueryClient();
+    const recent = recentTransactionsKey(SPACE_ID);
+    const otherRecent = recentTransactionsKey("another-space");
+    client.setQueryData(recent, [item("a"), item("b"), item("c")]);
+    client.setQueryData(otherRecent, [item("b")]);
+    removeMovementFromListCache(client, SPACE_ID, "b");
+    expect(client.getQueryData<MovementListItem[]>(recent)?.map((i) => i.id)).toEqual(["a", "c"]);
+    expect(client.getQueryData<MovementListItem[]>(otherRecent)).toHaveLength(1);
   });
 
   it("does nothing when no list is in the cache", () => {

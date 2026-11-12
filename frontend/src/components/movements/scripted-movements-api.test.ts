@@ -144,6 +144,55 @@ const EXPENSE: MovementCreate = {
   description: "Super",
 };
 
+describe("the size of a page (limit)", () => {
+  const MANY = Array.from({ length: 9 }, (_, index) =>
+    movement({ id: `n${index + 1}`, date: `2026-10-${String(20 - index).padStart(2, "0")}` }),
+  );
+  const many = () => scriptedMovementsApi({ items: () => MANY });
+
+  it("gives as many items as asked, the newest first, with the cursor of the next page", async () => {
+    const api = many();
+    const first = await listTransactions(api, SPACE, {}, null, 6);
+    expect(first.items.map((item) => item.id)).toEqual(["n1", "n2", "n3", "n4", "n5", "n6"]);
+    expect(first.next_cursor).not.toBeNull();
+    const second = await listTransactions(api, SPACE, {}, first.next_cursor, 6);
+    expect(second.items.map((item) => item.id)).toEqual(["n7", "n8", "n9"]);
+    expect(second.next_cursor).toBeNull();
+  });
+
+  it("gives 50 when it is not said, and all of a short list with no cursor", async () => {
+    const page = await listTransactions(many(), SPACE, {});
+    expect(page.items).toHaveLength(9);
+    expect(page.next_cursor).toBeNull();
+  });
+
+  it("has no cursor when the page holds exactly what there is", async () => {
+    const page = await listTransactions(many(), SPACE, {}, null, 9);
+    expect(page.items).toHaveLength(9);
+    expect(page.next_cursor).toBeNull();
+  });
+
+  it("records the limit in the call, for a test to read", async () => {
+    const api = many();
+    await listTransactions(api, SPACE, {}, null, 6);
+    expect(api.calls[0]).toMatchObject({ kind: "list", query: { limit: 6 } });
+  });
+
+  it("answers a 422 on the query for a limit outside 1 to 100, as the real endpoint does", async () => {
+    for (const limit of [0, -1, 101, 2.5]) {
+      await expect(listTransactions(many(), SPACE, {}, null, limit)).rejects.toMatchObject({
+        status: 422,
+        body: { detail: [{ loc: ["query", "limit"] }] },
+      });
+    }
+    // The ends are fine.
+    await expect(listTransactions(many(), SPACE, {}, null, 1)).resolves.toMatchObject({
+      items: [{ id: "n1" }],
+    });
+    await expect(listTransactions(many(), SPACE, {}, null, 100)).resolves.toBeDefined();
+  });
+});
+
 describe("the summary of an account (BE-25)", () => {
   it("adds the balance change of the account: every confirmed movement, transfers and adjustments too", async () => {
     const { api } = setup();

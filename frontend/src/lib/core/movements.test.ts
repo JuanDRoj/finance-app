@@ -688,6 +688,25 @@ describe("describeMovementCategory", () => {
     });
   });
 
+  it("tells a subcategory by its principal alone when asked: the short table of the Inicio", () => {
+    expect(describeMovementCategory(item(), { principalOnly: true })).toEqual({
+      label: "Comida",
+      quiet: false,
+    });
+    // A principal, a transfer, an adjustment and no category read the same either way.
+    expect(describeMovementCategory(item({ category: FOOD }), { principalOnly: true }).label).toBe(
+      "Comida",
+    );
+    expect(describeMovementCategory(transfer(), { principalOnly: true })).toEqual({
+      label: "Transferencia",
+      quiet: true,
+    });
+    expect(describeMovementCategory(item({ category: null }), { principalOnly: true })).toEqual({
+      label: "Sin categoría",
+      quiet: true,
+    });
+  });
+
   it("writes Transferencia and Ajuste, quiet, since they have no category", () => {
     expect(describeMovementCategory(transfer())).toEqual({ label: "Transferencia", quiet: true });
     expect(describeMovementCategory(adjustment())).toEqual({ label: "Ajuste", quiet: true });
