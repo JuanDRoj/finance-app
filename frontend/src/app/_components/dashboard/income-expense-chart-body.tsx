@@ -45,9 +45,12 @@ function yAxisWidthFor(labels: Iterable<string>): number {
   return Math.max(Y_AXIS_MIN_WIDTH, longest * Y_LABEL_CHAR_WIDTH + Y_LABEL_PADDING);
 }
 
-/** The labels of the axes, in `muted-foreground`; the months are 13 px (`text-caption`) and the amounts 12 px. */
-const MONTH_TICK = { fill: "var(--muted-foreground)", fontSize: 13 } as const;
-const AMOUNT_TICK = { fill: "var(--muted-foreground)", fontSize: 12 } as const;
+/**
+ * The labels of the axes, in `muted-foreground`; the months are 13 px (`text-caption`) and the
+ * amounts 12 px (`text-xs`), the sizes as classes of the tokens, like the Neto's months.
+ */
+const MONTH_TICK = { fill: "var(--muted-foreground)", className: "text-caption" } as const;
+const AMOUNT_TICK = { fill: "var(--muted-foreground)", className: "text-xs" } as const;
 
 /** The column under the mouse or the keyboard: `primary` at 10 % (12 % in dark), round at the top. */
 const COLUMN_RADIUS = 12;

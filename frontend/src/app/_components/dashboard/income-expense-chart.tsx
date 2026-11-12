@@ -80,11 +80,11 @@ export function IncomeExpenseLegend({ className }: Readonly<{ className?: string
       )}
     >
       <li className="flex items-center gap-2">
-        <span aria-hidden className="size-2.5 shrink-0 rounded-[3px] bg-chart-income" />
+        <span aria-hidden className="size-2.5 shrink-0 rounded-swatch bg-chart-income" />
         {SERIES_LABELS.income}
       </li>
       <li className="flex items-center gap-2">
-        <span aria-hidden className="size-2.5 shrink-0 rounded-[3px] bg-chart-expense" />
+        <span aria-hidden className="size-2.5 shrink-0 rounded-swatch bg-chart-expense" />
         {SERIES_LABELS.expense}
       </li>
     </ul>

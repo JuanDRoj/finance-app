@@ -17,7 +17,7 @@ export function ChartTooltipCard({
       role="status"
       aria-live="polite"
       className={cn(
-        "min-w-36 max-w-[190px] rounded-[12px] bg-tooltip px-3 py-2.5 text-tooltip-label text-tooltip-foreground shadow-tooltip",
+        "min-w-36 max-w-[190px] rounded-chart-tooltip bg-tooltip px-3 py-2.5 text-tooltip-label text-tooltip-foreground shadow-tooltip",
         className,
       )}
     >

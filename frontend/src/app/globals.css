@@ -178,6 +178,9 @@
   /* KAN-91 (FE-27), from the Kanza canvas (docs/diseno.md D14, D17 › Escritorio v2). */
   --radius-card: 1.25rem; /* 20px: desktop cards (`surface`) */
   --radius-dialog: 1.5rem; /* 24px: centered dialogs */
+  /* KAN-102 (FE-36), from the Kanza canvas (docs/diseno.md D9, D13 and D14): the Inicio's charts. */
+  --radius-chart-tooltip: 0.75rem; /* 12px: the tooltip of the Neto and Ingresos y gastos charts (not the 10px `tooltip`) */
+  --radius-swatch: 0.1875rem; /* 3px: the color square of the chart legend */
   --shadow-panel: -16px 0 40px rgba(0, 0, 0, 0.16); /* the side panel */
   --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.22); /* a centered dialog */
   --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.16); /* the bottom sheet */

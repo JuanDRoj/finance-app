@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
  * - No `aspect-video`: the height comes from the caller (`className`).
  * - The keyboard focus of the chart is **visible**. `accessibilityLayer` (the default of Recharts 3)
  *   makes the `<svg>` focusable, and shadcn hides its outline (`outline-hidden`), which would leave
- *   a keyboard user with no sign of where the focus is. Never hide it (`chart.test.tsx` guards it).
+ *   a keyboard user with no sign of where the focus is. Never hide it (`chart-source.test.ts` guards it).
  * - The tooltip is not shadcn's `ChartTooltipContent` (`bg-background`): the canvas draws it inverted
  *   (`tooltip` tokens), so each chart brings its own content (`dashboard/chart-tooltip-card.tsx`).
  *

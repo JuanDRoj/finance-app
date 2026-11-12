@@ -443,6 +443,26 @@ describe("charts of the Inicio", () => {
     });
   });
 
+  it("takes the tooltip's 12 px and the legend square's 3 px from radius tokens, with no radius in brackets", () => {
+    expect(css).toContain("--radius-chart-tooltip: 0.75rem;");
+    expect(css).toContain("--radius-swatch: 0.1875rem;");
+    expect(tooltip).toContain("rounded-chart-tooltip");
+    expect(read("./_components/dashboard/income-expense-chart.tsx")).toContain("rounded-swatch");
+    const files = [
+      "./_components/dashboard/chart-boundary.tsx",
+      "./_components/dashboard/chart-skeleton.tsx",
+      "./_components/dashboard/chart-tooltip-card.tsx",
+      "./_components/dashboard/income-expense-chart.tsx",
+      "./_components/dashboard/income-expense-chart-body.tsx",
+      "./_components/dashboard/net-chart.tsx",
+      "./_components/dashboard/net-chart-body.tsx",
+      "../components/ui/chart.tsx",
+    ];
+    for (const file of files) {
+      expect(read(file), file).not.toMatch(/\brounded(?:-[a-z]{1,2})?-\[/);
+    }
+  });
+
   it("defines the series colors once per theme and exposes them to Tailwind", () => {
     expect(light.get("chart-income")).toBe("#23895f");
     expect(light.get("chart-expense")).toBe("#b5652a");

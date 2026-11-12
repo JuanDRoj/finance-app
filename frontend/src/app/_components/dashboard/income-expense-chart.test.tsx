@@ -74,6 +74,18 @@ describe("IncomeExpenseChart, from 1024 px", () => {
     expect(tickLabels(container, "yAxis")).toEqual(["0", "25 mil", "50 mil", "75 mil"]);
   });
 
+  it("sizes the labels with the tokens' classes: 13 px for the months, 12 px for the amounts", async () => {
+    const { container } = renderChart();
+    await chartOf(CANVAS_LABEL);
+    const classOf = (axis: "xAxis" | "yAxis") =>
+      container
+        .querySelector(`.recharts-${axis}-tick-labels .recharts-cartesian-axis-tick-value`)
+        ?.getAttribute("class");
+    expect(classOf("xAxis")).toContain("text-caption");
+    expect(classOf("yAxis")).toContain("text-xs");
+    expect(container.querySelector("svg text[font-size]")).toBeNull();
+  });
+
   it("draws one horizontal grid line for each tick and no vertical ones", async () => {
     const { container } = renderChart();
     await chartOf(CANVAS_LABEL);
@@ -125,6 +137,7 @@ describe("IncomeExpenseChart, from 1024 px", () => {
       "MayoIngresos$\u00A065.000,00Gastos$\u00A041.200,00Ahorro$\u00A023.800,00",
     );
     expect(tooltip.getAttribute("aria-live")).toBe("polite");
+    expect(tooltip.className).toContain("rounded-chart-tooltip");
     // The savings are the last row, apart from the other two by a rule.
     const rows = [...tooltip.querySelectorAll(":scope > div")];
     expect(rows.map((row) => row.className.includes("border-t"))).toEqual([false, false, true]);
@@ -248,5 +261,6 @@ describe("IncomeExpenseLegend", () => {
       expect.stringContaining("bg-chart-expense"),
     ]);
     expect([...squares].every((square) => square.className.includes("size-2.5"))).toBe(true);
+    expect([...squares].every((square) => square.className.includes("rounded-swatch"))).toBe(true);
   });
 });
