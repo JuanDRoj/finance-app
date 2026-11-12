@@ -245,6 +245,8 @@ La lista de movimientos tiene su propia base `_active` (KAN-79): espacio + sin `
 
 **Dashboard: top 5 del mes y porcentajes** (`GET /spaces/{id}/dashboard`, KAN-81). Disponible, Deuda y Neto son los de `balance-summary` (`get_balance_summary`, sin una segunda regla). El gasto del mes en curso (zona del espacio, con `now` inyectado desde el router; todo el mes, también los días posteriores a hoy) sale de `transactions.repository.expense_by_category`: `_counted_entries` + `type = 'expense'` + rango de fechas, agrupado por categoría. Así ajustes, transferencias, ingresos, pendientes, saltados y borrados quedan fuera por construcción, y la suma es el `expense_minor` de `/transactions/summary` del mismo mes. El rollup a la categoría principal, el orden `(-monto, id)` y el corte en 5 son funciones puras (`dashboard/top_expenses.py`): subcategorías y archivadas suman a su principal, con menos categorías salen menos filas y no hay fila "Otros" (el front la deriva de `month_expense_minor`). El porcentaje es entero, mitad hacia arriba, con aritmética entera (`(200·parte + total) // (2·total)`, nunca `float`) y sobre el total gastado del mes, así que las filas no suman 100. Son 5 consultas en secuencia sobre la sesión del request (nunca `asyncio.gather`), en número fijo (un test lo exige); cada una lee lo confirmado en su momento, y se acepta que dos cifras difieran por un movimiento guardado entre medio.
 
+**Dashboard: series por mes** (`GET /spaces/{id}/dashboard/series?months=6`, KAN-90). Ingresos, gastos y neto al cierre de los últimos `months` meses (1 a 12), siempre esa cantidad de puntos y el último el mes en curso en la zona del espacio. `transactions.repository.monthly_totals` hace **una** pasada por `_counted_entries` de todo el historial agrupada por mes con `SUM(...) FILTER (WHERE type = ...)` (ingresos, gastos) y `SUM(amount)` (variación del neto, ajustes incluidos; una transferencia suma 0). El mes se corta con `to_char(date::timestamp, 'YYYY-MM')`: sin el cast PostgreSQL lee el `date` como `timestamptz` en la zona de la sesión de la BD (lo mismo que hace `date_trunc`), y el formato va como literal para que el `GROUP BY` sea la misma expresión que el `SELECT`. La ventana, el relleno con ceros y el neto acumulado son funciones puras (`dashboard/monthly_series.py`): el neto de apertura suma todo lo anterior a la ventana, un mes vacío arrastra el neto, y el último punto suma además lo confirmado con fecha posterior, así que es el neto de hoy (`balance-summary`). Son 2 consultas fijas (zona horaria y totales); con 100 000 movimientos la agregación tarda unos 70-80 ms sin índice nuevo (lee casi toda la tabla). Los flujos son `ge=0` en el schema: un signo equivocado en la BD es un 500, no un gráfico equivocado.
+
 **Cron idempotente.** `insert(...).on_conflict_do_nothing(constraint="uq_transactions_template_id_period").returning(Transaction.id)` (dialecto `postgresql`). Solo se crean entries para los ids devueltos. Correrlo dos veces el mismo día no duplica nada.
 
 **Siembra idempotente** (`categories.service.seed_default_categories`, KAN-65): mismo recurso. Si el espacio ya tiene alguna fila no hace nada (nunca se borra, solo se archiva). Inserta las principales con `on_conflict_do_nothing()`, que se apoya en el índice único de nombre, y cuelga las subcategorías de los ids que **de verdad** quedaron en la BD, no de los que generó. Dos siembras cruzadas terminan con un solo juego de filas y ninguna FK rota.
@@ -355,7 +357,16 @@ El dashboard (KAN-81) suma:
 | SQL de un agregado en el módulo dueño de los datos y aritmética en funciones puras | `transactions/repository.py` (`expense_by_category`) y `dashboard/top_expenses.py` | §7 |
 | Porcentaje con aritmética entera y redondeo mitad hacia arriba | `dashboard/top_expenses.py` (`percentage`) | §7 |
 | Número fijo de consultas, vigilado con un test de conteo de sentencias | `tests/services/test_dashboard_service.py` | §10 |
-| Fechas de un test de API leídas al correr cada test (fixture), no al importar | `tests/api/test_dashboard.py` (`months`) | §10 |
+| Fechas de un test de API leídas al correr cada test (fixture), no al importar | `tests/months.py` y `tests/api/conftest.py` (`months`) | §10 |
+
+Las series del dashboard (KAN-90) suman:
+
+| Patrón | Dónde | Sección |
+|---|---|---|
+| Un agregado de todo el historial en una consulta y el recorte de la ventana en Python | `transactions/repository.py` (`monthly_totals`) y `dashboard/monthly_series.py` | §7 |
+| Agrupar por mes un `date` sin depender de la zona de la sesión de la BD (`to_char(date::timestamp, ...)`), vigilado con `SET LOCAL TIME ZONE` | `transactions/repository.py`, `tests/services/test_dashboard_series_service.py` | §7, §10 |
+| Parámetros de query con `InputModel` (`extra="forbid"`) y límites `ge`/`le` | `dashboard/schemas.py` (`SeriesParams`) | §5 |
+| Cruces con reglas existentes: el último neto, el gasto del mes y la variación por cuenta deben cuadrar | `tests/services/test_dashboard_series_service.py` | §10 |
 
 ## 12. Qué se descartó de las fuentes y por qué
 
