@@ -590,26 +590,35 @@ describe("the states", () => {
     expect(screen.queryByText(/Aún no/)).toBeNull();
   });
 
-  it("when the dashboard fails the Neto and the tiles give way to one error with 'Reintentar'", async () => {
+  it("when the dashboard fails the Neto, the tiles and the top 5 give way to one error with 'Reintentar'", async () => {
     const { faults } = setup({ faults: { dashboard: "server" } });
-    // The error of the summary is one; the top 5 gives its own, shorter one (below).
-    const alert = (await screen.findByText("No se pudo cargar tu resumen")).closest(
-      "[role='alert']",
-    ) as HTMLElement;
-    expect(alert).not.toBeNull();
+    // One failing request, one alert: the top 5 comes from the same request and is not drawn.
+    expect(await screen.findByText("No se pudo cargar tu resumen")).toBeTruthy();
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    const alert = alerts[0] as HTMLElement;
+    expect(within(alert).getAllByRole("button", { name: "Reintentar" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Reintentar" })).toHaveLength(1);
+    expect(screen.queryByText("No se pudieron cargar los gastos")).toBeNull();
+    expect(screen.queryByRole("region", { name: /Gastos por categoría/ })).toBeNull();
     // What to do and that the data is safe, in Spanish: the title of the card plus the text of the error.
     expect(alert.textContent).toContain("Inténtalo de nuevo en unos minutos");
     expect(alert.textContent).toContain("Tus datos están a salvo");
     expect(screen.queryByText(/Internal server error|internal_error/)).toBeNull();
     expect(screen.queryByRole("region", { name: "Neto" })).toBeNull();
-    // The top 5 gives its own short error; the cards that do not depend on it carry on.
-    await within(region(/Gastos por categoría/)).findByText("No se pudieron cargar los gastos");
+    // The cards that do not depend on the dashboard carry on.
     await within(region("Cuentas")).findByText("$ 84.250,00");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
 
+    // The one "Reintentar" brings back the figures and the top 5 together.
     faults.dashboard = undefined;
     fireEvent.click(within(alert).getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("$ 96.430,00")).toBeTruthy();
     expect(screen.queryByText("No se pudo cargar tu resumen")).toBeNull();
+    const top = await screen.findByRole("region", { name: /Gastos por categoría/ });
+    expect(await within(top).findAllByRole("listitem")).toHaveLength(5);
+    expect(within(region("Disponible")).getByText("$ 128.900,00")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("when the series fails the figures stay, the chip and the comparison go, and the two charts say so", async () => {
@@ -668,5 +677,7 @@ describe("the states", () => {
     expect(await screen.findByText("No se pudo cargar tu resumen")).toBeTruthy();
     expect(screen.queryByText("$ 0,00")).toBeNull();
     expect(screen.queryByRole("region", { name: "Neto" })).toBeNull();
+    expect(screen.queryByRole("region", { name: /Gastos por categoría/ })).toBeNull();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 });

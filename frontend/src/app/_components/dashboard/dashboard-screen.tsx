@@ -54,8 +54,11 @@ type DashboardScreenProps = {
  *   560 and 320. At 1280 px the canvas' table has a floor of 620 px in a card of about 567 px of room
  *   and scrolls sideways, hiding "Monto", its last column; with 668 the card is about 673 px wide
  *   and fits. At 1440 px both are the same size or more.
- * - The dashboard failing takes the place of the Neto and the tiles with one error and "Reintentar";
- *   the series failing only leaves out the chip of change, the comparison and the two charts' content.
+ * - The dashboard failing takes the place of the Neto and the tiles with **one** error and "Reintentar",
+ *   at the full width, and the top 5 (which comes from the same request) is not drawn at all, on a
+ *   phone or a desktop: one failing request, one alert. Its "Reintentar" asks the dashboard again and,
+ *   when it answers, brings the figures and the top 5 back together. The series failing only leaves
+ *   out the chip of change, the comparison and the two charts' content (each chart says so).
  */
 export function DashboardScreen({
   space,
@@ -133,12 +136,16 @@ export function DashboardScreen({
       )}
 
       <IncomeExpenseCard series={series} currency={currency} className="lg:basis-140 lg:grow-2" />
-      <TopExpensesCard
-        dashboard={dashboard}
-        currency={currency}
-        currentMonth={currentMonth}
-        className="col-span-2 lg:basis-80 lg:grow"
-      />
+      {/* The top 5 comes from the dashboard: when that failed the error above is the only one (a screen
+          reader hears one alert for one failure) and its "Reintentar" brings this card back too. */}
+      {dashboard.failed ? null : (
+        <TopExpensesCard
+          dashboard={dashboard}
+          currency={currency}
+          currentMonth={currentMonth}
+          className="col-span-2 lg:basis-80 lg:grow"
+        />
+      )}
 
       {/* Row 3. 668 and 280 where the canvas has 560 and 320, on purpose: see the comment above. */}
       <RecentMovementsCard
