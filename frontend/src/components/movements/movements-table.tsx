@@ -32,7 +32,8 @@ type MovementsTableProps = {
   className?: string;
   /**
    * "Eliminar X" of a row: without it the rows have no delete button (a table that only shows, like
-   * the one the Inicio will have). Must be the same function between renders (this is a `memo`). The
+   * the Inicio's "Últimos movimientos", `variant="compact"`). Must be the same function between
+   * renders (this is a `memo`). The
    * button is left out of a row the API would refuse to delete (an adjustment, a pending or a
    * skipped movement).
    */

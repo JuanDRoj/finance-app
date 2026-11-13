@@ -192,6 +192,9 @@
   --text-amount-panel: 1.75rem; /* 28px: the amount in the side panel of desktop */
   --text-amount-symbol-panel: 1.375rem; /* 22px: the currency symbol before it */
   --tracking-amount: -0.02em; /* the amount in the bottom sheet of a phone */
+  /* KAN-84 (FE-24), from the Kanza canvas (docs/diseno.md D13 and D14): the Inicio's dashboard. */
+  --text-net: 2.625rem; /* 42px: the Neto figure from 768px (36px below it is `text-4xl`) */
+  --text-card-title: 1.1875rem; /* 19px: title of a card of the desktop Inicio (Ingresos y gastos, Cuentas…) */
 }
 
 @theme inline {

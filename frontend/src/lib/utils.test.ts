@@ -138,6 +138,18 @@ describe("cn", () => {
     expect(cn("text-panel-title", "text-section-title")).toBe("text-section-title");
   });
 
+  it("resolves the size of the Neto and of a card title of the Inicio (KAN-84) against Tailwind's and colors", () => {
+    expect(cn("text-4xl", "md:text-net")).toBe("text-4xl md:text-net");
+    expect(cn("text-lg", "text-net")).toBe("text-net");
+    expect(cn("text-net", "text-lg")).toBe("text-lg");
+    expect(cn("text-net", "text-debt")).toBe("text-net text-debt");
+    expect(cn("text-base", "md:text-lg", "lg:text-card-title")).toBe(
+      "text-base md:text-lg lg:text-card-title",
+    );
+    expect(cn("text-card-title", "text-section-title")).toBe("text-section-title");
+    expect(cn("text-card-title", "text-foreground")).toBe("text-card-title text-foreground");
+  });
+
   it("resolves the title size of the panel and the dialog (KAN-91) against Tailwind's and colors", () => {
     expect(cn("text-xl", "text-panel-title")).toBe("text-panel-title");
     expect(cn("text-panel-title", "text-xl")).toBe("text-xl");

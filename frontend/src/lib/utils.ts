@@ -25,6 +25,8 @@ const twMerge = extendTailwindMerge({
         "amount-symbol",
         "amount-panel",
         "amount-symbol-panel",
+        "net",
+        "card-title",
       ],
       tracking: ["brand", "title", "amount"],
       radius: [

@@ -1,18 +1,26 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { accountsQueryKey } from "@/lib/core/data/accounts";
+import { dashboardKey, dashboardSeriesKey } from "@/lib/core/data/dashboard";
 import type { SpaceRead } from "@/lib/core/data/spaces";
 import type { UserRead } from "@/lib/core/data/me";
+import { recentTransactionsKey } from "@/lib/core/data/transactions";
 import HomePage from "./page";
 
 // The edges of the screen are mocked: the typed API client (with the session cookie) and the
 // router. What is under test is the page's own logic: the greeting, the fallback of the name, the
-// 401 redirect and the error and empty states.
+// 401 redirect, the error and empty states and, with accounts, what it prefetches for the dashboard
+// (and that the client finds it under the same keys), the month and the day of the space, and what it
+// hands the screen. The dashboard itself is a stand-in (`DashboardScreen` has its own tests).
 const mocks = vi.hoisted(() => ({
   getServerApi: vi.fn(),
   get: vi.fn(),
   redirect: vi.fn(),
   userMenu: vi.fn(),
   currencyCard: vi.fn(),
+  screen: vi.fn(),
 }));
 
 vi.mock("@/lib/api/server", () => ({ getServerApi: mocks.getServerApi }));
@@ -40,6 +48,19 @@ vi.mock("@/components/currency/currency-card", () => ({
   CurrencyCard: (props: { space: { id: string; currency: { code: string } } }) => {
     mocks.currencyCard(props);
     return <section aria-label="Moneda de tu espacio" />;
+  },
+}));
+// The dashboard (KAN-84) has its own tests: the stand-in records what the page hands it and draws
+// the card of the currency it receives, where the real screen would.
+vi.mock("./_components/dashboard/dashboard-screen", () => ({
+  DashboardScreen: (props: { currencyCard?: ReactNode }) => {
+    mocks.screen(props);
+    return (
+      <div data-testid="dashboard-screen">
+        <h2>Dashboard</h2>
+        {props.currencyCard}
+      </div>
+    );
   },
 }));
 vi.mock("@/components/bottom-nav", () => ({ BottomNav: () => null }));
@@ -80,6 +101,47 @@ const CARD = {
   due_day: 12,
   balance_minor: -2412000,
 };
+const DASHBOARD = {
+  month: "2026-10",
+  available_minor: 12890000,
+  card_debt_minor: 3247000,
+  net_minor: 9643000,
+  month_expense_minor: 3677000,
+  top_expense_categories: [
+    {
+      category_id: "00000000-0000-4000-8000-000000000101",
+      name: "Comida",
+      icon: "fork-knife",
+      amount_minor: 2123000,
+      percentage: 58,
+    },
+  ],
+};
+const SERIES = {
+  points: [
+    { month: "2026-09", income_minor: 6800000, expense_minor: 3980000, net_minor: 9210000 },
+    { month: "2026-10", income_minor: 6800000, expense_minor: 3677000, net_minor: 9643000 },
+  ],
+};
+const MOVEMENT = {
+  id: "00000000-0000-4000-8000-000000000301",
+  type: "expense",
+  status: "confirmed",
+  date: "2026-10-20",
+  description: "Tienda Inglesa",
+  amount_minor: -234000,
+  category: null,
+  account: { id: "a1", name: "Itaú", type: "bank" },
+  from_account: null,
+  to_account: null,
+  balance_after_minor: null,
+};
+const RECENT = { items: [MOVEMENT], next_cursor: null };
+
+const DASHBOARD_PATH = "/spaces/{space_id}/dashboard";
+const SERIES_PATH = "/spaces/{space_id}/dashboard/series";
+const RECENT_PATH = "/spaces/{space_id}/transactions";
+const ACCOUNTS_PATH = "/spaces/{space_id}/accounts";
 
 function ok(data: unknown) {
   return { data, response: new Response(null, { status: 200 }) };
@@ -89,18 +151,35 @@ function failure(status: number, body?: { code: string; detail: string }) {
   return { error: body, response: new Response(null, { status }) };
 }
 
-/** What the three calls answer; each test overrides what it needs. No accounts unless it says so. */
-function backend(answers: { me?: unknown; spaces?: unknown; accounts?: unknown }) {
+type Answers = {
+  me?: unknown;
+  spaces?: unknown;
+  accounts?: unknown;
+  dashboard?: unknown;
+  series?: unknown;
+  recent?: unknown;
+};
+
+/** What the calls answer; each test overrides what it needs. No accounts unless it says so. */
+function backend(answers: Answers) {
   mocks.get.mockImplementation(async (path: string) => {
     if (path === "/me") return answers.me ?? ok(USER);
     if (path === "/spaces") return answers.spaces ?? ok([SPACE]);
-    if (path === "/spaces/{space_id}/accounts") return answers.accounts ?? ok([]);
+    if (path === ACCOUNTS_PATH) return answers.accounts ?? ok([]);
+    if (path === DASHBOARD_PATH) return answers.dashboard ?? ok(DASHBOARD);
+    if (path === SERIES_PATH) return answers.series ?? ok(SERIES);
+    if (path === RECENT_PATH) return answers.recent ?? ok(RECENT);
     throw new Error(`unexpected path ${path}`);
   });
 }
 
+/** The page inside a QueryClientProvider (the dashboard's boundary hydrates into it); the client is returned to look at its cache. */
 async function renderHome() {
-  return render(await HomePage());
+  const client = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>{await HomePage()}</QueryClientProvider>,
+  );
+  return { ...view, client };
 }
 
 beforeEach(() => {
@@ -108,6 +187,7 @@ beforeEach(() => {
   mocks.get.mockReset();
   mocks.userMenu.mockReset();
   mocks.currencyCard.mockReset();
+  mocks.screen.mockReset();
   // `redirect()` works by throwing; the stand-in does too, so the page stops like the real one.
   mocks.redirect.mockReset().mockImplementation((url: string) => {
     throw new Error(`NEXT_REDIRECT ${url}`);
@@ -241,48 +321,77 @@ describe("HomePage", () => {
     await renderHome();
     expect(title()).toBe("Hola, ana.perez");
   });
-
-  it("asks /me and /spaces once each, then the accounts of the space, with one client", async () => {
+  it("asks /me and /spaces once each, then what the dashboard needs, with one client", async () => {
     await renderHome();
     expect(mocks.getServerApi).toHaveBeenCalledTimes(1);
     expect(mocks.get.mock.calls.map(([path]) => path).sort()).toEqual([
       "/me",
       "/spaces",
-      "/spaces/{space_id}/accounts",
+      ACCOUNTS_PATH,
+      DASHBOARD_PATH,
+      SERIES_PATH,
+      RECENT_PATH,
     ]);
-    // The active ones only: the backend hides the archived by default, so no query is sent.
-    expect(mocks.get).toHaveBeenLastCalledWith("/spaces/{space_id}/accounts", {
-      params: { path: { space_id: "s1" } },
-    });
   });
 
-  it("starts both calls before either one answers", async () => {
-    const pending: Array<(value: unknown) => void> = [];
-    mocks.get.mockImplementation(
-      (path: string) =>
-        new Promise((resolve) => {
-          if (path === "/spaces/{space_id}/accounts") return resolve(ok([]));
-          pending.push((value) => resolve(value ?? (path === "/me" ? ok(USER) : ok([SPACE]))));
-        }),
-    );
+  it("starts the two calls of the shell before either one answers, and then the four of the dashboard together", async () => {
+    const shell: Array<(value: unknown) => void> = [];
+    const later: string[] = [];
+    mocks.get.mockImplementation((path: string) => {
+      if (path === "/me" || path === "/spaces") {
+        return new Promise((resolve) => {
+          shell.push(() => resolve(path === "/me" ? ok(USER) : ok([SPACE])));
+        });
+      }
+      later.push(path);
+      return new Promise((resolve) => {
+        const answers: Record<string, unknown> = {
+          [ACCOUNTS_PATH]: ok([]),
+          [DASHBOARD_PATH]: ok(DASHBOARD),
+          [SERIES_PATH]: ok(SERIES),
+          [RECENT_PATH]: ok(RECENT),
+        };
+        resolve(answers[path]);
+      });
+    });
     const page = HomePage();
     await vi.waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
-    expect(pending).toHaveLength(2);
-    // The accounts need the id of the space, so they wait for both answers.
-    expect(mocks.get).not.toHaveBeenCalledWith("/spaces/{space_id}/accounts", expect.anything());
-    pending.forEach((answer) => answer(undefined));
-    render(await page);
+    expect(shell).toHaveLength(2);
+    // The rest needs the id of the space, so it waits for both answers.
+    expect(later).toEqual([]);
+    shell.forEach((answer) => answer(undefined));
+    render(<QueryClientProvider client={new QueryClient()}>{await page}</QueryClientProvider>);
     expect(title()).toBe("Hola, Ana Pérez");
-    expect(mocks.get).toHaveBeenCalledTimes(3);
+    expect(mocks.get).toHaveBeenCalledTimes(6);
+    expect([...later].sort()).toEqual(
+      [ACCOUNTS_PATH, DASHBOARD_PATH, RECENT_PATH, SERIES_PATH].sort(),
+    );
+  });
+
+  it("starts the four calls of the dashboard before any of them answers", async () => {
+    const waiting: string[] = [];
+    mocks.get.mockImplementation((path: string) => {
+      if (path === "/me") return Promise.resolve(ok(USER));
+      if (path === "/spaces") return Promise.resolve(ok([SPACE]));
+      waiting.push(path);
+      return new Promise(() => {});
+    });
+    void HomePage();
+    await vi.waitFor(() => expect(waiting).toHaveLength(4));
+    expect([...waiting].sort()).toEqual(
+      [ACCOUNTS_PATH, DASHBOARD_PATH, RECENT_PATH, SERIES_PATH].sort(),
+    );
   });
 
   it("shows the first space when there are several", async () => {
     backend({ spaces: ok([SPACE, { ...SPACE, id: "s2", name: "Casa", type: "household" }]) });
     await renderHome();
     expect(mocks.currencyCard.mock.calls[0]?.[0].space.id).toBe("s1");
-    expect(mocks.get).toHaveBeenLastCalledWith("/spaces/{space_id}/accounts", {
-      params: { path: { space_id: "s1" } },
-    });
+    const spaceIds = mocks.get.mock.calls
+      .filter(([path]) => path !== "/me" && path !== "/spaces")
+      .map(([, init]) => init.params.path.space_id);
+    expect(spaceIds).toHaveLength(4);
+    expect(new Set(spaceIds)).toEqual(new Set(["s1"]));
     expect(screen.queryByText("Casa")).toBeNull();
   });
 
@@ -509,8 +618,16 @@ describe("HomePage", () => {
     });
   });
 
-  describe("with accounts", () => {
+  describe("with accounts: the dashboard", () => {
     beforeEach(() => backend({ accounts: ok([BANK, CASH, CARD]) }));
+
+    it("draws the dashboard instead of the invitation", async () => {
+      await renderHome();
+      expect(screen.getByTestId("dashboard-screen")).toBeTruthy();
+      expect(screen.queryByText("Empieza por tus cuentas")).toBeNull();
+      expect(screen.queryByRole("region", { name: "Tus cuentas" })).toBeNull();
+      expect(mocks.screen).toHaveBeenCalledTimes(1);
+    });
 
     it("offers 'Registrar' in the sidebar, which opens the sheet over the screen", async () => {
       await renderHome();
@@ -521,101 +638,188 @@ describe("HomePage", () => {
       expect(sidebar.queryByRole("link", { name: "Nueva cuenta" })).toBeNull();
     });
 
-    it("lists them under 'Tus cuentas' instead of the invitation", async () => {
+    it("hands the screen the space, its month and its day, and nothing else of the data", async () => {
       await renderHome();
-      const region = screen.getByRole("region", { name: "Tus cuentas" });
-      const rows = within(region).getAllByRole("listitem");
-      expect(rows).toHaveLength(3);
-      expect(
-        rows.map((row) => within(row).getByText(/^(Itaú|Billetera|Visa Itaú)$/).textContent),
-      ).toEqual(["Itaú", "Billetera", "Visa Itaú"]);
-      expect(screen.queryByText("Empieza por tus cuentas")).toBeNull();
-      expect(screen.queryByRole("link", { name: "Crear mi primera cuenta" })).toBeNull();
-    });
-
-    it("names the type in Spanish and, for a card, the days it closes and is due", async () => {
-      await renderHome();
-      const [bank, cash, card] = within(
-        screen.getByRole("region", { name: "Tus cuentas" }),
-      ).getAllByRole("listitem");
-      expect(bank?.textContent).toContain("Banco");
-      expect(cash?.textContent).toContain("Efectivo");
-      expect(card?.textContent).toContain("Cierra el 5 · vence el 12");
-      expect(card?.textContent).not.toContain("Tarjeta");
-    });
-
-    it("writes each balance in the space's currency, and a card by what it owes in the debt color", async () => {
-      await renderHome();
-      const [bank, cash, card] = within(
-        screen.getByRole("region", { name: "Tus cuentas" }),
-      ).getAllByRole("listitem");
-      // Intl puts a no-break space after the symbol; Testing Library's text has it as a plain one.
-      expect(bank?.textContent).toContain("$\u00A01.550,50");
-      expect(cash?.textContent).toContain("$\u00A05.500,00");
-      // `balance_minor` is -2412000 (it owes): shown positive.
-      expect(card?.textContent).toContain("$\u00A024.120,00");
-      expect(card?.textContent).not.toContain("\u2212");
-      expect(within(card as HTMLElement).getByText(/24\.120,00/).className).toContain("text-debt");
-      expect(within(bank as HTMLElement).getByText(/1\.550,50/).className).not.toContain(
-        "text-debt",
-      );
-    });
-
-    it("writes a negative balance with the typographic minus, and a card paid in excess too", async () => {
-      backend({
-        accounts: ok([
-          { ...BANK, balance_minor: -25075 },
-          { ...CARD, balance_minor: 10000 },
-        ]),
+      expect(mocks.screen.mock.calls[0]?.[0]).toEqual({
+        space: { id: "s1", currency: { code: "UYU", exponent: 2 } },
+        currentMonth: expect.stringMatching(/^\d{4}-\d{2}$/),
+        today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        currencyCard: expect.anything(),
       });
-      await renderHome();
-      const [bank, card] = within(screen.getByRole("region", { name: "Tus cuentas" })).getAllByRole(
-        "listitem",
-      );
-      expect(bank?.textContent).toContain("\u2212$\u00A0250,75");
-      expect(card?.textContent).toContain("\u2212$\u00A0100,00");
     });
 
-    it("uses the currency of the space: dollars say 'US$'", async () => {
-      backend({
-        spaces: ok([{ ...SPACE, currency: { code: "USD", exponent: 2 } }]),
-        accounts: ok([BANK]),
+    it("works out the month and the day in the space's time zone, not the server's", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        // 02:30 UTC of November 1st is still October 31st, 23:30, in Montevideo: the month changes
+        // later for the space than for the server.
+        vi.setSystemTime(new Date("2026-11-01T02:30:00Z"));
+        await renderHome();
+        expect(mocks.screen.mock.calls[0]?.[0]).toMatchObject({
+          currentMonth: "2026-10",
+          today: "2026-10-31",
+        });
+        // A space in another zone is already in November.
+        mocks.screen.mockClear();
+        backend({
+          accounts: ok([BANK]),
+          spaces: ok([{ ...SPACE, timezone: "Pacific/Auckland" }]),
+        });
+        cleanup();
+        await renderHome();
+        expect(mocks.screen.mock.calls[0]?.[0]).toMatchObject({
+          currentMonth: "2026-11",
+          today: "2026-11-01",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("adds 'así va tu mes' to the date under the title, as the canvas has it", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-10-22T01:30:00Z"));
+        await renderHome();
+        const subtitle = screen.getByText("Miércoles 21 de octubre · así va tu mes");
+        expect(subtitle.closest("header")).not.toBeNull();
+        expect(subtitle.className).toContain("lg:block");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("asks for the dashboard, six months of series, six movements and the accounts with the archived ones", async () => {
+      await renderHome();
+      expect(mocks.get).toHaveBeenCalledWith(DASHBOARD_PATH, {
+        params: { path: { space_id: "s1" } },
       });
-      await renderHome();
-      expect(screen.getByRole("region", { name: "Tus cuentas" }).textContent).toContain(
-        "US$\u00A01.550,50",
-      );
+      expect(mocks.get).toHaveBeenCalledWith(SERIES_PATH, {
+        params: { path: { space_id: "s1" }, query: { months: 6 } },
+      });
+      // The latest movements of the whole history: six of them and no filter (not even the month).
+      expect(mocks.get).toHaveBeenCalledWith(RECENT_PATH, {
+        params: { path: { space_id: "s1" }, query: { limit: 6 } },
+      });
+      expect(mocks.get).toHaveBeenCalledWith(ACCOUNTS_PATH, {
+        params: { path: { space_id: "s1" }, query: { include_archived: true } },
+      });
     });
 
-    it("makes each row a link to the account's page", async () => {
-      await renderHome();
-      const region = within(screen.getByRole("region", { name: "Tus cuentas" }));
-      const hrefs = region.getAllByRole("link").map((link) => link.getAttribute("href"));
-      expect(hrefs).toEqual([BANK, CASH, CARD].map((account) => `/cuentas/${account.id}`));
-    });
-
-    it("cuts a very long name with an ellipsis instead of breaking the row", async () => {
-      const long = "Cuenta ".repeat(40).trim();
-      backend({ accounts: ok([{ ...BANK, name: long }]) });
-      await renderHome();
-      expect(screen.getByText(long).className).toContain("truncate");
-    });
-
-    it("holds a balance at the limit of the backend", async () => {
-      backend({ accounts: ok([{ ...BANK, balance_minor: Number.MAX_SAFE_INTEGER }]) });
-      await renderHome();
-      expect(screen.getByText(/90\.071\.992\.547\.409,91/)).toBeTruthy();
+    it("hands the client what it prefetched, under the keys the screen reads", async () => {
+      const { client } = await renderHome();
+      expect(client.getQueryData(dashboardKey("s1"))).toEqual(DASHBOARD);
+      expect(client.getQueryData(dashboardSeriesKey("s1", 6))).toEqual(SERIES);
+      expect(client.getQueryData(recentTransactionsKey("s1"))).toEqual([MOVEMENT]);
+      expect(client.getQueryData(accountsQueryKey("s1", { includeArchived: true }))).toEqual([
+        BANK,
+        CASH,
+        CARD,
+      ]);
     });
 
     it("keeps the card of the currency while the space has no movements, and drops it after", async () => {
       const { unmount } = await renderHome();
       expect(screen.getByRole("region", { name: "Moneda de tu espacio" })).toBeTruthy();
+      expect(mocks.currencyCard).toHaveBeenCalledTimes(1);
+      expect(mocks.currencyCard.mock.calls[0]?.[0].space).toEqual({
+        id: "s1",
+        currency: { code: "UYU" },
+      });
       unmount();
 
+      mocks.currencyCard.mockClear();
+      mocks.screen.mockClear();
       backend({ spaces: ok([{ ...SPACE, currency_locked: true }]), accounts: ok([BANK]) });
       await renderHome();
       expect(screen.queryByRole("region", { name: "Moneda de tu espacio" })).toBeNull();
-      expect(screen.getByRole("region", { name: "Tus cuentas" })).toBeTruthy();
+      expect(mocks.currencyCard).not.toHaveBeenCalled();
+      expect(mocks.screen.mock.calls[0]?.[0].currencyCard).toBeNull();
+    });
+
+    it("does not draw the dashboard when only archived accounts are left: that is the first use", async () => {
+      backend({ accounts: ok([{ ...BANK, archived_at: "2026-09-01T10:00:00Z" }]) });
+      await renderHome();
+      expect(screen.queryByTestId("dashboard-screen")).toBeNull();
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Empieza por tus cuentas" }),
+      ).toBeTruthy();
+      const sidebar = within(document.querySelector("[data-slot='sidebar']") as HTMLElement);
+      expect(sidebar.getByRole("link", { name: "Nueva cuenta" })).toBeTruthy();
+    });
+
+    it("never shows the raw values of the backend", async () => {
+      await renderHome();
+      expect(screen.queryByText(/personal|household/)).toBeNull();
+      expect(screen.queryByText(/\b(bank|cash|credit_card)\b/)).toBeNull();
+    });
+
+    describe("when one of the three cards' requests fails", () => {
+      let logged: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      });
+
+      afterEach(() => {
+        logged.mockRestore();
+      });
+
+      const BROKEN = failure(500, { code: "internal_error", detail: "Internal Server Error" });
+
+      it.each([
+        ["the dashboard", "dashboard", () => dashboardKey("s1")],
+        ["the series", "series", () => dashboardSeriesKey("s1", 6)],
+        ["the latest movements", "recent", () => recentTransactionsKey("s1")],
+      ] as const)(
+        "still draws the page without %s: that query is not hydrated and the card asks again",
+        async (name, answer, key) => {
+          backend({ accounts: ok([BANK]), [answer]: BROKEN });
+          const { client } = await renderHome();
+          expect(screen.getByTestId("dashboard-screen")).toBeTruthy();
+          expect(title()).toBe("Hola, Ana Pérez");
+          expect(client.getQueryData(key())).toBeUndefined();
+          // The others did arrive.
+          expect(client.getQueryData(accountsQueryKey("s1", { includeArchived: true }))).toEqual([
+            BANK,
+          ]);
+          expect(logged).toHaveBeenCalledTimes(1);
+          expect(logged).toHaveBeenCalledWith(`Home: could not load ${name}`, { status: 500 });
+          expect(JSON.stringify(logged.mock.calls)).not.toContain("Internal Server Error");
+          expect(mocks.redirect).not.toHaveBeenCalled();
+        },
+      );
+
+      it("logs only the name of an error that is not an ApiError, never its message", async () => {
+        mocks.get.mockImplementation(async (path: string) => {
+          if (path === "/me") return ok(USER);
+          if (path === "/spaces") return ok([SPACE]);
+          if (path === ACCOUNTS_PATH) return ok([BANK]);
+          throw new SyntaxError("Unexpected token < in JSON: <html>secret");
+        });
+        await renderHome();
+        expect(logged).toHaveBeenCalledWith("Home: could not load the dashboard", {
+          kind: "SyntaxError",
+        });
+        expect(JSON.stringify(logged.mock.calls)).not.toContain("secret");
+        expect(screen.getByTestId("dashboard-screen")).toBeTruthy();
+      });
+    });
+
+    describe("without a valid session", () => {
+      const UNAUTHORIZED = failure(401, { code: "invalid_session", detail: "Invalid session" });
+
+      it.each(["dashboard", "series", "recent", "accounts"] as const)(
+        "goes to /login on a 401 from the %s",
+        async (answer) => {
+          const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+          backend({ accounts: ok([BANK]), [answer]: UNAUTHORIZED });
+          await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
+          expect(mocks.redirect).toHaveBeenCalledWith("/login");
+          expect(logged).not.toHaveBeenCalled();
+          logged.mockRestore();
+        },
+      );
     });
   });
 
@@ -640,6 +844,7 @@ describe("HomePage", () => {
       expect(screen.getByText("Reintentar").closest("a")?.getAttribute("href")).toBe("/");
       expect(screen.queryByText("Empieza por tus cuentas")).toBeNull();
       expect(screen.queryByRole("link", { name: "Crear mi primera cuenta" })).toBeNull();
+      expect(screen.queryByTestId("dashboard-screen")).toBeNull();
       expect(mocks.currencyCard).not.toHaveBeenCalled();
     });
 
@@ -667,13 +872,6 @@ describe("HomePage", () => {
       });
       await renderHome();
       expect(screen.getByRole("alert").textContent).toContain("No pudimos conectar");
-    });
-
-    it("goes to /login on a 401 from the accounts", async () => {
-      backend({ accounts: failure(401, { code: "invalid_session", detail: "Invalid session" }) });
-      await expect(HomePage()).rejects.toThrow("NEXT_REDIRECT /login");
-      expect(mocks.redirect).toHaveBeenCalledWith("/login");
-      expect(logged).not.toHaveBeenCalled();
     });
 
     it("logs only the kind of failure, never the message", async () => {
