@@ -36,9 +36,24 @@ function chartOf(name: string | RegExp) {
 }
 
 /**
+ * Waits for `count` animation frames inside `act`. Recharts reads the pointer on the next frame
+ * (`throttleDelay: "raf"`, in two steps: the position, then the handler of the chart), so after a
+ * move the only certain way to know it was processed is to let those frames go by: a fixed wait in
+ * milliseconds could end first on a slow machine, and a test that expects "nothing comes back" would
+ * pass without the move ever having been seen.
+ */
+async function frames(count = 3) {
+  await act(async () => {
+    for (let frame = 0; frame < count; frame += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+  });
+}
+
+/**
  * jsdom has no layout, so Recharts cannot tell which month is under the pointer: the wrapper gets a
- * size and a position, and the returned function moves the pointer to `x` (Recharts reads the
- * position on the next animation frame, hence the wait).
+ * size and a position, and the returned function moves the pointer to `x` and waits for the frames
+ * in which Recharts takes it in.
  */
 function hoverable(container: HTMLElement, height: number) {
   const wrapper = container.querySelector(".recharts-wrapper") as HTMLElement;
@@ -48,7 +63,7 @@ function hoverable(container: HTMLElement, height: number) {
     ({ left: 0, top: 0, width: 640, height, right: 640, bottom: height, x: 0, y: 0 }) as DOMRect;
   return async (x: number) => {
     fireEvent.mouseMove(wrapper, { clientX: x, clientY: height / 2 });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await frames();
   };
 }
 
