@@ -71,7 +71,7 @@ export function StatTile({
         ) : (
           <p
             className={cn(
-              "font-heading text-lg font-semibold tracking-[-0.01em] tabular-nums wrap-anywhere md:text-xl lg:text-2xl",
+              "font-heading text-lg font-semibold tracking-stat tabular-nums wrap-anywhere md:text-xl lg:text-2xl",
               tone === "debt" && "text-debt",
             )}
           >

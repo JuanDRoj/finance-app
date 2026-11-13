@@ -98,7 +98,7 @@ export function DashboardChartsDemo({ initial = "canvas" }: Readonly<{ initial?:
       <Part title="Tarjeta del Neto">
         <Card
           variant="tile"
-          className="max-lg:hidden lg:gap-0 lg:px-6 lg:pt-[22px] lg:pb-4"
+          className="max-lg:hidden lg:gap-0 lg:px-6 lg:pt-5.5 lg:pb-4"
           style={{ width }}
         >
           <p className="text-item font-bold text-muted-foreground">Neto</p>

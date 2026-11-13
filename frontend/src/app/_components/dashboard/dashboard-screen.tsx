@@ -1,7 +1,7 @@
 "use client";
 
 import { Bank, CreditCard, ListBullets } from "@phosphor-icons/react/ssr";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { browserApi } from "@/lib/api/browser";
 import {
   compareExpense,
@@ -69,8 +69,14 @@ export function DashboardScreen({
   const figures = dashboard.data;
   const points = series.data?.points;
 
-  const comparison =
-    figures && points ? compareExpense(points, today, figures.month_expense_minor) : null;
+  // The note of "Gastos de octubre": BigInt arithmetic over the series, so it is worked out again only
+  // when the series, the day or the month's expenses change, not on every render of the screen.
+  const monthExpense = figures?.month_expense_minor;
+  const comparison = useMemo(
+    () =>
+      points && monthExpense !== undefined ? compareExpense(points, today, monthExpense) : null,
+    [points, today, monthExpense],
+  );
 
   return (
     <div

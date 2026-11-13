@@ -3,8 +3,8 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 // Our own `@theme` tokens (globals.css) that tailwind-merge cannot tell apart from other groups.
 // Without them it reads `text-brand` as a text *color* and drops it next to `text-primary`
-// (the Kanza name needs both). Add a token here whenever it is a font size, tracking, radius or
-// shadow that is not one of Tailwind's own names. Colors need nothing: any other `text-*` name is
+// (the Kanza name needs both). Add a token here whenever it is a font size, line height, tracking,
+// radius or shadow that is not one of Tailwind's own names. Colors need nothing: any other `text-*` name is
 // a color.
 const twMerge = extendTailwindMerge({
   extend: {
@@ -28,7 +28,8 @@ const twMerge = extendTailwindMerge({
         "net",
         "card-title",
       ],
-      tracking: ["brand", "title", "amount"],
+      tracking: ["brand", "title", "amount", "stat"],
+      leading: ["net"],
       radius: [
         "tile",
         "icon",

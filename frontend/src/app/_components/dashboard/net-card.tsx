@@ -100,7 +100,7 @@ export function NetCard({ dashboard, series, currency, className }: Readonly<Net
       <div className="relative z-10 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         {dashboard ? (
           <>
-            <p className="font-heading text-4xl leading-[1.1] font-semibold tracking-title tabular-nums wrap-anywhere md:text-net">
+            <p className="font-heading text-4xl leading-net font-semibold tracking-title tabular-nums wrap-anywhere md:text-net">
               {formatDashboardAmount(dashboard.net_minor, currency)}
             </p>
             {points ? (

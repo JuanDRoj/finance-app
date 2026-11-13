@@ -195,6 +195,8 @@
   /* KAN-84 (FE-24), from the Kanza canvas (docs/diseno.md D13 and D14): the Inicio's dashboard. */
   --text-net: 2.625rem; /* 42px: the Neto figure from 768px (36px below it is `text-4xl`) */
   --text-card-title: 1.1875rem; /* 19px: title of a card of the desktop Inicio (Ingresos y gastos, Cuentas…) */
+  --leading-net: 1.1; /* line height of the Neto figure (36px and 42px) */
+  --tracking-stat: -0.01em; /* the amount of a tile of the Inicio (Disponible, Deuda, Gastos) */
 }
 
 @theme inline {
