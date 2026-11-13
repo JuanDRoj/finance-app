@@ -169,6 +169,25 @@ describe("cn", () => {
     expect(cn("tracking-amount", "lg:tracking-normal")).toBe("tracking-amount lg:tracking-normal");
   });
 
+  it("resolves the radius tokens of the charts (KAN-102) against Tailwind's and each other, and keeps them apart from colors", () => {
+    // The chart's tooltip is 12 px and the legend's square 3 px; neither is the 10 px `tooltip`.
+    expect(cn("rounded-chart-tooltip", "rounded-full")).toBe("rounded-full");
+    expect(cn("rounded-full", "rounded-chart-tooltip")).toBe("rounded-chart-tooltip");
+    expect(cn("rounded-tooltip", "rounded-chart-tooltip")).toBe("rounded-chart-tooltip");
+    expect(cn("rounded-chart-tooltip", "rounded-tooltip")).toBe("rounded-tooltip");
+    expect(cn("rounded-swatch", "rounded-lg")).toBe("rounded-lg");
+    expect(cn("rounded-lg", "rounded-swatch")).toBe("rounded-swatch");
+    expect(cn("rounded-swatch", "rounded-chart-tooltip")).toBe("rounded-chart-tooltip");
+    // A radius never removes a color or a size, and a one-sided radius does not remove the others.
+    expect(cn("rounded-swatch bg-chart-income size-2.5")).toBe(
+      "rounded-swatch bg-chart-income size-2.5",
+    );
+    expect(cn("rounded-chart-tooltip bg-tooltip text-tooltip-label text-tooltip-foreground")).toBe(
+      "rounded-chart-tooltip bg-tooltip text-tooltip-label text-tooltip-foreground",
+    );
+    expect(cn("rounded-icon", "rounded-t-swatch")).toBe("rounded-icon rounded-t-swatch");
+  });
+
   it("keeps font families and weights apart", () => {
     expect(cn("font-brand", "font-extrabold")).toBe("font-brand font-extrabold");
     expect(cn("font-heading", "font-bold")).toBe("font-heading font-bold");

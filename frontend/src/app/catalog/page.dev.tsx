@@ -41,6 +41,7 @@ import { LoadingDemo } from "./_components/loading-demo";
 import { MovementEditDemo } from "./_components/movement-edit-demos";
 import { MovementPiecesDemo } from "./_components/movement-pieces-demos";
 import { AccountDetailDemo } from "./_components/account-detail-demos";
+import { DashboardChartsDemo } from "./_components/dashboard-chart-demos";
 import { MovementsScreenDemo } from "./_components/movements-screen-demos";
 import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
 import { NavPreview } from "./_components/nav-preview";
@@ -552,6 +553,10 @@ export default async function CatalogPage({
 
         <Section title="Pantalla Cuentas: detalle de una cuenta (movimientos con saldo)">
           <AccountDetailDemo />
+        </Section>
+
+        <Section title="Inicio: gráficos de Neto e Ingresos y gastos (desde 1024 px)">
+          <DashboardChartsDemo />
         </Section>
 
         <Section title="Cifras (tnum)">

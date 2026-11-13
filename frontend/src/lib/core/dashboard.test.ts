@@ -4,6 +4,7 @@ import {
   MIN_BAR_PERCENT,
   compareExpense,
   describeAvailableNote,
+  describeChartMonth,
   describeDebtNote,
   describeIncomeExpenseChartLabel,
   describeMonthSavings,
@@ -16,6 +17,8 @@ import {
   formatPercent,
   hasHistory,
   hasIncomeOrExpense,
+  incomeExpenseTicks,
+  netChartDomain,
   niceTicks,
   topBarWidths,
   topCategoryHref,
@@ -685,5 +688,105 @@ describe("the notes of Disponible and Deuda de tarjetas", () => {
     expect(describeAvailableNote([oldBank])).toBe("Sin bancos ni efectivo");
     expect(describeDebtNote([card, oldCard])).toBe("En 1 tarjeta");
     expect(describeDebtNote([oldCard])).toBe("Sin tarjetas");
+  });
+});
+
+describe("netChartDomain", () => {
+  it("is the lowest and highest net with a margin of 10 % of the span on each side", () => {
+    // 71.200,00 to 96.430,00: the span is 2.523.000 and a tenth of it, 252.300, goes on each side.
+    expect(netChartDomain(CANVAS)).toEqual([6867700, 9895300]);
+  });
+
+  it("rounds the margin up, and gives at least 1 minor unit", () => {
+    expect(netChartDomain([point("2026-09", 0, 0, 100), point("2026-10", 0, 0, 105)])).toEqual([
+      99, 106,
+    ]);
+    expect(netChartDomain([point("2026-09", 0, 0, 5), point("2026-10", 0, 0, 5)])).toEqual([4, 6]);
+  });
+
+  it("does not depend on the order of the points or on the sign", () => {
+    expect(
+      netChartDomain([
+        point("2026-08", 0, 0, 3000),
+        point("2026-09", 0, 0, -1000),
+        point("2026-10", 0, 0, 1000),
+      ]),
+    ).toEqual([-1400, 3400]);
+    expect(netChartDomain([point("2026-09", 0, 0, -5000), point("2026-10", 0, 0, -1000)])).toEqual([
+      -5400, -600,
+    ]);
+  });
+
+  it("has a range for a single point and for none", () => {
+    expect(netChartDomain([point("2026-10", 0, 0, 0)])).toEqual([-1, 1]);
+    expect(netChartDomain([])).toEqual([0, 1]);
+  });
+
+  it("works with the largest amounts, where a float margin would be wrong", () => {
+    const [low, high] = netChartDomain([
+      point("2026-09", 0, 0, -MAX_SAFE),
+      point("2026-10", 0, 0, MAX_SAFE),
+    ]);
+    expect(Number.isFinite(low)).toBe(true);
+    expect(Number.isFinite(high)).toBe(true);
+    expect(low).toBeLessThan(-MAX_SAFE);
+    expect(high).toBeGreaterThan(MAX_SAFE);
+  });
+});
+
+describe("incomeExpenseTicks", () => {
+  it("are the canvas' axis for the largest month: 0, 25 mil, 50 mil, 75 mil", () => {
+    const ticks = incomeExpenseTicks(CANVAS);
+    expect(ticks).toEqual([BigInt(0), BigInt(2500000), BigInt(5000000), BigInt(7500000)]);
+    expect(ticks.map((tick) => formatCompactMoney(tick, UYU))).toEqual([
+      "0",
+      "25 mil",
+      "50 mil",
+      "75 mil",
+    ]);
+  });
+
+  it("look at the expenses too, not only the income", () => {
+    const ticks = incomeExpenseTicks([point("2026-10", 100000, 7250000, 0)]);
+    expect(ticks[3]).toBe(BigInt(7500000));
+  });
+
+  it("scale down with the amounts: a step of 2,5 times a power of ten", () => {
+    expect(incomeExpenseTicks([point("2026-10", 72500, 30000, 0)]).map(Number)).toEqual([
+      0, 25000, 50000, 75000,
+    ]);
+  });
+
+  it("reach the largest amount exactly, past the largest safe integer", () => {
+    const ticks = incomeExpenseTicks([point("2026-10", MAX_SAFE, 1, 0)]);
+    expect(ticks).toHaveLength(4);
+    expect(ticks[0]).toBe(BigInt(0));
+    expect(ticks[3]).toBeGreaterThanOrEqual(BigInt(MAX_SAFE));
+  });
+
+  it("have a harmless fallback when there is nothing to draw", () => {
+    expect(incomeExpenseTicks([point("2026-10", 0, 0, 0)])).toEqual([
+      BigInt(0),
+      BigInt(1),
+      BigInt(2),
+      BigInt(3),
+    ]);
+    expect(incomeExpenseTicks([])).toHaveLength(4);
+  });
+});
+
+describe("describeChartMonth", () => {
+  it("writes the month with a capital, and 'setiembre' as the es-UY locale does", () => {
+    expect(describeChartMonth("2026-09")).toBe("Setiembre");
+    expect(describeChartMonth("2027-01")).toBe("Enero");
+  });
+
+  it("says how the month in progress is called: 'hoy' for the Neto, 'en curso' for the bars", () => {
+    expect(describeChartMonth("2026-10", "hoy")).toBe("Octubre (hoy)");
+    expect(describeChartMonth("2026-10", "en curso")).toBe("Octubre (en curso)");
+  });
+
+  it("never throws on a text that is not a month", () => {
+    expect(describeChartMonth("nope")).toBe("Nope");
   });
 });

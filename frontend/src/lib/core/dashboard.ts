@@ -299,6 +299,62 @@ export function describeIncomeExpenseChartLabel(
   );
 }
 
+// --- What the charts draw -----------------------------------------------------------------------------
+
+/** An amount of the series as a BigInt for the geometry; a number that is not an integer counts as 0. */
+function exactOf(amount: number): bigint {
+  return Number.isInteger(amount) ? BigInt(amount) : ZERO;
+}
+
+/**
+ * The vertical range of the Neto's area: the lowest and highest net of the series with a margin of
+ * 10 % of the span on each side (at least 1 minor unit), so the line never touches the edges and a
+ * series with all the same value sits in the middle. There is no zero line: the chart shows the
+ * shape of the evolution, the exact figures are in its tooltip and its table (docs/diseno.md D9). The
+ * arithmetic is BigInt and only the two ends become numbers, because they are only geometry. An
+ * empty series gives `[0, 1]`.
+ */
+export function netChartDomain(points: readonly MonthlySeriesPoint[]): [number, number] {
+  if (points.length === 0) return [0, 1];
+  let low = exactOf(points[0]?.net_minor ?? 0);
+  let high = low;
+  for (const point of points) {
+    const net = exactOf(point.net_minor);
+    if (net < low) low = net;
+    if (net > high) high = net;
+  }
+  const span = high - low;
+  const margin = span === ZERO ? BigInt(1) : (span + BigInt(9)) / BigInt(10);
+  return [Number(low - margin), Number(high + margin)];
+}
+
+/**
+ * The ticks of the Ingresos y gastos axis: `niceTicks` of the largest income or expense of the series
+ * (4 of them, from 0: "0, 25 mil, 50 mil, 75 mil" for the canvas' 72.500). An amount that is not a
+ * positive integer counts as 0. With nothing to draw it gives 0, 1, 2, 3 and is not meant to be shown.
+ */
+export function incomeExpenseTicks(points: readonly MonthlySeriesPoint[]): bigint[] {
+  let largest = ZERO;
+  for (const point of points) {
+    for (const amount of [point.income_minor, point.expense_minor]) {
+      const exact = exactOf(amount);
+      if (exact > largest) largest = exact;
+    }
+  }
+  return niceTicks(largest);
+}
+
+/**
+ * The title of a month in a chart's tooltip and table: "Setiembre", or "Octubre (hoy)" for the month
+ * in progress when `current` says how to call it ("hoy" for the Neto, which is the net of today; "en
+ * curso" for the bars, which are the whole month so far).
+ */
+export function describeChartMonth(month: string, current?: "hoy" | "en curso"): string {
+  const name = monthWord(month);
+  const title = `${name.charAt(0).toLocaleUpperCase(DEFAULT_LOCALE)}${name.slice(1)}`;
+  return current ? `${title} (${current})` : title;
+}
+
 // --- The top 5 ------------------------------------------------------------------------------------
 
 /** The thinnest a bar of the top 5 is drawn, in percent of the track: a category with something never looks empty. */

@@ -36,6 +36,9 @@
   --income: var(--primary);
   --expense: var(--foreground);
   --debt: #96560a;
+  /* Series of the Inicio's charts (docs/diseno.md D9 and D14): the income and the expense bars. */
+  --chart-income: #23895f;
+  --chart-expense: #b5652a;
   --glass: rgba(255, 255, 255, 0.58);
   --glass-strong: rgba(255, 255, 255, 0.74);
   --glass-border: rgba(255, 255, 255, 0.9);
@@ -104,6 +107,8 @@
     --input: rgba(255, 255, 255, 0.4);
     --ring: #6eddaa;
     --debt: #f0b45a;
+    --chart-income: #3aa97a;
+    --chart-expense: #c27535;
     --glass: rgba(20, 32, 26, 0.6);
     --glass-strong: rgba(16, 28, 22, 0.82);
     --glass-border: rgba(255, 255, 255, 0.1);
@@ -173,6 +178,9 @@
   /* KAN-91 (FE-27), from the Kanza canvas (docs/diseno.md D14, D17 › Escritorio v2). */
   --radius-card: 1.25rem; /* 20px: desktop cards (`surface`) */
   --radius-dialog: 1.5rem; /* 24px: centered dialogs */
+  /* KAN-102 (FE-36), from the Kanza canvas (docs/diseno.md D9, D13 and D14): the Inicio's charts. */
+  --radius-chart-tooltip: 0.75rem; /* 12px: the tooltip of the Neto and Ingresos y gastos charts (not the 10px `tooltip`) */
+  --radius-swatch: 0.1875rem; /* 3px: the color square of the chart legend */
   --shadow-panel: -16px 0 40px rgba(0, 0, 0, 0.16); /* the side panel */
   --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.22); /* a centered dialog */
   --shadow-sheet: 0 -10px 30px rgba(0, 0, 0, 0.16); /* the bottom sheet */
@@ -212,6 +220,8 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-debt: var(--debt);
+  --color-chart-income: var(--chart-income);
+  --color-chart-expense: var(--chart-expense);
   --color-glass: var(--glass);
   --color-glass-strong: var(--glass-strong);
   --color-glass-border: var(--glass-border);

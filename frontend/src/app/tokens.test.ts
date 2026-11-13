@@ -84,6 +84,11 @@ const PAIRS: Pair[] = [
   ["sidebar-tile-foreground", "sidebar-tile", 4.5, { light: 9.38, dark: 9.38 }],
   ["tooltip-foreground", "tooltip", 4.5, { light: 15.98, dark: 15.98 }], // text of the tooltip
   ["tooltip", "background", 3, { light: 15.84, dark: 17.15 }], // the tooltip stands out of the page
+  // The series of the Inicio's charts (KAN-102, D9): bars and legend squares are non-text, 3:1 on the
+  // card they are drawn on (`surface`). They are only 1,01:1 (light) and 1,21:1 (dark) apart, so the
+  // legend, the fixed order of the bars, the tooltip and the table are what tell them apart.
+  ["chart-income", "surface", 3, { light: 4.36, dark: 5.71 }],
+  ["chart-expense", "surface", 3, { light: 4.32, dark: 4.71 }],
 ];
 
 describe.each([
@@ -394,6 +399,77 @@ describe("tint of a hovered or pressed row of Movimientos", () => {
     const card = over(dark, "card", hexOf(dark, "blob-1"));
     const green = blend(hexOf(dark, "primary"), card, 0.12);
     expect(contrast(hexOf(dark, "muted-foreground"), green)).toBeLessThan(4.5);
+  });
+});
+
+// The Inicio's charts (KAN-102, D9). The column under the mouse or the keyboard in Ingresos y gastos is
+// `primary` at 10 % (12 % in dark), the same tint as a hovered row of the table; the bars stay at 3:1
+// on it. The Neto's line is `primary` at 2 px over the area, which is `primary` at 14 %.
+describe("charts of the Inicio", () => {
+  const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+  const bars = read("./_components/dashboard/income-expense-chart-body.tsx");
+  const area = read("./_components/dashboard/net-chart-body.tsx");
+  const tooltip = read("./_components/dashboard/chart-tooltip-card.tsx");
+  const alpha = (source: string, pattern: RegExp) => Number(pattern.exec(source)?.[1]) / 100;
+
+  it("reads the tints from the components: the column like the table's row, the area at 14 %", () => {
+    expect(alpha(bars, /(?<![:\w-])fill-primary\/(\d+)/)).toBe(0.1);
+    expect(alpha(bars, /dark:fill-primary\/(\d+)/)).toBe(0.12);
+    expect(area).toContain('fill="var(--primary)"');
+    expect(area).toContain("fillOpacity={0.14}");
+    expect(area).toContain('stroke="var(--primary)"');
+    // The rule inside the tooltip is the tooltip's own text color at 15 %, in both themes.
+    expect(alpha(tooltip, /border-tooltip-foreground\/(\d+)/)).toBe(0.15);
+  });
+
+  describe.each([
+    ["light", light, 0.1, 0.14],
+    ["dark", dark, 0.12, 0.14],
+  ] as const)("%s palette", (_name, palette, columnAlpha, areaAlpha) => {
+    const surface = (token: string) => hexOf(palette, token);
+
+    it.each(["chart-income", "chart-expense"])(
+      "%s reaches 3:1 on the highlighted column over the card",
+      (series) => {
+        const column = blend(surface("primary"), surface("surface"), columnAlpha);
+        expect(contrast(surface(series), column)).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    it("keeps the line of the Neto at 3:1 over its area and the card", () => {
+      const fill = blend(surface("primary"), surface("surface"), areaAlpha);
+      expect(contrast(surface("primary"), fill)).toBeGreaterThanOrEqual(3);
+      expect(contrast(surface("primary"), surface("surface"))).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it("takes the tooltip's 12 px and the legend square's 3 px from radius tokens, with no radius in brackets", () => {
+    expect(css).toContain("--radius-chart-tooltip: 0.75rem;");
+    expect(css).toContain("--radius-swatch: 0.1875rem;");
+    expect(tooltip).toContain("rounded-chart-tooltip");
+    expect(read("./_components/dashboard/income-expense-chart.tsx")).toContain("rounded-swatch");
+    const files = [
+      "./_components/dashboard/chart-boundary.tsx",
+      "./_components/dashboard/chart-skeleton.tsx",
+      "./_components/dashboard/chart-tooltip-card.tsx",
+      "./_components/dashboard/income-expense-chart.tsx",
+      "./_components/dashboard/income-expense-chart-body.tsx",
+      "./_components/dashboard/net-chart.tsx",
+      "./_components/dashboard/net-chart-body.tsx",
+      "../components/ui/chart.tsx",
+    ];
+    for (const file of files) {
+      expect(read(file), file).not.toMatch(/\brounded(?:-[a-z]{1,2})?-\[/);
+    }
+  });
+
+  it("defines the series colors once per theme and exposes them to Tailwind", () => {
+    expect(light.get("chart-income")).toBe("#23895f");
+    expect(light.get("chart-expense")).toBe("#b5652a");
+    expect(dark.get("chart-income")).toBe("#3aa97a");
+    expect(dark.get("chart-expense")).toBe("#c27535");
+    expect(css).toContain("--color-chart-income: var(--chart-income);");
+    expect(css).toContain("--color-chart-expense: var(--chart-expense);");
   });
 });
 
