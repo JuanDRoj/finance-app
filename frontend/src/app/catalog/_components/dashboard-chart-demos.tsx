@@ -48,7 +48,6 @@ function BrokenChart(): never {
   throw new Error("El gráfico de prueba falla a propósito");
 }
 
-// `text-[42px]` and `text-[19px]` are the canvas' sizes and have no token yet: the real cards (KAN-84) must use tokens.
 export function DashboardChartsDemo({ initial = "canvas" }: Readonly<{ initial?: ScenarioId }>) {
   const [scenarioId, setScenarioId] = useState<ScenarioId>(initial);
   const [frame, setFrame] = useState<FrameWidth>("w744");
@@ -99,11 +98,11 @@ export function DashboardChartsDemo({ initial = "canvas" }: Readonly<{ initial?:
       <Part title="Tarjeta del Neto">
         <Card
           variant="tile"
-          className="max-lg:hidden lg:gap-0 lg:px-6 lg:pt-[22px] lg:pb-4"
+          className="max-lg:hidden lg:gap-0 lg:px-6 lg:pt-5.5 lg:pb-4"
           style={{ width }}
         >
           <p className="text-item font-bold text-muted-foreground">Neto</p>
-          <p className="font-heading text-[42px] leading-tight font-semibold tabular-nums wrap-anywhere">
+          <p className="font-heading text-net leading-tight font-semibold tabular-nums wrap-anywhere">
             {formatDashboardAmount(dashboard.net_minor, currency)}
           </p>
           {change ? (
@@ -125,7 +124,7 @@ export function DashboardChartsDemo({ initial = "canvas" }: Readonly<{ initial?:
         <Card variant="tile" className="max-lg:hidden lg:gap-4" style={{ width }}>
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <h4 className="font-heading text-[19px] font-bold">Ingresos y gastos</h4>
+              <h4 className="font-heading text-card-title font-bold">Ingresos y gastos</h4>
               <p className="text-sm text-muted-foreground">Últimos 6 meses · octubre en curso</p>
             </div>
             <IncomeExpenseLegend />

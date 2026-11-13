@@ -138,6 +138,35 @@ describe("cn", () => {
     expect(cn("text-panel-title", "text-section-title")).toBe("text-section-title");
   });
 
+  it("resolves the size of the Neto and of a card title of the Inicio (KAN-84) against Tailwind's and colors", () => {
+    expect(cn("text-4xl", "md:text-net")).toBe("text-4xl md:text-net");
+    expect(cn("text-lg", "text-net")).toBe("text-net");
+    expect(cn("text-net", "text-lg")).toBe("text-lg");
+    expect(cn("text-net", "text-debt")).toBe("text-net text-debt");
+    expect(cn("text-base", "md:text-lg", "lg:text-card-title")).toBe(
+      "text-base md:text-lg lg:text-card-title",
+    );
+    expect(cn("text-card-title", "text-section-title")).toBe("text-section-title");
+    expect(cn("text-card-title", "text-foreground")).toBe("text-card-title text-foreground");
+  });
+
+  it("resolves the line height of the Neto and the tracking of a tile's amount (KAN-84) against Tailwind's", () => {
+    expect(cn("leading-tight", "leading-net")).toBe("leading-net");
+    expect(cn("leading-net", "leading-tight")).toBe("leading-tight");
+    expect(cn("tracking-tight", "tracking-stat")).toBe("tracking-stat");
+    expect(cn("tracking-stat", "tracking-title")).toBe("tracking-title");
+    expect(cn("tracking-title", "tracking-stat")).toBe("tracking-stat");
+    // They are not colors nor sizes: they sit next to a size and a color of their own kind.
+    expect(cn("text-4xl", "leading-net", "tracking-title", "text-debt")).toBe(
+      "text-4xl leading-net tracking-title text-debt",
+    );
+    expect(cn("text-lg", "tracking-stat", "text-debt")).toBe("text-lg tracking-stat text-debt");
+    // The classes of the Neto's figure all survive together, with the size of 768 px.
+    const figure =
+      "font-heading text-4xl leading-net font-semibold tracking-title tabular-nums wrap-anywhere md:text-net";
+    expect(cn(figure)).toBe(figure);
+  });
+
   it("resolves the title size of the panel and the dialog (KAN-91) against Tailwind's and colors", () => {
     expect(cn("text-xl", "text-panel-title")).toBe("text-panel-title");
     expect(cn("text-panel-title", "text-xl")).toBe("text-xl");

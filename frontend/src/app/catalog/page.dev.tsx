@@ -21,10 +21,8 @@ import { ApiError } from "@/lib/core/data/errors";
 import { describeApiError } from "@/lib/core/i18n";
 import { formatMoney } from "@/lib/core/money";
 import { MoreList } from "@/components/more-list";
-import type { AccountWithBalance } from "@/lib/core/data/accounts";
 import type { MoreSection } from "@/components/nav-sections";
 import { AuditPanel } from "./_components/audit-panel";
-import { AccountsSummary } from "../_components/accounts-summary";
 import { FirstUse } from "../_components/first-use";
 import { AccountEditDemo } from "./_components/account-demos";
 import { CategoryFormsDemo } from "./_components/category-demos";
@@ -42,6 +40,7 @@ import { MovementEditDemo } from "./_components/movement-edit-demos";
 import { MovementPiecesDemo } from "./_components/movement-pieces-demos";
 import { AccountDetailDemo } from "./_components/account-detail-demos";
 import { DashboardChartsDemo } from "./_components/dashboard-chart-demos";
+import { DashboardScreenDemo } from "./_components/dashboard-screen-demos";
 import { MovementsScreenDemo } from "./_components/movements-screen-demos";
 import { HeroMoneyDemo, MovementSheetDemo } from "./_components/movement-demos";
 import { NavPreview } from "./_components/nav-preview";
@@ -112,35 +111,6 @@ const DEMO_MORE: readonly MoreSection[] = [
     description:
       "Y una descripción también larguísima, para ver que la fila crece y el chevron no se aplasta",
   },
-];
-
-// Accounts as the Inicio lists them once the space has some, with the extremes of break-ui: a name
-// that does not fit, a balance at the limit of the backend, an overdraft and a card in debt.
-const DEMO_ACCOUNT = {
-  archived_at: null,
-  closing_day: null,
-  due_day: null,
-} as const;
-const DEMO_ACCOUNTS: AccountWithBalance[] = [
-  { ...DEMO_ACCOUNT, id: "1", name: "Itaú", type: "bank", balance_minor: 8425000 },
-  { ...DEMO_ACCOUNT, id: "2", name: "Billetera", type: "cash", balance_minor: 550000 },
-  {
-    ...DEMO_ACCOUNT,
-    id: "3",
-    name: "Visa Itaú",
-    type: "credit_card",
-    closing_day: 5,
-    due_day: 12,
-    balance_minor: -2412000,
-  },
-  {
-    ...DEMO_ACCOUNT,
-    id: "4",
-    name: "Cuenta de ahorro en dólares del banco con el nombre más largo que se te ocurra",
-    type: "bank",
-    balance_minor: Number.MAX_SAFE_INTEGER,
-  },
-  { ...DEMO_ACCOUNT, id: "5", name: "Descubierto", type: "bank", balance_minor: -25075 },
 ];
 
 const NOT_FOUND = describeApiError(
@@ -501,12 +471,6 @@ export default async function CatalogPage({
           />
         </Section>
 
-        <Section title="Inicio con cuentas (Tus cuentas)">
-          <div className="flex flex-col gap-3.5 lg:max-w-280">
-            <AccountsSummary accounts={DEMO_ACCOUNTS} currency={UYU} />
-          </div>
-        </Section>
-
         <Section title="Formulario de cuenta">
           <AccountFormDemo />
         </Section>
@@ -553,6 +517,10 @@ export default async function CatalogPage({
 
         <Section title="Pantalla Cuentas: detalle de una cuenta (movimientos con saldo)">
           <AccountDetailDemo />
+        </Section>
+
+        <Section title="Inicio: pantalla (el dashboard de un espacio con cuentas)">
+          <DashboardScreenDemo />
         </Section>
 
         <Section title="Inicio: gráficos de Neto e Ingresos y gastos (desde 1024 px)">

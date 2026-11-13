@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   EXPENSE_COMPARISON_FROM_DAY,
+  HOME_ACCOUNTS_LIMIT,
   MIN_BAR_PERCENT,
   compareExpense,
   describeAvailableNote,
   describeChartMonth,
   describeDebtNote,
+  describeExpensesTitle,
   describeIncomeExpenseChartLabel,
   describeMonthSavings,
   describeNetChange,
+  describeNoExpenses,
   describeNetChartLabel,
+  describeSeriesSubtitle,
+  describeTopExpensesLabel,
   expensesHref,
   formatCompactMoney,
   formatDashboardAmount,
@@ -20,6 +25,7 @@ import {
   incomeExpenseTicks,
   netChartDomain,
   niceTicks,
+  pickHomeAccounts,
   topBarWidths,
   topCategoryHref,
 } from "./dashboard";
@@ -788,5 +794,85 @@ describe("describeChartMonth", () => {
 
   it("never throws on a text that is not a month", () => {
     expect(describeChartMonth("nope")).toBe("Nope");
+  });
+});
+
+describe("describeExpensesTitle", () => {
+  it("names the month in a sentence, in lowercase and with 'setiembre'", () => {
+    expect(describeExpensesTitle("2026-10")).toBe("Gastos de octubre");
+    expect(describeExpensesTitle("2026-09")).toBe("Gastos de setiembre");
+  });
+
+  it("leaves a text that is not a month as it came", () => {
+    expect(describeExpensesTitle("nope")).toBe("Gastos de nope");
+  });
+});
+
+describe("describeNoExpenses", () => {
+  it("says the month has no expenses yet, with the month as a word", () => {
+    expect(describeNoExpenses("2026-10")).toBe("Aún no registras gastos en octubre.");
+    expect(describeNoExpenses("2026-09")).toBe("Aún no registras gastos en setiembre.");
+  });
+});
+
+describe("describeTopExpensesLabel", () => {
+  it("names the list of the top 5 with the month of the dashboard", () => {
+    expect(describeTopExpensesLabel("2026-10")).toBe("Gastos por categoría de octubre");
+    expect(describeTopExpensesLabel("2026-09")).toBe("Gastos por categoría de setiembre");
+  });
+});
+
+describe("describeSeriesSubtitle", () => {
+  it("counts the months of the series and names the current one", () => {
+    expect(describeSeriesSubtitle(CANVAS)).toBe("Últimos 6 meses · octubre en curso");
+    expect(describeSeriesSubtitle(CANVAS.slice(-3))).toBe("Últimos 3 meses · octubre en curso");
+  });
+
+  it("reads right with a single month, and is empty for none", () => {
+    expect(describeSeriesSubtitle(CANVAS.slice(-1))).toBe("Octubre (en curso)");
+    expect(describeSeriesSubtitle([])).toBe("");
+  });
+});
+
+describe("pickHomeAccounts", () => {
+  function account(n: number, overrides: Partial<AccountWithBalance> = {}): AccountWithBalance {
+    return {
+      id: `a${n}`,
+      name: `Cuenta ${n}`,
+      type: "bank",
+      closing_day: null,
+      due_day: null,
+      archived_at: null,
+      balance_minor: n * 100,
+      ...overrides,
+    };
+  }
+
+  it("lists at most eight, in the order the API gave them, and counts what was left out", () => {
+    const many = Array.from({ length: 11 }, (_, index) => account(index + 1));
+    const { rows, hidden } = pickHomeAccounts(many);
+    expect(HOME_ACCOUNTS_LIMIT).toBe(8);
+    expect(rows.map((row) => row.id)).toEqual(many.slice(0, 8).map((row) => row.id));
+    expect(hidden).toBe(3);
+  });
+
+  it("keeps everything when there are eight or fewer", () => {
+    const few = [account(1), account(2, { type: "credit_card", closing_day: 5, due_day: 12 })];
+    expect(pickHomeAccounts(few)).toEqual({ rows: few, hidden: 0 });
+    const eight = Array.from({ length: 8 }, (_, index) => account(index + 1));
+    expect(pickHomeAccounts(eight).hidden).toBe(0);
+  });
+
+  it("never lists an archived account, and does not count it as left out", () => {
+    const archived = account(2, { archived_at: "2026-09-01T10:00:00Z" });
+    const { rows, hidden } = pickHomeAccounts([account(1), archived, account(3)]);
+    expect(rows.map((row) => row.id)).toEqual(["a1", "a3"]);
+    expect(hidden).toBe(0);
+  });
+
+  it("takes a smaller limit, and none when there are no accounts", () => {
+    expect(pickHomeAccounts([account(1), account(2), account(3)], 2).hidden).toBe(1);
+    expect(pickHomeAccounts([])).toEqual({ rows: [], hidden: 0 });
+    expect(pickHomeAccounts([account(1)], 0)).toEqual({ rows: [], hidden: 1 });
   });
 });

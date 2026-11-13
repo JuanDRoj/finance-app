@@ -437,3 +437,48 @@ export function describeDebtNote(accounts: readonly AccountWithBalance[]): strin
   if (cards === 0) return "Sin tarjetas";
   return `En ${cards} ${cards === 1 ? "tarjeta" : "tarjetas"}`;
 }
+
+// --- The titles and the lists of the cards ------------------------------------------------------------
+
+/** "Gastos de octubre": the title of the tile and of the card of what was spent in the month (a month as a word). */
+export function describeExpensesTitle(month: string): string {
+  return `Gastos de ${monthWord(month)}`;
+}
+
+/** What the top 5 says when the month has no expenses: "Aún no registras gastos en octubre." */
+export function describeNoExpenses(month: string): string {
+  return `Aún no registras gastos en ${monthWord(month)}.`;
+}
+
+/** The name of the list of the top 5: "Gastos por categoría de octubre". */
+export function describeTopExpensesLabel(month: string): string {
+  return `Gastos por categoría de ${monthWord(month)}`;
+}
+
+/**
+ * The line under "Ingresos y gastos": "Últimos 6 meses · octubre en curso" (the months the series has
+ * and the current one, which is its last point). With a single month, just "Octubre (en curso)".
+ */
+export function describeSeriesSubtitle(points: readonly MonthlySeriesPoint[]): string {
+  const last = points[points.length - 1];
+  if (!last) return "";
+  if (points.length === 1) return describeChartMonth(last.month, "en curso");
+  return `Últimos ${points.length} meses · ${monthWord(last.month)} en curso`;
+}
+
+/** How many accounts the "Cuentas" card of the Inicio lists (docs/diseno.md D17 › Escritorio v2). */
+export const HOME_ACCOUNTS_LIMIT = 8;
+
+/**
+ * The accounts of the "Cuentas" card of the Inicio: the active ones in the order the API gives them
+ * (by name), the first `limit` of them. `hidden` is how many were left out, which the card does not
+ * need to say: "Ver cuentas" is always there. Archived accounts never show.
+ */
+export function pickHomeAccounts(
+  accounts: readonly AccountWithBalance[],
+  limit: number = HOME_ACCOUNTS_LIMIT,
+): { rows: AccountWithBalance[]; hidden: number } {
+  const active = activeOf(accounts);
+  const rows = active.slice(0, Math.max(0, limit));
+  return { rows, hidden: active.length - rows.length };
+}
