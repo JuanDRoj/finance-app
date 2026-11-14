@@ -248,6 +248,12 @@ EXPECTED_SPACE_OPERATIONS = {
     ("POST", "/spaces/{space_id}/categories/{category_id}/archive"),
     ("POST", "/spaces/{space_id}/categories/{category_id}/unarchive"),
     ("POST", "/spaces/{space_id}/transactions"),
+    ("GET", "/spaces/{space_id}/transactions"),
+    ("GET", "/spaces/{space_id}/transactions/summary"),
+    ("GET", "/spaces/{space_id}/transactions/{transaction_id}"),
+    ("PUT", "/spaces/{space_id}/transactions/{transaction_id}"),
+    ("DELETE", "/spaces/{space_id}/transactions/{transaction_id}"),
+    ("POST", "/spaces/{space_id}/transactions/{transaction_id}/restore"),
 }
 
 
