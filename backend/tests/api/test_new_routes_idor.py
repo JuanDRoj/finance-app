@@ -155,7 +155,9 @@ async def test_user_b_gets_404_on_every_route_of_the_space_of_user_a(
         for label, transaction_id in whose:
             response = await _send(api_client, route, a.space_id, transaction_id, body)
             leaked = [text for text in LEAKS if text in response.text]
-            if (response.status_code, response.json()) != (404, SPACE_NOT_FOUND) or leaked:
+            # The status goes first: a route that answers without a body (a 204) is refused here
+            # with its status and not with a JSONDecodeError that ends the loop.
+            if response.status_code != 404 or response.json() != SPACE_NOT_FOUND or leaked:
                 refused.append(f"{route.name} {label}: {response.status_code} {response.text}")
 
     assert refused == []
@@ -192,12 +194,19 @@ async def test_user_b_gets_404_transaction_not_found_in_their_own_space_for_a_mo
         foreign = await _send(api_client, route, b.space_id, theirs["id"], body)
         missing = await _send(api_client, route, b.space_id, unknown, body)
         leaked = [text for text in LEAKS if text in foreign.text]
+        # The status goes first: an answer without a body (a 204) is refused here with its status
+        # and text and not with a JSONDecodeError that ends the loop.
         if (
-            (foreign.status_code, foreign.json()) != (404, TRANSACTION_NOT_FOUND)
+            foreign.status_code != 404
+            or foreign.json() != TRANSACTION_NOT_FOUND
+            or missing.status_code != 404
             or foreign.json() != missing.json()  # the same body as an id that does not exist
             or leaked
         ):
-            refused.append(f"{route.name}: {foreign.status_code} {foreign.text}")
+            refused.append(
+                f"{route.name}: {foreign.status_code} {foreign.text}"
+                f" (unknown id: {missing.status_code} {missing.text})"
+            )
 
     assert refused == []
     assert set((await balances(api_client, b.space_id)).values()) == {0}
