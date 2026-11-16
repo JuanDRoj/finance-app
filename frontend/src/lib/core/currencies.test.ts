@@ -1,26 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { SEEDED_CURRENCIES } from "./currency-fixtures";
 import { CURRENCY_NAMES, describeCurrency, orderCurrencies } from "./i18n";
 import { CURRENCY_LOCALES, localeForCurrency } from "./locale";
 import { currencySymbolOf, formatMoney } from "./money";
-
-// The currencies the backend seeds and their ISO 4217 exponent: a copy of `SEED` in
-// `backend/migrations/versions/20261005_0001_create_currencies.py` (the backend checks it too, in
-// `backend/tests/db/test_currencies_migration.py`). `GET /currencies` sends only the code and the
-// exponent, and `openapi.json` publishes `code` as a plain string (no enum), so there is no
-// generated type to compare against: this list is the one to touch when the backend seeds another
-// currency (a data migration). The test then fails until the new code has a name in
-// `CURRENCY_NAMES` (i18n.ts) and a locale in `CURRENCY_LOCALES` (locale.ts): without them the picker
-// would list it as a bare code and its amounts would read "XXX 1.500" (KAN-103, found on a phone).
-const SEEDED_CURRENCIES = {
-  UYU: 2,
-  COP: 2,
-  USD: 2,
-  ARS: 2,
-  BRL: 2,
-  EUR: 2,
-  CLP: 0,
-  PYG: 0,
-} as const satisfies Record<string, number>;
 
 const SEEDED = Object.entries(SEEDED_CURRENCIES);
 

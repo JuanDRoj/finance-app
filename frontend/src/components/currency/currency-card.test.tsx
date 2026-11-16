@@ -200,22 +200,29 @@ describe("the picker, as a sheet below 1024 px and a dialog from there", () => {
     ["a phone", false],
     ["a desktop", true],
   ])(
-    "gives every row a name next to its code, none with the code alone (%s)",
+    "gives every row its name next to its code, none with the code alone (%s)",
     async (_name, desktop) => {
       mocks.desktop = desktop;
       renderCard();
       await opened();
-      const rows = screen
-        .getAllByRole("radio")
-        .map((input) => input.closest("label") as HTMLElement);
-      expect(rows).toHaveLength(8);
-      for (const row of rows) {
-        const [name, code] = Array.from(row.querySelectorAll("span")).map(
-          (span) => span.textContent,
-        );
-        expect(code).toMatch(/^[A-Z]{3}$/);
-        expect(name).toBeTruthy();
-        expect(name).not.toBe(code);
+      const radios = screen.getAllByRole("radio") as HTMLInputElement[];
+      expect(radios).toHaveLength(8);
+      // What a person reads in each row is its name and its code. The names are written out here
+      // (not taken from the app's own maps), so a row with only the code, or with the wrong name,
+      // fails: that is what showed up on a phone for CLP and PYG.
+      const NAMES: Record<string, string> = {
+        UYU: "Peso uruguayo",
+        COP: "Peso colombiano",
+        USD: "Dólar estadounidense",
+        ARS: "Peso argentino",
+        BRL: "Real brasileño",
+        EUR: "Euro",
+        CLP: "Peso chileno",
+        PYG: "Guaraní",
+      };
+      for (const input of radios) {
+        const row = input.closest("label") as HTMLElement;
+        expect(row.textContent).toBe(`${NAMES[input.value]}${input.value}`);
       }
     },
   );

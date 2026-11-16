@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SEEDED_CURRENCIES } from "./currency-fixtures";
 import { localeForCurrency } from "./locale";
 import { currencySymbolOf, formatMoney, minorToDecimalString, parseMoneyInput } from "./money";
 
@@ -154,10 +155,8 @@ describe("currencySymbolOf", () => {
     ["EUR", "€"],
     ["CLP", "$"],
     ["PYG", "Gs."],
-  ])("%s is written with %s", (code, symbol) => {
-    expect(currencySymbolOf({ code, exponent: code === "CLP" || code === "PYG" ? 0 : 2 })).toBe(
-      symbol,
-    );
+  ] as const)("%s is written with %s", (code, symbol) => {
+    expect(currencySymbolOf({ code, exponent: SEEDED_CURRENCIES[code] })).toBe(symbol);
   });
 
   it("falls back to the ISO code for a currency without a symbol in its locale", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatInstant, formatLocalDate } from "./dates";
+import { SEEDED_CURRENCIES } from "./currency-fixtures";
 import { DEFAULT_LOCALE, localeForCurrency } from "./locale";
 import { formatMoney } from "./money";
 
@@ -71,7 +72,7 @@ describe("the eight seeded currencies, written", () => {
 
   it("never writes the ISO code of a seeded currency: each has its own symbol", () => {
     for (const [code, locale] of SEEDED) {
-      const exponent = code === "CLP" || code === "PYG" ? 0 : 2;
+      const exponent = SEEDED_CURRENCIES[code];
       expect(formatMoney(155050, { code, exponent })).not.toContain(code);
       expect(localeForCurrency(code)).toBe(locale);
     }
