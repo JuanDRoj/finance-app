@@ -40,9 +40,13 @@ import {
 import { cn } from "@/lib/utils";
 
 // One retry, not the three of the rest of the app: the person is waiting in front of a skeleton, and
-// a list of six currencies that failed twice will not load by insisting. A session that ended (401)
+// a short list of currencies that failed twice will not load by insisting. A session that ended (401)
 // is not retried either: the answer would be the same.
 const CURRENCIES_RETRIES = 1;
+
+// One skeleton row per currency the app names (the eight the backend seeds): the list that replaces
+// it has that many rows, so nothing jumps when the request answers.
+const SKELETON_ROWS = Object.keys(CURRENCY_NAMES).length;
 
 const TITLE = "Moneda de tu espacio";
 const DESCRIPTION =
@@ -71,13 +75,14 @@ type CurrencyPickerProps = {
 };
 
 /**
- * "Moneda de tu espacio" (docs/diseno.md D18): the six currencies as radios and "Usar esta
- * moneda". A centered dialog from 1024 px and a bottom sheet below it, the same content in both
+ * "Moneda de tu espacio" (docs/diseno.md D18): the currencies as radios (the eight the backend
+ * seeds) and "Usar esta moneda". A centered dialog from 1024 px and a bottom sheet below it, the same content in both
  * (the width is asked with `useIsDesktop`, which is fine here: it only opens after a tap, when the
  * real width is known).
  *
  * - The list comes from `GET /currencies` when it opens, in the order of `CURRENCY_NAMES`: a
- *   skeleton of six rows while it loads, an `Alert` with "Reintentar" if it fails.
+ *   skeleton with one row per known currency while it loads (`SKELETON_ROWS`, so the list does not
+ *   jump when it arrives), an `Alert` with "Reintentar" if it fails.
  * - "Usar esta moneda" with the current one chosen just closes: no request.
  * - On success the queries of the spaces are invalidated and the page's server data refreshed (the
  *   sidebar and the card show the new currency), then it closes.
@@ -161,7 +166,7 @@ export function CurrencyPicker({
           <span role="status" className="sr-only">
             Cargando las monedas…
           </span>
-          {Array.from({ length: 6 }, (_, index) => (
+          {Array.from({ length: SKELETON_ROWS }, (_, index) => (
             <Skeleton key={index} className="h-12.5 w-full rounded-icon" />
           ))}
         </div>

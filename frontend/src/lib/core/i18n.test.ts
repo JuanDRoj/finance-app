@@ -431,6 +431,8 @@ describe("describeCurrency", () => {
     expect(describeCurrency("UYU")).toBe("Peso uruguayo · UYU");
     expect(describeCurrency("USD")).toBe("Dólar estadounidense · USD");
     expect(describeCurrency("EUR")).toBe("Euro · EUR");
+    expect(describeCurrency("CLP")).toBe("Peso chileno · CLP");
+    expect(describeCurrency("PYG")).toBe("Guaraní · PYG");
   });
 
   it("shows only the code when it has no name, and never reads inherited keys", () => {
@@ -439,7 +441,16 @@ describe("describeCurrency", () => {
   });
 
   it("keeps the order of the list the user picks from (docs/diseno.md D18)", () => {
-    expect(Object.keys(CURRENCY_NAMES)).toEqual(["UYU", "COP", "USD", "ARS", "BRL", "EUR"]);
+    expect(Object.keys(CURRENCY_NAMES)).toEqual([
+      "UYU",
+      "COP",
+      "USD",
+      "ARS",
+      "BRL",
+      "EUR",
+      "CLP",
+      "PYG",
+    ]);
   });
 });
 
@@ -447,8 +458,19 @@ describe("orderCurrencies", () => {
   const codes = (list: { code: string }[]) => list.map((currency) => currency.code);
 
   it("puts the currencies in the order of the list the person picks from", () => {
-    const fromBackend = ["EUR", "ARS", "UYU", "BRL", "USD", "COP"].map((code) => ({ code }));
-    expect(codes(orderCurrencies(fromBackend))).toEqual(["UYU", "COP", "USD", "ARS", "BRL", "EUR"]);
+    const fromBackend = ["PYG", "EUR", "ARS", "CLP", "UYU", "BRL", "USD", "COP"].map((code) => ({
+      code,
+    }));
+    expect(codes(orderCurrencies(fromBackend))).toEqual([
+      "UYU",
+      "COP",
+      "USD",
+      "ARS",
+      "BRL",
+      "EUR",
+      "CLP",
+      "PYG",
+    ]);
   });
 
   it("keeps the rest of each currency untouched", () => {
@@ -463,8 +485,9 @@ describe("orderCurrencies", () => {
   });
 
   it("sends a currency without a name after the known ones, in the order the backend gave", () => {
-    const fromBackend = ["CLP", "EUR", "PEN", "UYU"].map((code) => ({ code }));
-    expect(codes(orderCurrencies(fromBackend))).toEqual(["UYU", "EUR", "CLP", "PEN"]);
+    // JPY and PEN are not seeded, so they have no name: they go last, as the backend sent them.
+    const fromBackend = ["JPY", "EUR", "PEN", "UYU"].map((code) => ({ code }));
+    expect(codes(orderCurrencies(fromBackend))).toEqual(["UYU", "EUR", "JPY", "PEN"]);
   });
 
   it("does not change the array it is given, and copes with an empty one", () => {

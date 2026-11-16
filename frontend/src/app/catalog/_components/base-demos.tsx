@@ -41,10 +41,16 @@ const TYPES = (Object.keys(ACCOUNT_TYPE_NAMES) as (keyof typeof ACCOUNT_TYPE_NAM
 const DAYS = Array.from({ length: 31 }, (_, index) => String(index + 1));
 const UYU: Currency = { code: "UYU", exponent: 2 };
 
-/** The six seeded currencies plus two simulated exponents (0 and 3) to try the field with. */
+// The seeded currencies with no decimals (ISO 4217, migration 0001 of the backend): the rest have 2.
+const SEEDED_WITHOUT_DECIMALS = new Set(["CLP", "PYG"]);
+
+/** The eight seeded currencies with their real exponent, plus one simulated (3) to try the field with. */
 const MONEY_CURRENCIES: { currency: Currency; note?: string }[] = [
-  ...Object.keys(CURRENCY_NAMES).map((code) => ({ currency: { code, exponent: 2 } })),
-  { currency: { code: "CLP", exponent: 0 }, note: "exponente 0 (simulado)" },
+  ...Object.keys(CURRENCY_NAMES).map((code) =>
+    SEEDED_WITHOUT_DECIMALS.has(code)
+      ? { currency: { code, exponent: 0 }, note: "exponente 0" }
+      : { currency: { code, exponent: 2 } },
+  ),
   { currency: { code: "KWD", exponent: 3 }, note: "exponente 3 (simulado)" },
 ];
 
@@ -56,7 +62,7 @@ function DayOptions() {
   ));
 }
 
-/** The six currencies as radios, like the list of "Moneda de tu espacio" (a fieldset of rows). */
+/** The eight currencies as radios, like the list of "Moneda de tu espacio" (a fieldset of rows). */
 function CurrencyChoices({ name, layout }: Readonly<{ name: string; layout: "sheet" | "dialog" }>) {
   const [chosen, setChosen] = useState("UYU");
   return (

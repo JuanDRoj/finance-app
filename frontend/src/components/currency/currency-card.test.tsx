@@ -29,11 +29,14 @@ afterEach(() => {
 });
 
 const SPACE = { id: "space-1", currency: { code: "UYU" } };
-// As the backend sends them: in no particular order, only the code and the exponent.
+// As the backend sends them: in no particular order, only the code and the exponent. The eight it
+// seeds (migration 0001): a fixture of six hid that CLP and PYG showed up with only their code.
 const CURRENCIES = [
   { code: "EUR", exponent: 2 },
+  { code: "PYG", exponent: 0 },
   { code: "ARS", exponent: 2 },
   { code: "USD", exponent: 2 },
+  { code: "CLP", exponent: 0 },
   { code: "UYU", exponent: 2 },
   { code: "COP", exponent: 2 },
   { code: "BRL", exponent: 2 },
@@ -162,7 +165,7 @@ describe("the picker, as a sheet below 1024 px and a dialog from there", () => {
     ["a phone", false],
     ["a desktop", true],
   ])(
-    "lists the six currencies in the order of the app, with the current one chosen (%s)",
+    "lists the eight currencies in the order of the app, with the current one chosen (%s)",
     async (_name, desktop) => {
       mocks.desktop = desktop;
       renderCard();
@@ -175,6 +178,8 @@ describe("the picker, as a sheet below 1024 px and a dialog from there", () => {
         "ARS",
         "BRL",
         "EUR",
+        "CLP",
+        "PYG",
       ]);
       expect(radio(/Peso uruguayo/).checked).toBe(true);
       expect(radios.filter((input) => input.checked)).toHaveLength(1);
@@ -182,9 +187,35 @@ describe("the picker, as a sheet below 1024 px and a dialog from there", () => {
       for (const [name, code] of [
         [/Dólar estadounidense/, "USD"],
         [/Real brasileño/, "BRL"],
+        [/Peso chileno/, "CLP"],
+        [/Guaraní/, "PYG"],
       ] as const) {
         const row = radio(name).closest("label") as HTMLElement;
         expect(row.textContent).toContain(code);
+      }
+    },
+  );
+
+  it.each([
+    ["a phone", false],
+    ["a desktop", true],
+  ])(
+    "gives every row a name next to its code, none with the code alone (%s)",
+    async (_name, desktop) => {
+      mocks.desktop = desktop;
+      renderCard();
+      await opened();
+      const rows = screen
+        .getAllByRole("radio")
+        .map((input) => input.closest("label") as HTMLElement);
+      expect(rows).toHaveLength(8);
+      for (const row of rows) {
+        const [name, code] = Array.from(row.querySelectorAll("span")).map(
+          (span) => span.textContent,
+        );
+        expect(code).toMatch(/^[A-Z]{3}$/);
+        expect(name).toBeTruthy();
+        expect(name).not.toBe(code);
       }
     },
   );
@@ -241,13 +272,13 @@ describe("the picker, as a sheet below 1024 px and a dialog from there", () => {
 });
 
 describe("while the list loads and when it fails", () => {
-  it("shows a skeleton of six rows, announced, and keeps the action off", async () => {
+  it("shows a skeleton of eight rows (one per currency of the list), announced, and keeps the action off", async () => {
     mocks.get.mockReturnValue(new Promise(() => {}));
     renderCard();
     open();
     const dialog = await screen.findByRole("dialog");
     expect(dialog.querySelector("[aria-busy='true']")).not.toBeNull();
-    expect(dialog.querySelectorAll("[data-slot='skeleton']")).toHaveLength(6);
+    expect(dialog.querySelectorAll("[data-slot='skeleton']")).toHaveLength(8);
     expect(within(dialog).getByRole("status").textContent).toBe("Cargando las monedas…");
     expect(screen.queryByRole("radio")).toBeNull();
     expect(
@@ -272,7 +303,7 @@ describe("while the list loads and when it fails", () => {
     ).toBe("true");
 
     fireEvent.click(within(alert).getByRole("button", { name: "Reintentar" }));
-    expect(await screen.findAllByRole("radio")).toHaveLength(6);
+    expect(await screen.findAllByRole("radio")).toHaveLength(8);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -467,7 +498,7 @@ describe("without a connection", () => {
     ).toBe("true");
 
     onlineManager.setOnline(true);
-    expect(await screen.findAllByRole("radio")).toHaveLength(6);
+    expect(await screen.findAllByRole("radio")).toHaveLength(8);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(mocks.get).toHaveBeenCalledTimes(1);
   });

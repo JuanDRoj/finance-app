@@ -138,7 +138,8 @@ describe("accountAmountView in a bank or cash account", () => {
   });
 
   it("follows the exponent of the currency", () => {
-    expect(accountAmountView(expense(-1500), BANK, CLP).text).toBe("\u2212CLP\u00A01.500");
+    // es-CL writes the sign after the "$" (docs/diseno.md D11).
+    expect(accountAmountView(expense(-1500), BANK, CLP).text).toBe("$\u22121.500");
     expect(accountAmountView(income(1500), BANK, KWD).text).toContain("1,500");
   });
 

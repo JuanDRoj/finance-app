@@ -242,7 +242,7 @@ describe("IncomeExpenseChart, from 1024 px", () => {
     await chartOf(/^Ingresos y gastos de los últimos 6 meses/);
     expect(tickLabels(container, "yAxis")).toEqual(["0", "25 mil", "50 mil", "75 mil"]);
     expect(within(screen.getByRole("table")).getAllByRole("row")[6]?.textContent).toBe(
-      "Octubre (en curso)CLP\u00A068.000CLP\u00A036.770CLP\u00A031.230",
+      "Octubre (en curso)$68.000$36.770$31.230",
     );
   });
 });

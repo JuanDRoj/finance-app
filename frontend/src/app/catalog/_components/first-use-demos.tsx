@@ -20,9 +20,11 @@ const SPACE = {
   id: "00000000-0000-4000-8000-000000000000",
   currency: { code: "UYU", exponent: 2 },
 };
-const CURRENCIES = ["EUR", "ARS", "USD", "UYU", "COP", "BRL"].map((code) => ({
+// The eight the backend seeds (migration 0001), in no particular order, with their real exponent:
+// CLP and PYG have none. A list of six would hide the two that once showed up with only their code.
+const CURRENCIES = ["EUR", "PYG", "ARS", "USD", "CLP", "UYU", "COP", "BRL"].map((code) => ({
   code,
-  exponent: 2,
+  exponent: code === "CLP" || code === "PYG" ? 0 : 2,
 }));
 
 export type AccountOutcome = "ok" | "never" | "fields" | "server" | "offline";

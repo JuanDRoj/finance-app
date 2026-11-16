@@ -11,6 +11,9 @@ const UYU = { code: "UYU", exponent: 2 };
 const COP = { code: "COP", exponent: 2 };
 const USD = { code: "USD", exponent: 2 };
 const CLP = { code: "CLP", exponent: 0 };
+const PYG = { code: "PYG", exponent: 0 };
+// Not seeded by the backend, so it has no locale of its own: it shows its ISO code (exponent 0).
+const JPY = { code: "JPY", exponent: 0 };
 const KWD = { code: "KWD", exponent: 3 };
 
 describe("minorToDecimalString", () => {
@@ -70,8 +73,13 @@ describe("formatMoney", () => {
     expect(formatMoney(123450, USD)).toBe(`US$${NBSP}1.234,50`);
   });
 
-  it("shows no decimals when the exponent is 0 and shows the code of an unmapped currency", () => {
-    expect(formatMoney(1500, CLP)).toBe(`CLP${NBSP}1.500`);
+  it("shows no decimals when the exponent is 0: CLP with es-CL and PYG with es-PY", () => {
+    expect(formatMoney(1500, CLP)).toBe("$1.500");
+    expect(formatMoney(1500, PYG)).toBe(`Gs.${NBSP}1.500`);
+  });
+
+  it("shows the code of a currency that is not mapped, with no decimals when its exponent is 0", () => {
+    expect(formatMoney(1500, JPY)).toBe(`JPY${NBSP}1.500`);
   });
 
   it("shows exactly three decimals when the exponent is 3", () => {
@@ -144,12 +152,16 @@ describe("currencySymbolOf", () => {
     ["ARS", "$"],
     ["BRL", "R$"],
     ["EUR", "€"],
+    ["CLP", "$"],
+    ["PYG", "Gs."],
   ])("%s is written with %s", (code, symbol) => {
-    expect(currencySymbolOf({ code, exponent: 2 })).toBe(symbol);
+    expect(currencySymbolOf({ code, exponent: code === "CLP" || code === "PYG" ? 0 : 2 })).toBe(
+      symbol,
+    );
   });
 
   it("falls back to the ISO code for a currency without a symbol in its locale", () => {
-    expect(currencySymbolOf(CLP)).toBe("CLP");
+    expect(currencySymbolOf(JPY)).toBe("JPY");
   });
 
   it("does not depend on the exponent", () => {
