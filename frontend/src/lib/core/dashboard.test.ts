@@ -90,7 +90,7 @@ describe("formatDashboardAmount", () => {
 
   it("writes the largest exact amount in full, with 0, 2 and 3 decimals", () => {
     expect(formatDashboardAmount(MAX_SAFE, UYU)).toBe("$\u00A090.071.992.547.409,91");
-    expect(formatDashboardAmount(MAX_SAFE, CLP)).toBe("CLP\u00A09.007.199.254.740.991");
+    expect(formatDashboardAmount(MAX_SAFE, CLP)).toBe("$9.007.199.254.740.991");
     expect(formatDashboardAmount(MAX_SAFE, KWD)).toMatch(/9\.007\.199\.254\.740,991$/);
   });
 
@@ -99,7 +99,7 @@ describe("formatDashboardAmount", () => {
     expect(formatDashboardAmount(-(MAX_SAFE + 2), UYU)).toBe(
       "Menos de \u2212$\u00A090.071.992.547.409,91",
     );
-    expect(formatDashboardAmount(1.8e19, CLP)).toBe("Más de CLP\u00A09.007.199.254.740.991");
+    expect(formatDashboardAmount(1.8e19, CLP)).toBe("Más de $9.007.199.254.740.991");
     expect(formatDashboardAmount(Infinity, UYU)).toMatch(/^Más de /);
   });
 
@@ -274,7 +274,8 @@ describe("describeNetChange", () => {
 
   it("follows the exponent of the currency", () => {
     expect(describeNetChange(1500, [point("a", 0, 0, 1000), point("b", 0, 0, 1)], CLP)?.text).toBe(
-      "+CLP\u00A0500 este mes",
+      // es-CL writes the sign after the "$" (docs/diseno.md D11).
+      "$+500 este mes",
     );
     expect(describeNetChange(2500, [point("a", 0, 0, 1000), point("b", 0, 0, 1)], KWD)?.text).toBe(
       "+KWD\u00A01,500 este mes",

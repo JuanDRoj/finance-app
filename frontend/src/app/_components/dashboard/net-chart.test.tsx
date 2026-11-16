@@ -198,7 +198,7 @@ describe("NetChart, from 1024 px", () => {
     await chartOf(/^Neto de los últimos 6 meses/);
     const table = screen.getByRole("table");
     expect(within(table).getByRole("row", { name: /Octubre/ }).textContent).toBe(
-      "Octubre (hoy)CLP\u00A096.430",
+      "Octubre (hoy)$96.430",
     );
   });
 });

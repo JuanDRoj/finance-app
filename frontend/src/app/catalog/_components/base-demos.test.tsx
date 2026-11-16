@@ -56,7 +56,10 @@ describe("BottomSheetDemo", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Moneda de tu espacio" });
     expect(dialog.getAttribute("data-side")).toBe("bottom");
-    expect(screen.getAllByRole("radio")).toHaveLength(6);
+    // The eight currencies the backend seeds, each with its name (CLP and PYG too).
+    expect(screen.getAllByRole("radio")).toHaveLength(8);
+    expect(screen.getByRole("radio", { name: /Peso chileno/ })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Guaraní/ })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /Peso uruguayo/ })).toHaveProperty("checked", true);
     expect(screen.getByRole("button", { name: "Usar esta moneda" })).toBeTruthy();
     expect(dialog.lastElementChild?.textContent).toBe("Cancelar");
@@ -81,11 +84,15 @@ describe("DialogDemo", () => {
 });
 
 describe("MoneyDemo and PickersDemo", () => {
-  it("shows the field with the six currencies and two simulated exponents", () => {
+  it("shows the field with the eight seeded currencies and a simulated exponent", () => {
     render(<MoneyDemo />);
-    for (const code of ["UYU", "COP", "USD", "ARS", "BRL", "EUR", "CLP", "KWD"]) {
+    for (const code of ["UYU", "COP", "USD", "ARS", "BRL", "EUR", "CLP", "PYG", "KWD"]) {
       expect(screen.getByLabelText(new RegExp(`· ${code}`))).toBeTruthy();
     }
+    // CLP and PYG are real currencies with exponent 0, not a simulation (only KWD is).
+    expect(screen.getByLabelText(/· CLP \(exponente 0\)/)).toBeTruthy();
+    expect(screen.getByLabelText(/· PYG \(exponente 0\)/)).toBeTruthy();
+    expect(screen.getByLabelText(/· KWD \(exponente 3 \(simulado\)\)/)).toBeTruthy();
     expect(screen.getByLabelText("Deuda actual (tono de deuda)").className).toContain("text-debt");
   });
 

@@ -7,7 +7,7 @@ import { unwrap } from "./errors";
 export type CurrencyRead = components["schemas"]["CurrencyRead"];
 
 /**
- * The currencies a space can use (`GET /currencies`, the six the backend seeds), in the order the
+ * The currencies a space can use (`GET /currencies`, the eight the backend seeds), in the order the
  * backend lists them. Throws an `ApiError`: `not_authenticated` or `invalid_session` (401).
  */
 export async function listCurrencies(api: ApiClient): Promise<CurrencyRead[]> {

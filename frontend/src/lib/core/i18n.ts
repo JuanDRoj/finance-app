@@ -353,7 +353,9 @@ export function describeMovementError(
 /**
  * Names of the currencies a space can use, in Spanish. `GET /currencies` sends only the code and
  * the exponent, so the name lives here (docs/diseno.md D18). The order is the one of the list the
- * user picks from (FE-16): UYU, COP, USD, ARS, BRL, EUR.
+ * user picks from (FE-16, KAN-103): UYU, COP, USD, ARS, BRL, EUR, CLP, PYG, the eight the backend
+ * seeds. A currency added to the backend must be added here and to `CURRENCY_LOCALES`
+ * (`currencies.test.ts` fails if one of the two is missing).
  */
 export const CURRENCY_NAMES: Readonly<Record<string, string>> = {
   UYU: "Peso uruguayo",
@@ -362,6 +364,8 @@ export const CURRENCY_NAMES: Readonly<Record<string, string>> = {
   ARS: "Peso argentino",
   BRL: "Real brasileño",
   EUR: "Euro",
+  CLP: "Peso chileno",
+  PYG: "Guaraní",
 };
 
 /**
@@ -446,7 +450,7 @@ export const MOVEMENT_EDIT_SAVE_LABEL = "Guardar cambios";
 
 /**
  * The currencies of `GET /currencies` in the order the person picks from (the order of
- * `CURRENCY_NAMES`: UYU, COP, USD, ARS, BRL, EUR). One the map does not know (the backend seeded a
+ * `CURRENCY_NAMES`: UYU, COP, USD, ARS, BRL, EUR, CLP, PYG). One the map does not know (the backend seeded a
  * new currency) goes after them, in the order the backend sent. Returns a new array.
  */
 export function orderCurrencies<T extends { code: string }>(currencies: readonly T[]): T[] {

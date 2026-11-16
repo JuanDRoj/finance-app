@@ -97,6 +97,8 @@ describe("CurrencyDemo", () => {
       "ARS",
       "BRL",
       "EUR",
+      "CLP",
+      "PYG",
     ]);
   });
 
@@ -110,7 +112,7 @@ describe("CurrencyDemo", () => {
     render(<CurrencyDemo instant />);
     choose(OUTCOME, "list-loading");
     const dialog = await openPicker();
-    expect(dialog.querySelectorAll("[data-slot='skeleton']")).toHaveLength(6);
+    expect(dialog.querySelectorAll("[data-slot='skeleton']")).toHaveLength(8);
   });
 
   it("shows the 409 when the currency is used", async () => {
