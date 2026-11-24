@@ -24,10 +24,10 @@ erDiagram
   RECURRING_TEMPLATES |o--o{ TRANSACTIONS : "genera"
   TRANSACTIONS |o--o| TRANSACTIONS : "enlazada con"
   ACCOUNTS ||--o{ CARD_STATEMENTS : "cierres"
-  SPACES ||--o{ BUDGETS : "v1.1"
+  SPACES ||--o{ BUDGETS : "H2"
   CATEGORIES ||--o{ BUDGETS : "limita"
   CURRENCIES ||--o{ SPACES : "moneda de"
-  SPACES ||--o{ GOALS : "v1.1"
+  SPACES ||--o{ GOALS : "H2"
   GOALS ||--o{ GOAL_ALLOCATIONS : "reparte en"
   ACCOUNTS ||--o{ GOAL_ALLOCATIONS : "reserva en"
  
@@ -89,9 +89,9 @@ erDiagram
     date date "fecha local"
     text description "nullable"
     uuid created_by FK "→ users.id"
-    uuid template_id FK "H2"
-    text period "H2, 2026-10"
-    int installment_number "H2"
+    uuid template_id FK "H3"
+    text period "H3, 2026-10"
+    int installment_number "H3"
     timestamptz deleted_at
   }
   ENTRIES {
@@ -211,7 +211,7 @@ Banco, efectivo o tarjeta. La tarjeta suma a Deuda; las demás, a Disponible.
 | type | bank · cash · credit_card (texto + CHECK `ck_accounts_type`); no se cambia después de crear la cuenta (decidido en KAN-63: el PATCH no lo acepta) |
 | closing_day | `smallint`, solo credit_card, obligatorio ahí; 1 a 31 (`ck_accounts_closing_day_range`, y `ck_accounts_card_days` para "solo y obligatorio en tarjeta") |
 | due_day | `smallint`, igual que `closing_day` (`ck_accounts_due_day_range`) |
-| archived_at | `timestamptz`; null = activa. Archivar exige saldo 0 (409 `account_has_balance`); lo aplica `accounts.service.archive_account` (KAN-67), con la cuenta bloqueada antes de leer el saldo. "Sin apartados" se sumará cuando existan las metas (v1.1). Desarchivar no mira el saldo. La tabla solo guarda la fecha |
+| archived_at | `timestamptz`; null = activa. Archivar exige saldo 0 (409 `account_has_balance`); lo aplica `accounts.service.archive_account` (KAN-67), con la cuenta bloqueada antes de leer el saldo. "Sin apartados" se sumará con las metas (H2, BE-30). Desarchivar no mira el saldo. La tabla solo guarda la fecha |
 | created_at, updated_at | `timestamptz` (UTC); `updated_at` lo actualiza el ORM, sin trigger |
 
 `UNIQUE (id, space_id)` (`uq_accounts_id_space_id`) es el destino de la FK compuesta de `entries`.
@@ -283,18 +283,18 @@ El "qué pasó". Una línea en la lista de movimientos.
 | --- | --- |
 | space_idFK | `NOT NULL`, `ON DELETE RESTRICT` |
 | type | expense · income · transfer · adjustment (texto + CHECK `ck_transactions_type`) |
-| status | pending · confirmed · skipped (texto + CHECK `ck_transactions_status`, sin default). Un movimiento creado a mano nace `confirmed`; pendientes y saltados vienen de las plantillas (H2) |
+| status | pending · confirmed · skipped (texto + CHECK `ck_transactions_status`, sin default). Un movimiento creado a mano nace `confirmed`; pendientes y saltados vienen de las plantillas (H3) |
 | date | `date` NOT NULL: el día local del usuario según `spaces.timezone`, no un momento. La API solo acepta `YYYY-MM-DD` |
 | description | `text` opcional (NULL); si viene, sin espacios en los extremos, no vacía (`ck_transactions_description_not_blank`) y de hasta 200 caracteres (`ck_transactions_description_length`). Los ajustes del sistema la dejan en NULL y la UI los rotula por tipo |
-| template_idFK | **H2, todavía no existe.** null si es manual |
-| period | **H2, todavía no existe.** Único junto con template_id |
-| installment_number | **H2, todavía no existe.** "cuota 3 de 6" |
+| template_idFK | **H3, todavía no existe.** null si es manual |
+| period | **H3, todavía no existe.** Único junto con template_id |
+| installment_number | **H3, todavía no existe.** "cuota 3 de 6" |
 | linked_transaction_idFK | **v2, todavía no existe.** Aporte al hogar |
 | created_byFK | `NOT NULL`, `ON DELETE RESTRICT`; usuario, útil en hogares |
 | created_at, updated_at | `timestamptz` (UTC). Al editar, el backend rehace los entries |
 | deleted_at | `timestamptz`; borrado suave, excluida de saldos y reportes |
 
-Índices y claves: `UNIQUE (id, space_id)` (`uq_transactions_id_space_id`), destino de la FK compuesta de `entries`, e índice parcial `ix_transactions_space_id_date_id_active` sobre `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`, para la lista con cursor. El índice completo `ix_transactions_space_id` sobre `space_id` responde si el espacio tiene alguna transacción, borradas incluidas (KAN-68), porque el parcial no sirve para eso. También le sirve a la FK `RESTRICT` cuando se borra un espacio. Las columnas marcadas H2 o v2 se agregan con los módulos que las usan (decidido en KAN-66): un `ADD COLUMN` nullable en PostgreSQL no reescribe la tabla.
+Índices y claves: `UNIQUE (id, space_id)` (`uq_transactions_id_space_id`), destino de la FK compuesta de `entries`, e índice parcial `ix_transactions_space_id_date_id_active` sobre `(space_id, date DESC, id DESC) WHERE deleted_at IS NULL`, para la lista con cursor. El índice completo `ix_transactions_space_id` sobre `space_id` responde si el espacio tiene alguna transacción, borradas incluidas (KAN-68), porque el parcial no sirve para eso. También le sirve a la FK `RESTRICT` cuando se borra un espacio. Las columnas marcadas H3 o v2 se agregan con los módulos que las usan (decidido en KAN-66): un `ADD COLUMN` nullable en PostgreSQL no reescribe la tabla.
  
 ### entries
  
@@ -326,11 +326,11 @@ Las claves `Idempotency-Key` que ya vio `POST /spaces/{id}/transactions` (KAN-93
 | transaction_idFK | **nullable a propósito**: NULL solo dentro del request que reclamó la clave, entre el reclamo y la creación del movimiento (esa fila no está confirmada, así que toda fila confirmada tiene su movimiento). FK compuesta `(transaction_id, space_id)` → `transactions(id, space_id)`, `ON DELETE CASCADE` (la app nunca borra en duro). Con NULL esa FK no se evalúa (MATCH SIMPLE) |
 | created_at | `timestamptz` (UTC), `now()` por defecto; el service escribe el `now` del request. Una clave vale 24 h desde aquí |
 
-Sin más índices: la PK sirve a todas las consultas. Reintentar una clave vigente no escribe datos, pero el reclamo deja esa fila bloqueada (`FOR NO KEY UPDATE`) hasta el fin del request, así que dos reintentos simultáneos de la misma clave van uno tras otro; es inocuo, porque después solo lee. Una clave vencida no se borra: la reemplaza el siguiente reclamo con la misma clave, aunque su cuerpo sea otro. La purga (un `DELETE ... WHERE created_at < ...`, con su índice por `created_at`) queda para el cron del hito 2. Un request que falla no deja clave (se deshace toda su transacción), y el reintento de una clave vigente devuelve el movimiento como está ahora, también si se borró después.
+Sin más índices: la PK sirve a todas las consultas. Reintentar una clave vigente no escribe datos, pero el reclamo deja esa fila bloqueada (`FOR NO KEY UPDATE`) hasta el fin del request, así que dos reintentos simultáneos de la misma clave van uno tras otro; es inocuo, porque después solo lee. Una clave vencida no se borra: la reemplaza el siguiente reclamo con la misma clave, aunque su cuerpo sea otro. La purga (un `DELETE ... WHERE created_at < ...`, con su índice por `created_at`) queda para el cron del hito 3. Un request que falla no deja clave (se deshace toda su transacción), y el reintento de una clave vigente devuelve el movimiento como está ahora, también si se borró después.
 
 ### budgets
  
-v1.1
+v1 · Hito 2
  
 Límite mensual por categoría principal.
  
@@ -342,7 +342,7 @@ Límite mensual por categoría principal.
  
 ### goals
  
-v1.1
+v1 · Hito 2
  
 "Viaje a Brasil", "PlayStation". Apartado virtual: el dinero sigue en sus cuentas.
  
@@ -352,11 +352,11 @@ v1.1
 | name |  |
 | target_amount_minor |  |
 | target_date | opcional |
-| archived_at | al cumplirla o abandonarla |
+| archived_at | la archiva el usuario (al cumplirla o abandonarla) y eso libera todo lo apartado; llegar al 100 % no la archiva: queda «¡Cumplida!» |
  
 ### goal_allocations
  
-v1.1
+v1 · Hito 2
  
 Cada vez que el usuario aparta o libera dinero, y en qué cuenta. No toca entries ni saldos.
  

@@ -407,7 +407,7 @@ export const TRANSACTION_TYPE_NAMES: Readonly<
 
 /**
  * The state of a movement (`status`), as a person reads it. Hito 1 only creates confirmed ones;
- * "Pendiente" and "Omitido" come with the recurring templates (Hito 2), but the list already
+ * "Pendiente" and "Omitido" come with the recurring templates (Hito 3), but the list already
  * shows them, with their state, because the backend lists them.
  */
 export const TRANSACTION_STATUS_NAMES: Readonly<
