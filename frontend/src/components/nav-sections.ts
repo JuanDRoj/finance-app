@@ -69,7 +69,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
 /**
  * What hangs from "Más" on a phone and sits at the bottom of the sidebar on desktop: Categorías
  * (FE-21, KAN-77; the row of "H1 · Más" in the canvas). With entries, the bottom bar shows "Más" and
- * `/mas` lists them. Hito 3 adds Ayuda and Ajustes.
+ * `/mas` lists them. Hito 4 adds Ayuda and Ajustes; where Presupuestos and Metas (Hito 2) go is
+ * drawn in FE-38.
  */
 export const MORE_SECTIONS: readonly MoreSection[] = [
   {

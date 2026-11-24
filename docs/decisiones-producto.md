@@ -1,6 +1,6 @@
 # Personal Finance App — Decisiones de producto
  
-Última actualización: 2026-10-21
+Última actualización: 2026-11-24
  
 ## Visión
 App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuarios cotidianos que quieren llevar su dinero sin depender de apps bancarias. Web responsive primero, **pensada para escritorio** y adaptada al celular (decidido el 2026-10-21); app móvil después.
@@ -20,18 +20,18 @@ App de finanzas personales, alternativa moderna a las hojas de cálculo. Usuario
 | Categorías | Predefinidas y editables, con subcategorías (2 niveles). Cada una lleva un ícono de una lista fija (columna `icon`): las predefinidas traen el suyo y al crear una se elige. |
 | Primer uso | Sin onboarding guiado ni cuentas creadas solas: el Inicio vacío invita a crear la primera cuenta con su saldo actual (se registra como ajuste), y "+" sin cuentas lleva al mismo formulario. |
 | Espacios | Los datos pertenecen a un **espacio**; los usuarios son miembros. "Mi espacio" privado + espacios de hogar con cuentas propias. Aporte personal → hogar = gasto "Aporte al hogar" + ingreso en el hogar (enlazados). Sin división de deudas. |
-| Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. En escritorio, además, la evolución del neto (6 meses) e ingresos y gastos por mes (decidido el 2026-10-21, H1). |
-| Presupuestos | Límite mensual por categoría con barra de progreso. |
-| Metas de ahorro | Apartados virtuales **repartidos en una o varias cuentas** (solo banco/efectivo, nunca tarjeta). Libre para gastar = Disponible − apartado. Al registrar un gasto/transferencia desde una cuenta con apartados, la app pregunta si usa dinero de una meta y libera el apartado con un toque. Si el saldo queda por debajo de lo apartado, se permite y se avisa. |
+| Dashboard | (A) Disponible/Deuda/Neto · (B) Top 5 gastos del mes por categoría principal · (D) Pendientes y cuotas futuras. En escritorio, además, la evolución del neto (6 meses) e ingresos y gastos por mes (decidido el 2026-10-21, H1). En el H2 se suman «Libre para gastar», dentro de Disponible y solo si hay algo apartado, y una tarjeta con hasta 3 presupuestos en «Cerca» o «Excedido» (decidido el 2026-11-24). |
+| Presupuestos | Límite mensual por **categoría principal de gasto** (las subcategorías suman a su principal), con barra de progreso. Lo gastado sigue la regla del top 5 del Inicio: gastos confirmados y sin borrar de todo el mes; ajustes, transferencias e ingresos no cuentan. Un límite igual todos los meses, sin traspasar lo que sobra; la pantalla muestra el mes en curso. Estados: normal, «Cerca» desde el 80 % (en el 100 % justo dice «Llegaste al límite», con el estilo de «Cerca») y «Excedido» por encima del 100 % («Te pasaste por $X»), sin notificaciones. Arriba, un resumen: total presupuestado, gastado, lo que queda y «Sin presupuesto» (lo gastado en categorías sin límite). Borrar un presupuesto es borrado real (es configuración, no dinero); el de una categoría archivada se oculta y vuelve al desarchivarla. Decidido el 2026-11-24. |
+| Metas de ahorro | Apartados virtuales **repartidos en una o varias cuentas** (solo banco/efectivo, nunca tarjeta). Libre para gastar = Disponible − apartado. No se aparta más de lo libre de la cuenta (saldo − lo ya apartado). Si un gasto o una transferencia deja el saldo por debajo de lo apartado en esa cuenta, se permite, se avisa y la app pregunta si usó dinero de una meta, para liberar con un toque; en los demás gastos y transferencias no pregunta, y cada meta tiene «Liberar» para usar su dinero a propósito (cambiado el 2026-11-24: antes preguntaba en todo gasto desde una cuenta con apartados, y eso molestaría a diario). Un cuadre de saldo que deja la cuenta por debajo de lo apartado solo avisa, sin preguntar: corrige el saldo según el banco, no es un gasto. Liberar queda en el historial de la meta y no se enlaza con el movimiento: borrar el gasto después no devuelve lo apartado. Al llegar al 100 % la meta queda «¡Cumplida!»; archivarla libera todo y no se borra. Con fecha objetivo muestra «Aparta $X por mes para llegar». Una transferencia no mueve lo apartado, y una cuenta con apartados no se puede archivar. |
+| Navegación del H2 | Presupuestos y Metas van en la barra lateral de escritorio y en «Más» en el celular; la barra inferior no cambia hasta Pendientes (H3), que toma el lugar de Cuentas (decidido el 2026-11-24). |
 | Editar/borrar | Edición libre de transacciones confirmadas; borrado suave (`deleted_at`) con "Deshacer". Historial de cambios en v2. |
-| Identidad | Nombre **Kanza** (de "¿me al-kanza?"); lema "Haz que alcance"; mercado: toda Latinoamérica. Ícono: grillo verde menta asomado sobre una moneda gigante, sobre baldosa verde bosque `#146e4d` ("B2 · Detrás de la moneda"), igual en claro y oscuro. Mascota: el grillo (cabeza asomada en el login; el de cuerpo entero quedó archivado). Favicon: versión simplificada para menos de 32 px. Logotipo en Bricolage Grotesque ExtraBold, solo para la marca. Definido el 2026-10-06; guía en [`frontend/docs/marca-kanza.md`](../frontend/docs/marca-kanza.md). Estados vacíos con el grillo: **sí en v1** (decidido el 2026-10-18 en KAN-63; detalle en `frontend/docs/diseno.md` D16). Avisos del grillo: se deciden en Hito 2, con Pendientes. Fuera de v1: pantalla de carga y registro de marca. |
+| Identidad | Nombre **Kanza** (de "¿me al-kanza?"); lema "Haz que alcance"; mercado: toda Latinoamérica. Ícono: grillo verde menta asomado sobre una moneda gigante, sobre baldosa verde bosque `#146e4d` ("B2 · Detrás de la moneda"), igual en claro y oscuro. Mascota: el grillo (cabeza asomada en el login; el de cuerpo entero quedó archivado). Favicon: versión simplificada para menos de 32 px. Logotipo en Bricolage Grotesque ExtraBold, solo para la marca. Definido el 2026-10-06; guía en [`frontend/docs/marca-kanza.md`](../frontend/docs/marca-kanza.md). Estados vacíos con el grillo: **sí en v1** (decidido el 2026-10-18 en KAN-63; detalle en `frontend/docs/diseno.md` D16). Avisos del grillo: se deciden en el Hito 3, con Pendientes. Fuera de v1: pantalla de carga y registro de marca. |
  
 ## Roadmap
-- **v1:** registro, plantillas, cuentas (cierre/vencimiento de tarjetas), transferencias, ajustes, categorías, dashboard (A, B, D). Estructura de espacios preparada.
-- **v1.1:** presupuestos y metas de ahorro.
+- **v1:** registro, cuentas, transferencias, ajustes, categorías, presupuestos y metas de ahorro, plantillas, cierre y vencimiento de tarjetas, dashboard (A, B, D). Estructura de espacios preparada. Presupuestos y metas eran la v1.1 y pasaron a la v1 el 2026-11-24.
 - **v2:** hogares compartidos, historial de cambios.
 - **Futuro:** multimoneda, app móvil (React Native), importar extractos, dividir compras (UI).
-Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito). Reparto acordado el 2026-10-17: H1 registro diario (cuentas, categorías, movimientos, dashboard A y B con sus gráficos de escritorio) · H2 pendientes y cuotas (plantillas, cron, dashboard D) · H3 tarjetas, Ajustes y producción · H4 v1.1 · H5 v2.
+Plan de construcción por hitos: en Jira (proyecto KAN; cada épico es un hito). Reparto acordado el 2026-10-17 y reordenado el 2026-11-24: H1 registro diario (cuentas, categorías, movimientos, dashboard A y B con sus gráficos de escritorio) · H2 presupuestos y metas de ahorro · H3 pendientes y cuotas (plantillas, cron, dashboard D) · H4 tarjetas, Ajustes y producción · H5 v2. Presupuestos y metas van primero porque solo dependen de lo que hizo el H1, y así la pregunta de metas queda diseñada antes de los otros flujos que pueden dispararla (confirmar un pendiente y pagar la tarjeta); Pendientes va antes que Tarjetas porque las cuotas en tarjeta entran en el monto a pagar.
  
 ## Decisiones técnicas
 Contexto: desarrollador solo (semi senior fullstack Python/React/DB/cloud). Proyecto personal/de aprendizaje con miras a producto real.
@@ -57,7 +57,7 @@ Reglas:
 - Plan Hobby de Vercel = no comercial.
 - **Código y BD en inglés** (snake_case, tablas en plural); interfaz en español.
 ### Monolito modular (backend)
-Una app FastAPI, una BD, un despliegue; módulos de dominio: `spaces`, `accounts`, `categories`, `transactions`, `recurring`, `dashboard` (v1.1: `budgets`, `goals`). Capas por módulo: router → service → repository. Un módulo usa a otro solo vía su service. Operaciones que cruzan módulos van en una sola transacción de BD.
+Una app FastAPI, una BD, un despliegue; módulos de dominio: `spaces`, `accounts`, `categories`, `transactions`, `recurring`, `dashboard` (H2: `budgets`, `goals`). Capas por módulo: router → service → repository. Un módulo usa a otro solo vía su service. Operaciones que cruzan módulos van en una sola transacción de BD.
  
 ### Base de datos: reglas de trabajo
 - Modelos ORM (SQLAlchemy) separados de los schemas de la API (Pydantic).
@@ -89,4 +89,4 @@ Una app FastAPI, una BD, un despliegue; módulos de dominio: `spaces`, `accounts
 ## Modelo de datos
 Diagrama y detalle: https://claude.ai/artifact/3TR4fDsfjuaVcsyix7BLb8
  
-Tablas v1: `users`, `spaces`, `space_members`, `accounts`, `card_statements`, `categories`, `recurring_templates`, `transactions`, `entries`. v1.1: `budgets`, `goals`, `goal_allocations`.
+Tablas v1: `users`, `spaces`, `space_members`, `accounts`, `card_statements`, `categories`, `recurring_templates`, `transactions`, `entries`, y del H2 `budgets`, `goals` y `goal_allocations` (eran v1.1 hasta el 2026-11-24).
